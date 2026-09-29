@@ -9,8 +9,14 @@ import java.time.LocalDateTime;
 
 /**
  * 委外维修返回记录（2026-09-17）
- * <p>维修退货单（{@code return_type=REPAIR}）送修出库后，工厂修好分批送回我方仓库的入库记录。
- * 登记即生效（库存 +），可逐行撤销（库存回滚）；不产生任何应付（维修费在送修审核时已挂）。</p>
+ * <p>维修退货单（{@code return_type=REPAIR}）送修出库后，工厂修好分批送回我方仓库的入库记录。</p>
+ *
+ * <p><b>2026-09-28 用户口径（「加工和物料的登记返回都需要审核和反审核」）</b>：原为**登记即生效**
+ * （登记即成品入库 + 核销在厂 + 扣用料 + 按行挂维修费应付），现改为 —— <b>登记只建草稿</b>
+ * （不动库存/账务；维修费单价仍在这里填、金额按行快照落库），详情页对每条记录点<b>审核</b>才落账
+ * （入库 + 核销在厂 + 按实际用料扣料/成本 + **按行生成维修费应付**），<b>反审核</b>对称逆回（含冲销应付）
+ * 并留痕（记录回草稿）；草稿可删除。与「物料维修返回」（{@code outsource_material_return_repair}）
+ * 及「加工返回」（{@code outsource_return_back}）同一口径 ⇒ {@code status} 只可能是 DRAFT / AUDITED。</p>
  */
 @Data
 @TableName("outsource_return_order_repair")
@@ -27,6 +33,17 @@ public class OutsourceReturnOrderRepair {
     private Long auditorId;
 
     private String auditorName;
+
+    /**
+     * 状态（2026-09-28 用户口径「加工和物料的登记返回都需要审核和反审核」）：
+     * {@code DRAFT}=草稿（登记只建草稿，不动库存/账务）；{@code AUDITED}=已审核（已落账）。
+     * <p>聚合口径：已返回量 / 未返回量 / 结案判定 / "不超送修"校验**只认 AUDITED**；草稿不参与，
+     * 因而也不挡主单反审核。存量行由 DataInitializer 回填为 AUDITED（历史即生效）。</p>
+     */
+    private String status;
+
+    /** 审核时间（审核时盖章；反审核清空） */
+    private LocalDateTime auditTime;
 
 
     @TableId(type = IdType.AUTO)
@@ -52,6 +69,20 @@ public class OutsourceReturnOrderRepair {
 
     /** 返回数量 */
     private BigDecimal quantity;
+
+    /**
+     * 维修费单价（元/件）—— 2026-09-28 用户口径：「费用精确到产品里，在登记返回时填写」。
+     * <p>整单的 {@code outsource_return_order.charge_amount} 是历史口径（新增时填、送修审核时挂账）；
+     * 现在维修费**按返回产品行**在**登记维修返回**时填：本列 = 单价，{@link #repairAmount} = 单价 × 数量。
+     * 留空/null = 该产品不收费（0）。</p>
+     */
+    private BigDecimal repairUnitPrice;
+
+    /**
+     * 维修费金额（= 单价 × 数量）—— 单价在**登记返回**时填、金额在此按行快照落库；
+     * 应付在**审核**该行时生成（反审核/删除草稿即冲销）—— 2026-09-28 草稿口径。
+     */
+    private BigDecimal repairAmount;
 
     /** 备注 */
     private String remark;

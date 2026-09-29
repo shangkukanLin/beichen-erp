@@ -46,7 +46,8 @@ foreach ($l in @(SqlLines "SELECT related_bill_id, material_id, SUM(change_quant
   $f = "$l" -split "`t"; $legs["$($f[0])|$($f[1])"] = D $f[2]
 }
 $retOf = @{}; $retStatus = @{}
-foreach ($l in @(SqlLines "SELECT r.return_order_id, r.material_id, SUM(r.quantity) FROM outsource_material_return_repair r GROUP BY r.return_order_id, r.material_id")) {
+# 2026-09-28 (draft+audit口径): only AUDITED rows actually consumed the on-site leg -- drafts move nothing.
+foreach ($l in @(SqlLines "SELECT r.return_order_id, r.material_id, SUM(r.quantity) FROM outsource_material_return_repair r WHERE r.status = 'AUDITED' GROUP BY r.return_order_id, r.material_id")) {
   $f = "$l" -split "`t"; $retOf["$($f[0])|$($f[1])"] = D $f[2]
 }
 $supWh = @{}

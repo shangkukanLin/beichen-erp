@@ -2,12 +2,12 @@
 #   S1 list tabs: REPAIR tab has "sent/returned" column (no linked-order column); DEFECT tab keeps it
 #   S2 create a REPAIR order (sent 1) -> audit: DEFECT stock -1, positive repair-charge payable
 #   S3 detail: sent/returned shown ; close hidden while unreturned > 0 (click is not offered)
-#   S4 register the 1 back (quality A) -> close button appears
+#   S4 register the 1 back (quality A) -> DRAFT (nothing moves) -> audit it: A stock +1 + repair-fee payable +50
 #   S5 list row shows "1 / 1"
 #   S6 close -> status 已结案, register/reopen button switch, un-audit hidden
 #   S7 list: status column shows 已结案 ; progress filter CLOSED vs PENDING_RETURN
 #   S8 reopen -> closed_flag back to 0
-#   S9 roll back: revoke return, un-audit, cancel doc
+#   S9 roll back: un-audit the return record (stock back), delete the draft, un-audit + cancel the doc
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 
 $script:MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
@@ -102,6 +102,9 @@ Ok ((D (StockQty $whId 'product_id' $prodId 'DEFECT')) -eq ($defBefore + 1)) 'S0
 # =====================================================================
 # 2026-09-27 三级菜单：维修退货 / 关联退货 已拆成**独立叶子**（不再是同页两个页签）
 #   ⇒ 断言改为分别直达两个叶子路由；页签现在是状态维度（待返回 | 已返回完 | 已作废），且标签带数量角标。
+# 2026-09-29（用户口径「三级菜单关联退货不要了，以后关联退货在加工收货里面退就行」）：
+#   「关联退货」叶子下线 ⇒ 旧地址 /outsource/return-order 断言改为"重定向到工厂售后叶子"，
+#   原「linked leaf keeps linked-order column」断言随之作废（该列已删），改断言"已无关联加工单列"。
 Step 'S1 leaf pages: column sets differ by leaf'
 Open '/outsource/return-order/repair' 3000
 $h1 = ((Rows 0).head -join '|')
@@ -112,9 +115,11 @@ Ok ((BodyHas (ZH 'tab_leaf_pending')) -eq 'true') 'S1 REPAIR leaf has tab 待返
 Ok ((BodyHas (ZH 'tab_leaf_returned')) -eq 'true') 'S1 REPAIR leaf has tab 已返回完'
 Open '/outsource/return-order' 2600
 $h2 = ((Rows 0).head -join '|')
-Write-Host ('S1 linked head=' + $h2)
-Ok ($h2 -match [regex]::Escape((ZH 'txt_ro_col_order'))) 'S1 linked leaf keeps linked-order column'
-Ok (-not ($h2 -match [regex]::Escape((ZH 'txt_mr_sent_returned')))) 'S1 linked leaf has no sent/returned column'
+$p2 = EvalJs "location.pathname"
+Write-Host ('S1 old linked url -> path=' + $p2 + ' head=' + $h2)
+Ok ($p2 -eq '/outsource/return-order/unlinked') 'S1 retired 关联退货 url redirects to the 工厂售后 leaf'
+Ok (-not ($h2 -match [regex]::Escape((ZH 'txt_ro_col_order')))) 'S1 the ledger no longer has a linked-order column'
+Ok (-not ($h2 -match [regex]::Escape((ZH 'txt_mr_sent_returned')))) 'S1 the ledger has no sent/returned column (that is the REPAIR leaf)'
 
 # =====================================================================
 Step 'S2 create REPAIR order (sent 1) and audit'
@@ -145,13 +150,15 @@ Ok ((PickOptionContains $prodName) -match 'OK') ('S2 pick product=' + $prodName)
 Start-Sleep -Milliseconds 2200
 Ok ((SetRowQty 0 '1') -match 'OK') 'S2 sent qty=1'
 Start-Sleep -Milliseconds 600
-Ok ((FillLabel 'lbl_charge_amount' '50') -match 'OK') 'S2 charge amount=50'
+# 2026-09-28（用户口径「维修费要精确到产品里，在登记返回的时候填写」）：
+#   本页**不得再有**「工厂收费 / 收费金额」字段（费用已搬到登记返回弹窗，按返回产品行填）
+Ok ((FillLabel 'lbl_charge_amount' '50') -match 'NOLABEL') 'S2 add page has NO 收费金额 field any more (fee moved to 登记返回)'
 Start-Sleep -Milliseconds 600
 Ok ((ClickBtn 'btn_save') -match 'OK') 'S2 save'
 Start-Sleep -Milliseconds 3400
 $rid = [int](MaxId 'outsource_return_order')
 Ok ((OrderField $rid 'return_type') -eq 'REPAIR') ('S2 return_type=REPAIR id=' + $rid)
-Ok ((D (OrderField $rid 'charge_amount')) -eq 50) 'S2 charge_amount=50 persisted'
+Ok ((D (OrderField $rid 'charge_amount')) -eq 0) 'S2 charge_amount=0 (no per-order fee any more)'
 
 Open ("/outsource/return-order/detail/$rid") 2800
 Ok ((ClickBtn 'btn_audit') -match 'OK') 'S2 audit'
@@ -159,7 +166,8 @@ ConfirmBox 1400 | Out-Null
 Start-Sleep -Milliseconds 3200
 Write-Host ('S2 after audit: defect=' + (StockQty $whId 'product_id' $prodId 'DEFECT') + ' repairPay=' + (RepairPay $facId))
 Ok ((D (StockQty $whId 'product_id' $prodId 'DEFECT')) -eq ($bDef - 1)) 'S2 after audit: DEFECT stock -1 (sent out)'
-Ok ((D (RepairPay $facId)) -eq ($bPay + 50)) 'S2 after audit: repair charge payable +50'
+# 2026-09-28：送修审核**不再挂**维修费应付（费用改在「登记维修返回」按返回产品行挂）
+Ok ((D (RepairPay $facId)) -eq $bPay) 'S2 after audit: NO repair payable yet (fee is per product line, at 登记返回)'
 Ok ((SqlOne "SELECT status FROM outsource_return_order WHERE id=$rid") -eq 'AUDITED') 'S2 status=AUDITED'
 
 # =====================================================================
@@ -181,10 +189,27 @@ Ok ((PickOptionContains (ZH 'opt_q_a')) -match 'OK') 'S4 returned quality=A'
 Start-Sleep -Milliseconds 800
 Ok ((SetRowQty 0 '1') -match 'OK') 'S4 returned qty=1'
 Start-Sleep -Milliseconds 600
+# 2026-09-28（用户口径）：维修费**在本弹窗按返回产品行**填（单价 × 本次返回数量 = 金额，留空=不收费）。
+# 行内 input 顺序：规格(select input) → 本次返回(input-number) → **维修费单价**(input-number) ⇒ index=2
+Ok ((SetRowInput 0 2 '50') -match 'OK') 'S4 per-product repair fee unit price=50'
+Start-Sleep -Milliseconds 600
 Ok ((ClickBtn 'btn_confirm_repair_return') -match 'OK') 'S4 confirm'
 Start-Sleep -Milliseconds 3400
+# 2026-09-28（用户口径「登记返回需要审核和反审核」）：登记只建**草稿** ⇒ 库存/应付都不动、记录为 DRAFT
 Ok (([int](SqlOne "SELECT COUNT(*) FROM outsource_return_order_repair WHERE return_order_id=$rid")) -eq 1) 'S4 one repair-return record'
-Ok ((D (StockQty $whId 'product_id' $prodId 'A')) -eq ($bA + 1)) 'S4 A stock +1 (repaired goods back)'
+Ok ((D (SqlOne "SELECT COALESCE(repair_unit_price,0) FROM outsource_return_order_repair WHERE return_order_id=$rid")) -eq 50) 'S4 the row stores repair_unit_price=50'
+Ok ((D (SqlOne "SELECT COALESCE(repair_amount,0) FROM outsource_return_order_repair WHERE return_order_id=$rid")) -eq 50) 'S4 the row stores repair_amount=50 (= unit x qty)'
+Ok ((SqlOne "SELECT status FROM outsource_return_order_repair WHERE return_order_id=$rid") -eq 'DRAFT') 'S4 the record is saved as DRAFT'
+Ok ((D (StockQty $whId 'product_id' $prodId 'A')) -eq $bA) 'S4 registration moved NO stock (draft)'
+Ok ((D (RepairPay $facId)) -eq $bPay) 'S4 registration posted NO payable (draft)'
+Ok ((HasBtn 'btn_mr_close') -eq 'false') 'S4 close button still hidden (a draft does not count as returned)'
+# audit = the legs really run here (A stock + repair-fee payable)
+Ok ((ClickRowBtn 0 'btn_audit') -match 'OK') 'S4 audit the repair-return record'
+ConfirmBox 1500 | Out-Null
+Start-Sleep -Milliseconds 3400
+Ok ((SqlOne "SELECT status FROM outsource_return_order_repair WHERE return_order_id=$rid") -eq 'AUDITED') 'S4 the record is AUDITED after the audit step'
+Ok ((D (StockQty $whId 'product_id' $prodId 'A')) -eq ($bA + 1)) 'S4 A stock +1 (repaired goods back, at audit)'
+Ok ((D (RepairPay $facId)) -eq ($bPay + 50)) 'S4 the audit posts the repair-fee payable (+50)'
 Ok ((HasBtn 'btn_mr_close') -eq 'true') 'S4 close button appears (unreturned = 0)'
 
 # =====================================================================
@@ -198,7 +223,7 @@ $ri = [int](FindRow $code)
 Ok ($ri -ge 0) ('S5 found row index=' + $ri + ' code=' + $code)
 Write-Host ('S5 sent/ret=' + (CellText $ri 2) + ' status=' + (CellText $ri 5))
 Ok ((CellText $ri 2) -match '^1\s*/\s*1') ('S5 sent/returned cell = ' + (CellText $ri 2))
-# 列序：退货单号|加工厂|送修/已返回|退货/送修内容|工厂收费|**状态**|操作 ⇒ 状态是第 5 列（0 基）；
+# 列序：退货单号|加工厂|送修/已返回|退货/送修内容|**维修费**(2026-09-28 原「工厂收费」列改名，值=Σ 各行维修费)|**状态**|操作 ⇒ 状态是第 5 列（0 基）；
 # 2026-09-27 修：原写 6 读到的其实是**操作列**（'详情/结案'），断言靠"结案≠已结案"侥幸通过。
 Ok ((CellText $ri 5) -notmatch [regex]::Escape((ZH 'txt_ro_closed'))) 'S5 status not closed yet'
 
@@ -238,12 +263,17 @@ Ok ((HasBtn 'btn_mr_close') -eq 'true') 'S8 close button back (unreturned = 0)'
 Ok ((HasBtn 'btn_unaudit') -eq 'true') 'S8 un-audit available again'
 
 # =====================================================================
-Step 'S9 roll back: revoke return, un-audit, cancel'
-Ok ((ClickRowBtn 0 'btn_revoke') -match 'OK') 'S9 revoke the return record'
+Step 'S9 roll back: un-audit the return record, delete the draft, un-audit + cancel the doc'
+# 2026-09-28（草稿口径）：已审核的返回不能直接删 —— 先「反审核」（对称逆回 + 留痕，记录回草稿），再删草稿
+Ok ((ClickRowBtn 0 'btn_unaudit') -match 'OK') 'S9 un-audit the return record'
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 3200
-Ok (([int](SqlOne "SELECT COUNT(*) FROM outsource_return_order_repair WHERE return_order_id=$rid")) -eq 0) 'S9 repair-return record removed'
 Ok ((D (StockQty $whId 'product_id' $prodId 'A')) -eq $bA) 'S9 A stock rolled back'
+Ok ((SqlOne "SELECT status FROM outsource_return_order_repair WHERE return_order_id=$rid") -eq 'DRAFT') 'S9 the record is back to DRAFT (kept: un-audit leaves an audit trail)'
+Ok ((ClickRowBtn 0 'btn_delete') -match 'OK') 'S9 delete the draft record'
+ConfirmBox 1500 | Out-Null
+Start-Sleep -Milliseconds 3200
+Ok (([int](SqlOne "SELECT COUNT(*) FROM outsource_return_order_repair WHERE return_order_id=$rid")) -eq 0) 'S9 draft record removed'
 Ok ((ClickBtn 'btn_unaudit') -match 'OK') 'S9 un-audit'
 ConfirmBox 1400 | Out-Null
 Start-Sleep -Milliseconds 3200

@@ -129,14 +129,35 @@ public class ReturnOrderController {
         return R.ok(returnOrderService.repairMaterialCandidates(id));
     }
 
-    /** 登记维修返回（维修退货单已审核后，工厂修好送回入库；登记即生效，不产生应付） */
+    /**
+     * 登记维修返回（维修退货单已审核后，工厂修好送回）—— **只建草稿**（2026-09-28 用户口径
+     * 「加工和物料的登记返回都需要审核和反审核」）：校验 + 落库（含维修费单价/金额快照），**不动库存/账务**。
+     */
     @PostMapping("/{id}/repair-return")
     public R<Void> repairReturn(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         returnOrderService.repairReturn(id, body);
         return R.ok();
     }
 
-    /** 撤销维修返回（库存回滚 + 删除该条返回记录） */
+    /**
+     * 维修返回记录**审核**（2026-09-28）：审核才落账 —— 成品入库 + 核销在厂 + 实际用料/成本 + **按行挂维修费应付**。
+     */
+    @PutMapping("/repair-return/{recordId}/audit")
+    public R<Void> auditRepairReturn(@PathVariable Long recordId) {
+        returnOrderService.auditRepairReturn(recordId);
+        return R.ok();
+    }
+
+    /**
+     * 维修返回记录**反审核**（2026-09-28）：逐腿对称逆回（先冲应付再回滚库存），记录回草稿（留痕）。
+     */
+    @PutMapping("/repair-return/{recordId}/un-audit")
+    public R<Void> unAuditRepairReturn(@PathVariable Long recordId) {
+        returnOrderService.unAuditRepairReturn(recordId);
+        return R.ok();
+    }
+
+    /** 删除维修返回**草稿**（2026-09-28：只有草稿可删；已审核的须先「反审核」） */
     @DeleteMapping("/repair-return/{recordId}")
     public R<Void> cancelRepairReturn(@PathVariable Long recordId) {
         returnOrderService.cancelRepairReturn(recordId);

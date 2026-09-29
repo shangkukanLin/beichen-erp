@@ -77,24 +77,39 @@ if ($srcWh -le 0 -or $supWh -le 0) {
   Ok ($afterAudit -eq ($base + 3)) 'A2 sending 3 units added 3 to the on-site row'
 
   # a return WITHOUT material-usage lines: this is the case the original bug leaked on
+  # 2026-09-28 (user: "registration must be draft + audit"): registration only creates a DRAFT -- EVERY leg
+  # (material in + on-site deduction + order credit + usage lines) now runs at AUDIT, not at register.
   $rb = @{ warehouseId = $srcWh; repairDate = '2026-09-27'; items = @(@{ materialId = $matId; quantity = 1 }); materials = @() } | ConvertTo-Json -Depth 6
   $r = Invoke-RestMethod -Uri ($API + '/' + $docId + '/repair-return') -Method Post -Headers $h -ContentType 'application/json' -Body $rb
   Write-Host ('A3 register: code=' + $r.code + ' msg=' + $r.msg)
-  Ok ($r.code -eq 200) 'A3 a return without material-usage lines is accepted'
-  $afterRegister = OnSite $supWh $matId
-  Write-Host ('A3 on-site=' + $afterRegister + ' (expected ' + ($base + 2) + ')')
-  Ok ($afterRegister -eq ($base + 2)) 'A3 registering deducted 1 from the on-site row'
+  Ok ($r.code -eq 200) 'A3 a return without material-usage lines is accepted (saved as DRAFT)'
   $recId = [int](SqlOne "SELECT COALESCE(MAX(id),0) FROM outsource_material_return_repair WHERE return_order_id=$docId")
   Ok ($recId -gt 0) ('A3 repair record created (id=' + $recId + ')')
-  Ok ([int](D (SqlOne "SELECT COALESCE(onsite_leg,1) FROM outsource_material_return_repair WHERE id=$recId")) -eq 1) 'A3 the record is flagged onsite_leg=1 (it DID deduct)'
+  Ok ((SqlOne "SELECT status FROM outsource_material_return_repair WHERE id=$recId") -eq 'DRAFT') 'A3 the record is a DRAFT'
+  $afterRegister = OnSite $supWh $matId
+  Write-Host ('A3 on-site=' + $afterRegister + ' (expected ' + ($base + 3) + ', unchanged)')
+  Ok ($afterRegister -eq ($base + 3)) 'A3 registering moved NOTHING (draft: the on-site row is untouched)'
 
-  $rd = Invoke-RestMethod -Uri ($API + '/repair-return/' + $recId) -Method Delete -Headers $h
-  Write-Host ('A4 cancel: code=' + $rd.code + ' msg=' + $rd.msg)
-  Ok ($rd.code -eq 200) 'A4 the return record can be cancelled'
+  # audit = the deduction leg really runs here
+  $ra = Invoke-RestMethod -Uri ($API + '/repair-return/' + $recId + '/audit') -Method Put -Headers $h
+  Write-Host ('A3b audit: code=' + $ra.code + ' msg=' + $ra.msg)
+  Ok ($ra.code -eq 200) 'A3b the draft is audited (legs run at audit now)'
+  $afterAuditReturn = OnSite $supWh $matId
+  Write-Host ('A3b on-site=' + $afterAuditReturn + ' (expected ' + ($base + 2) + ')')
+  Ok ($afterAuditReturn -eq ($base + 2)) 'A3b auditing deducted 1 from the on-site row'
+  Ok ([int](D (SqlOne "SELECT COALESCE(onsite_leg,1) FROM outsource_material_return_repair WHERE id=$recId")) -eq 1) 'A3b the record is flagged onsite_leg=1 (it DID deduct)'
+
+  # un-audit must restore the on-site row -- this is the original regression ("在厂行只减不还")
+  $ru = Invoke-RestMethod -Uri ($API + '/repair-return/' + $recId + '/un-audit') -Method Put -Headers $h
+  Write-Host ('A4 un-audit: code=' + $ru.code + ' msg=' + $ru.msg)
+  Ok ($ru.code -eq 200) 'A4 the return record can be un-audited'
   $afterCancel = OnSite $supWh $matId
   Write-Host ('A4 on-site=' + $afterCancel + ' (expected ' + ($base + 3) + ')')
-  Ok ($afterCancel -eq ($base + 3)) 'A4 cancelling restored the on-site row (CASE-A REGRESSION GUARD)'
-  Ok (([int](D (SqlOne "SELECT COUNT(*) FROM outsource_material_return_repair WHERE id=$recId"))) -eq 0) 'A4 the record is gone (repeatable)'
+  Ok ($afterCancel -eq ($base + 3)) 'A4 un-auditing restored the on-site row (CASE-A REGRESSION GUARD)'
+  $rd = Invoke-RestMethod -Uri ($API + '/repair-return/' + $recId) -Method Delete -Headers $h
+  Write-Host ('A4b delete draft: code=' + $rd.code + ' msg=' + $rd.msg)
+  Ok ($rd.code -eq 200) 'A4b the draft can be deleted (delete is draft-only now)'
+  Ok (([int](D (SqlOne "SELECT COUNT(*) FROM outsource_material_return_repair WHERE id=$recId"))) -eq 0) 'A4b the record is gone (repeatable)'
 
   # un-audit is what used to fail hard with "on-site material insufficient" after a leaked cancellation
   $ua = Invoke-RestMethod -Uri ($API + '/' + $docId + '/un-audit') -Method Put -Headers $h
@@ -121,14 +136,22 @@ if ($lDoc -le 0 -or $lOwh -le 0) {
   $rb2 = @{ warehouseId = $lWh; repairDate = '2026-09-27'; items = @(@{ materialId = $lMat; quantity = 1 }); materials = @() } | ConvertTo-Json -Depth 6
   $r2 = Invoke-RestMethod -Uri ($API + '/' + $lDoc + '/repair-return') -Method Post -Headers $h -ContentType 'application/json' -Body $rb2
   Write-Host ('B2 register: code=' + $r2.code + ' msg=' + $r2.msg)
-  Ok ($r2.code -eq 200) 'B2 a return on a legacy doc is accepted (the deduction leg is skipped)'
-  Ok ((OnSite $lOwh $lMat) -eq 0) 'B2 the skipped deduction left the on-site row alone'
+  Ok ($r2.code -eq 200) 'B2 a return on a legacy doc is accepted (saved as DRAFT)'
+  Ok ((OnSite $lOwh $lMat) -eq 0) 'B2 registering moved nothing (draft)'
   $rec2 = [int](SqlOne "SELECT COALESCE(MAX(id),0) FROM outsource_material_return_repair WHERE return_order_id=$lDoc")
-  Ok ([int](D (SqlOne "SELECT COALESCE(onsite_leg,1) FROM outsource_material_return_repair WHERE id=$rec2")) -eq 0) 'B2 the record is flagged onsite_leg=0 (it did NOT deduct)'
+  # the deduction leg is skipped for a legacy doc -- but the flag is only written at AUDIT now
+  $ra2 = Invoke-RestMethod -Uri ($API + '/repair-return/' + $rec2 + '/audit') -Method Put -Headers $h
+  Write-Host ('B2b audit: code=' + $ra2.code + ' msg=' + $ra2.msg)
+  Ok ($ra2.code -eq 200) 'B2b auditing a legacy doc succeeds (the deduction leg is skipped)'
+  Ok ((OnSite $lOwh $lMat) -eq 0) 'B2b the skipped deduction left the on-site row alone'
+  Ok ([int](D (SqlOne "SELECT COALESCE(onsite_leg,1) FROM outsource_material_return_repair WHERE id=$rec2")) -eq 0) 'B2b the record is flagged onsite_leg=0 (it did NOT deduct)'
+  $ru2 = Invoke-RestMethod -Uri ($API + '/repair-return/' + $rec2 + '/un-audit') -Method Put -Headers $h
+  Write-Host ('B3 un-audit: code=' + $ru2.code + ' msg=' + $ru2.msg)
+  Ok ($ru2.code -eq 200) 'B3 the record can be un-audited'
+  Ok ((OnSite $lOwh $lMat) -eq 0) 'B3 un-auditing did NOT invent on-site units (CASE-B REGRESSION GUARD)'
   $rd2 = Invoke-RestMethod -Uri ($API + '/repair-return/' + $rec2) -Method Delete -Headers $h
-  Write-Host ('B3 cancel: code=' + $rd2.code + ' msg=' + $rd2.msg)
-  Ok ($rd2.code -eq 200) 'B3 the record can still be cancelled'
-  Ok ((OnSite $lOwh $lMat) -eq 0) 'B3 cancelling did NOT invent on-site units (CASE-B REGRESSION GUARD)'
+  Write-Host ('B3b delete draft: code=' + $rd2.code + ' msg=' + $rd2.msg)
+  Ok ($rd2.code -eq 200) 'B3b the draft can be deleted'
 }
 
 Write-Host ''

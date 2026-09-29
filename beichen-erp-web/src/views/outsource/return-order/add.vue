@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, computed, watch, onMounted } from 'vue'
-import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeType, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel, ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
+import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceReturnType, OutsourceReturnTypeLabel, ProductQualityType, ProductQualityTypeLabel } from '@/api/enums'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -33,11 +33,11 @@ const form = reactive({
   // （存量加工退货草稿编辑时保持原类型，后端会拒绝把它改成维修退货或新建加工退货）。
   returnType: (prefillReturnType === OutsourceReturnType.DEFECT ? OutsourceReturnType.DEFECT : OutsourceReturnType.REPAIR) as string,
   factoryId: undefined as any, warehouseId: undefined as any,
-  returnDate: localDate(), remark: '',
-  // 工厂收费：**加工厂向我方收取**（我方付加工厂），审核后生成一条正向应付
-  chargeFlag: 0, chargeType: '' as string, chargeAmount: 0, chargeReason: ''
+  returnDate: localDate(), remark: ''
+  // 2026-09-28（用户口径）：本页**不再有「工厂收费」** —— 维修费改到「登记维修返回」按返回产品行填
+  //   （单价 × 数量），登记即按行生成对加工厂的应付，撤销该行即冲销该条（见 detail.vue repairFeeTotal）。
 })
-/** 维修退货：不关联加工单、不还料（无物料明细）、**必须由加工厂收费**，修好后走「维修返回」登记入库 */
+/** 维修退货：不关联加工单、不还料（无物料明细）；修好后走「登记维修返回」登记入库（维修费在同一处按行填） */
 const isRepair = computed(() => form.returnType === OutsourceReturnType.REPAIR)
 /** 从「成品收货」带来/预填的加工单号（仅展示，说明这张单关联了哪张加工单） */
 const linkedOrderCode = ref('')
@@ -59,15 +59,9 @@ function onTypeChange() {
   if (isRepair.value) {
     // 维修退货不关联加工单（后端同口径拦截），这里把选择一并清掉
     linkedOrderId.value = undefined
-    form.chargeFlag = 1
-    form.chargeType = form.chargeType || OutsourceChargeType.REWORK
-  } else {
-    form.chargeFlag = 0; form.chargeType = ''; form.chargeAmount = 0; form.chargeReason = ''
   }
+  // 2026-09-28：收费字段已从本页移除（维修费在「登记维修返回」按产品行填）
 }
-const chargeTypeOptions = computed(() =>
-  Object.values(OutsourceChargeType).map((v) => ({ value: v, label: OutsourceChargeTypeLabel[v] || v }))
-)
 const factoryOptions = ref<any[]>([])
 const warehouseOptions = ref<any[]>([])
 /** 可关联的加工单（该加工厂下，2026-09-17 需求：可选可清空，清空=不关联） */
@@ -383,17 +377,8 @@ async function handleSubmit() {
   if (!form.factoryId) { ElMessage.warning('请选择加工厂'); return }
   // 出库仓必选：库存按「仓库+产品」校验，不先选仓就没有比对基准
   if (!form.warehouseId) { ElMessage.warning(isRepair.value ? '请选择送修出库仓' : '请选择成品出库仓'); return }
-  // 收费方向：**加工厂向我方收取**（我方付加工厂）。
-  // 维修退货必须收费（工厂收我方维修费）；加工退货禁止收费（不良是工厂的问题，工厂不向我方收费）
-  const charged = Number(form.chargeFlag) === 1
-  if (isRepair.value) {
-    if (!charged) { ElMessage.warning('维修退货必须填写「加工厂向我方收取」的维修费，请打开「工厂收费」'); return }
-    if (!form.chargeType) { ElMessage.warning('请选择收费类型（如返工费）'); return }
-    if (!(Number(form.chargeAmount) > 0)) { ElMessage.warning('收费金额必须大于 0'); return }
-  } else if (charged) {
-    ElMessage.warning('加工退货不产生工厂收费（不良是工厂的问题，加工厂不向我方收费）')
-    return
-  }
+  // 2026-09-28（用户口径）：本页不再校验/提交「工厂收费」—— 维修费在「登记维修返回」时按**返回产品行**收
+  //   （单价 × 数量，登记即挂一条对加工厂的应付；撤销该行即冲销该条）。
   // 库存校验：退回/送修数量不能超出所选仓**该规格**的库存（未选仓库时查不到库存，不拦截）
   for (const r of rows.value as any[]) {
     if (!r.productName || !(Number(r.returnQuantity) > 0)) continue
@@ -433,10 +418,9 @@ async function handleSubmit() {
     sourceDeliveryId: isRepair.value ? null : (prefillDeliveryId || null),
     factoryId: form.factoryId, warehouseId: form.warehouseId,
     returnDate: form.returnDate, remark: form.remark,
-    chargeFlag: charged ? 1 : 0,
-    chargeType: charged ? form.chargeType : '',
-    chargeAmount: charged ? Number(form.chargeAmount) : 0,
-    chargeReason: charged ? (form.chargeReason || '') : '',
+    // 2026-09-28（用户口径）：整单收费**恒 0** —— 新单不再有整单维修费（后端 audit 的兼容分支
+    // 只在 chargeAmount>0 时才挂账，此处永不触发；维修费改由「登记维修返回」按产品行挂）
+    chargeFlag: 0, chargeType: null, chargeAmount: 0, chargeReason: null,
     items, products
   }
   try {
@@ -456,8 +440,7 @@ async function handleSubmit() {
 function resetForm() {
   Object.assign(form, {
     factoryId: undefined, warehouseId: undefined,
-    returnDate: localDate(), remark: '',
-    chargeFlag: 0, chargeType: '', chargeAmount: 0, chargeReason: ''
+    returnDate: localDate(), remark: ''
   })
   rows.value = [createEmptyRow()]
   mergedItems.value = []
@@ -472,9 +455,8 @@ async function loadForEdit(id: number) {
     Object.assign(form, {
       returnType: d.returnType || OutsourceReturnType.DEFECT,
       factoryId: d.factoryId, warehouseId: d.warehouseId,
-      returnDate: d.returnDate || localDate(), remark: d.remark || '',
-      chargeFlag: Number(d.chargeFlag) === 1 ? 1 : 0, chargeType: d.chargeType || '',
-      chargeAmount: Number(d.chargeAmount) || 0, chargeReason: d.chargeReason || ''
+      returnDate: d.returnDate || localDate(), remark: d.remark || ''
+      // 2026-09-28：收费字段已从本页移除（维修费在「登记维修返回」按产品行收，见 detail.vue）
     })
     linkedOrderCode.value = d.orderCode || ''
     linkedOrderId.value = Number(d.orderId) || undefined
@@ -506,20 +488,20 @@ async function loadForEdit(id: number) {
 }
 
 /**
- * 页签标题**跟随实际类型**（2026-09-27 用户实测）：
+ * 页面名**跟随实际类型**（2026-09-27 立；**2026-09-28 用户口径补齐页头**）：
  * 本页路由 `meta.title` 是「新增/编辑委外加工退货」—— 那是本页**早先主营加工退货**时定的名；
  * 现在本页默认就是维修退货（见 form.returnType 注释：加工退货已统一到「成品收货」办理），
- * 于是从「成品维修退货」叶子点「新增」，页签却写着"新增委外加工退货"（名不符实）。
- * ⇒ 这里按 isRepair 把页签名改对；落库类型不变，只影响顶部页签显示；页内切类型时同步。
- *    页签由 layout 在路由变化时按 meta.title 打开，本函数在其后（onMounted）覆盖。
+ * 于是从「客户售后」叶子点「新增」时名不符实（用户实测报回：页头写着"新增委外加工退货"）。
+ * <p>⚠️ 原先只改了**页签 + 浏览器标题**（`syncTabTitle`），页头直接吃路由 `meta.title` ⇒ 三处不一致。
+ * 现在**页头（PageShell :title）/ 页签 / 浏览器标题三处同源**，都取本 computed。</p>
  */
+const pageTitleText = computed(() => (editId ? '编辑' : '新增') + (isRepair.value ? '客户售后' : '委外加工退货'))
 function syncTabTitle() {
-  const kind = isRepair.value ? '成品维修退货' : '委外加工退货'
-  const t = (editId ? '编辑' : '新增') + kind
-  tabStore.updateTabTitle(route.path, t)
-  applyPageTitle(t)   // 浏览器标签页标题同口径（后缀统一在 @/utils/pageTitle）
+  tabStore.updateTabTitle(route.path, pageTitleText.value)
+  applyPageTitle(pageTitleText.value)   // 浏览器标签页标题同口径（后缀统一在 @/utils/pageTitle）
 }
-watch(isRepair, syncTabTitle)
+// 页内切类型（如 加工退货 ⇄ 维修退货）与编辑/新增切换都要同步；页签由 layout 按 meta.title 打开 ⇒ 这里在其后覆盖
+watch(pageTitleText, syncTabTitle)
 
 onMounted(async () => {
   syncTabTitle()           // 先摆正页签名，再拉数据
@@ -536,8 +518,9 @@ async function loadMaterialTypes() {
 </script>
 
 <template>
-  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（保存） -->
-  <PageShell back-fallback="/outsource/return-order">
+  <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题 → 右端操作（保存）
+       标题 2026-09-28 起改取 pageTitleText（跟随类型：维修退货=新增客户售后），不再吃路由 meta 的历史名 -->
+  <PageShell :title="pageTitleText" back-fallback="/outsource/return-order">
     <template #actions>
       <el-button type="primary" :loading="submitting" @click="handleSubmit">保存</el-button>
     </template>
@@ -549,7 +532,7 @@ async function loadMaterialTypes() {
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">
             {{ isRepair
-              ? '维修退货：客户退回的售后品推给工厂维修 —— 不关联加工单、不还料；加工厂向我方收取维修费（必填）；修好后在详情页「登记维修返回」把货入回来。'
+              ? '维修退货：客户退回的售后品推给工厂维修 —— 不关联加工单、不还料；修好后在详情页「登记维修返回」把货入回来，届时按【返回产品行】填维修费（单价 × 数量 ⇒ 生成对加工厂的应付）。'
               : '加工退货：工厂交货后发现不良退回工厂 —— 可关联加工单（也可不关联）；退货物料按 BOM 快照还回工厂委外仓；加工厂不向我方收费（不良是工厂的问题）。' }}
           </span>
         </template>
@@ -584,29 +567,8 @@ async function loadMaterialTypes() {
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="退货日期"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>
-          <el-col :span="8">
-            <!-- 收费方向：**加工厂向我方收取**（我方付加工厂），审核后生成一条正向应付 -->
-            <el-form-item label="工厂收费" :required="isRepair">
-              <el-switch v-model="form.chargeFlag" :active-value="1" :inactive-value="0" active-text="收费" inactive-text="不收费" :disabled="!isRepair" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="收费类型" :required="form.chargeFlag === 1">
-              <el-select v-model="form.chargeType" placeholder="请选择" clearable style="width:100%" :disabled="form.chargeFlag !== 1">
-                <el-option v-for="o in chargeTypeOptions" :key="o.value" :label="o.label" :value="o.value" />
-              </el-select>
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="收费金额" :required="form.chargeFlag === 1">
-              <el-input-number v-model="form.chargeAmount" :min="0" :precision="2" :step="10" controls-position="right" style="width:100%" :disabled="form.chargeFlag !== 1" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="8">
-            <el-form-item label="收费说明">
-              <el-input v-model="form.chargeReason" placeholder="选填，如：返工费/运费" :disabled="form.chargeFlag !== 1" />
-            </el-form-item>
-          </el-col>
+          <!-- 2026-09-28（用户口径）：本页不再有「工厂收费 / 收费类型 / 收费金额 / 收费说明」——
+               维修费改到「登记维修返回」按**返回产品行**填（单价 × 数量），登记即按行生成对加工厂的应付。 -->
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
       </el-form>
@@ -620,7 +582,10 @@ async function loadMaterialTypes() {
         </div>
       </template>
       <el-table :data="rows" border size="small">
-        <el-table-column label="产品" width="160">
+        <!-- 2026-09-28（用户口径「修改选择送修产品的列表，宽度充满布局」）：本列由 `width=160` 改 **`min-width`** ——
+             实测：表格宽 948、五列固定宽合计仅 560 ⇒ 右侧空 388px 没铺满（产品下拉只有 143px 宽）。
+             Element 的 `min-width` 会把**剩余宽度按比例**分给这类列（本表另一列 `BOM物料` 也是 min-width）⇒ 铺满且不横向滚动。 -->
+        <el-table-column label="产品" min-width="180">
           <template #default="{row,$index}">
             <el-select v-model="row.productName" size="small" filterable clearable style="width:100%"
               :disabled="!form.factoryId" :placeholder="form.factoryId ? '请选择产品' : '请先选择加工厂'"

@@ -70,14 +70,32 @@ public interface OutsourceReturnOrderService {
     Map<String, Object> returnPrefill(Long deliveryId, Long orderId);
 
     /**
-     * 登记维修返回（2026-09-17）：维修退货单**已审核**（货已送工厂）后，工厂修好分批送回我方仓库。
-     * <p>登记即生效（成品入库 + 流水 `OUTSOURCE_REPAIR_IN`），**不产生任何应付**（维修费在送修审核时已挂）；
-     * 返回数量不得超过该产品/品质的送修量减已返回量。</p>
+     * 登记维修返回（2026-09-17 立；**2026-09-28 改草稿口径**）：维修退货单**已审核**（货已送工厂）后，
+     * 工厂修好分批送回我方仓库。
+     * <p>用户口径「加工和物料的登记返回都需要审核和反审核」⇒ 登记只建**草稿**：只校验（本单已审核、未结案、
+     * 数量不超「送修 − 已审核返回」、实际用料限本单 BOM）+ 落库（返回行含维修费单价/金额快照 + 用料明细），
+     * <b>不动库存/在厂行/成本/应付</b>；审核（{@link #auditRepairReturn}）才落账，反审核
+     * （{@link #unAuditRepairReturn}）对称逆回（含冲销按行生成的维修费应付），草稿可直接删除。</p>
      */
     void repairReturn(Long id, Map<String, Object> body);
 
-    /** 撤销维修返回：把已入库的成品扣回并删除该条返回记录（库存回滚，走 `CANCEL_OUTSOURCE_REPAIR_IN`） */
+    /**
+     * 删除维修返回**草稿**（2026-09-28 草稿口径）：草稿未落账 ⇒ 直接删记录（用料明细改挂到本单仍在的草稿）；
+     * 已审核的必须先 {@link #unAuditRepairReturn}（对称逆回 + 留痕）再删。
+     */
     void cancelRepairReturn(Long repairRecordId);
+
+    /**
+     * **审核**维修返回（2026-09-28 草稿口径）：审核才落账 —— 成品入我方仓 + 核销在厂 + 实际用料扣料/FIFO/成本，
+     * 并按行生成**维修费应付**（金额 = 该行 repair_amount，0 = 不收费），最后盖审核人章。
+     */
+    void auditRepairReturn(Long repairRecordId);
+
+    /**
+     * **反审核**维修返回（2026-09-28 草稿口径）：逐腿对称逆回（先冲应付再回滚库存），
+     * 记录回到**草稿**（留痕可查）并清空审核人。
+     */
+    void unAuditRepairReturn(Long repairRecordId);
 
     /**
      * 结案（仅维修退货，2026-09-17）：工厂把修好的货**全部送回**（未返回 = 0）后人工确认收尾。

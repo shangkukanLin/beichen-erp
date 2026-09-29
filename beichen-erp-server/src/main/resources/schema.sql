@@ -611,7 +611,12 @@ CREATE TABLE IF NOT EXISTS outsource_return_order_product (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外加工退货成品明细';
 
 -- 2026-09-17：委外维修返回记录（维修退货单送修后，工厂修好分批送回我方仓库）
--- 与主单一起构成"送修出库 → 维修返回入库"闭环；登记即生效（库存 +），支持逐行撤销（库存回滚）。
+-- 与主单一起构成"送修出库 → 维修返回入库"闭环。
+-- 2026-09-28（用户口径「维修费要精确到产品里、在登记返回时填写」）：维修费从主单整单字段下沉到**本表按产品行**
+--   —— repair_unit_price/repair_amount 在**登记返回**时填、金额按行快照落库。
+-- 2026-09-28（用户口径「加工和物料的登记返回都需要审核和反审核」）：**登记只建草稿**（不动库存/账务），
+--   **审核**才落账（成品入库 + 核销在厂 + 扣实际用料/成本 + **按行生成维修费应付**），**反审核**对称逆回
+--   （含冲销应付）并留痕（记录回草稿）；草稿可删除。与物料侧/加工返回同口径。
 CREATE TABLE IF NOT EXISTS outsource_return_order_repair (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     return_order_id BIGINT NOT NULL COMMENT '维修退货单ID(outsource_return_order.id)',
@@ -621,10 +626,16 @@ CREATE TABLE IF NOT EXISTS outsource_return_order_repair (
     product_name VARCHAR(100) COMMENT '产品名称快照',
     quality_type VARCHAR(20) DEFAULT 'A' COMMENT '返回品质(A/B/C/DEFECT)',
     quantity DECIMAL(18,0) COMMENT '返回数量',
+    repair_unit_price DECIMAL(18,2) DEFAULT 0 COMMENT '维修费单价(登记返回时按产品行填，留空=0)',
+    repair_amount DECIMAL(18,2) DEFAULT 0 COMMENT '维修费金额(=单价×数量，审核该行时生成应付)',
+    -- 2026-09-28（草稿口径）：状态与审核时间（两态：草稿未落账 / 已审核已落账；不设作废——草稿直接删）
+    status VARCHAR(20) DEFAULT 'DRAFT' COMMENT '状态: DRAFT=草稿(未落账) AUDITED=已审核(已落账)',
+    audit_time DATETIME DEFAULT NULL COMMENT '审核时间(反审核清空)',
     remark VARCHAR(255) COMMENT '备注',
     company_id BIGINT COMMENT '公司ID',
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    INDEX idx_return_order_id (return_order_id)
+    INDEX idx_return_order_id (return_order_id),
+    INDEX idx_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外维修返回记录';
 
 -- 2026-09-25 P2-1：维修返回明细（在厂核销 + 实际用料）。
@@ -765,8 +776,11 @@ CREATE TABLE IF NOT EXISTS outsource_material_return_item (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外物料退货明细';
 
 -- 2026-09-17：委外物料维修返回记录（维修返还单送修后，供应商修好分批把物料送回来）
--- 与主单一起构成"送修出库 → 维修返回入库"闭环；登记即生效（物料库存 +），支持逐行撤销（库存回滚）。
--- 与「委外加工退货」的 outsource_return_order_repair 同范式，只是对象是物料而非成品。
+-- 与主单一起构成"送修出库 → 维修返回入库"闭环。
+-- 2026-09-28（用户口径「加工和物料的登记返回都需要审核和反审核」）：**登记只建草稿**（不动库存/账务），
+--   **审核**才落账（物料入库 + 回补订单收料数 + 核销在厂 MATERIAL_REPAIR + 扣子物料/成本结转），
+--   **反审核**对称逆回并留痕（记录回草稿）；草稿可删除。与「加工返回」outsource_return_back 同口径。
+-- ⚠️ 加工侧的 outsource_return_order_repair（成品维修退货的登记返回）经用户确认**仍是登记即生效**，未纳入本次改造。
 CREATE TABLE IF NOT EXISTS outsource_material_return_repair (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     return_order_id BIGINT NOT NULL COMMENT '物料退货单ID(outsource_material_return.id)',

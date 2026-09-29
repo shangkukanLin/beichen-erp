@@ -172,16 +172,9 @@ for ($i = 1; $i -le $repNeed; $i++) {
   Start-Sleep -Milliseconds 1400
   Write-Host ('  repair out wh: ' + (SelectLabelContains 'lbl_repair_out_wh' $whName3))
   Start-Sleep -Milliseconds 1200
-  # 维修退货 requires a factory charge -> flip the switch on, then fill the amount
-  Write-Host ('  charge switch: ' + (ClickLabelSwitch (ZH 'lbl_charge_flag')))
-  Start-Sleep -Milliseconds 900
-  # 收费类型 is REQUIRED for 维修退货 ("请选择收费类型（如返工费）") -> take the first option
-  Write-Host ('  charge type open: ' + (OpenSelect 'lbl_charge_type'))
-  Start-Sleep -Milliseconds 1300
-  Write-Host ('  charge type pick: ' + (PickFirstOptionD 1200))
-  Start-Sleep -Milliseconds 800
-  Write-Host ('  charge amount: ' + (FillLabel 'lbl_charge_amount' '50'))
-  Start-Sleep -Milliseconds 900
+  # 2026-09-28（用户口径「维修费精确到产品里、在登记返回时填写」）：新增页**不再有**
+  #   「工厂收费 / 收费类型 / 收费金额」三件套 —— 费用改到「登记维修返回」弹窗按**返回产品行**填
+  #   （单价 × 本次返回数量 = 金额 ⇒ 登记即按行挂一条对加工厂的应付）。本脚本只验证"建单 + 审核"，无需填费。
   OpenRowSelect 0 0 | Out-Null
   Start-Sleep -Milliseconds 1800
   # 送修件必须是我方仓里"不良品"规格的成品 -> pick by name (options appear once the warehouse is chosen)

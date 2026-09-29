@@ -2,9 +2,9 @@
 #   S1 list page: type tabs (REFUND / REPAIR) + "new repair-return" button
 #   S2 create a REPAIR draft from the tab entry (url carries returnType=REPAIR)
 #   S3 audit -> material leaves source warehouse, **repair fee -> payable to the supplier** (P3 2026-09-28)
-#   S4 register repair return -> material comes back into the warehouse
-#   S5 un-audit is BLOCKED while repair-return records exist
-#   S6 cancel repair return -> stock rolled back; then un-audit + cancel succeed
+#   S4 register repair return (DRAFT) then audit it -> material comes back only at AUDIT
+#   S5 un-audit the doc is BLOCKED while AUDITED repair-return records exist
+#   S6 un-audit the repair record (stock rolled back) -> delete the draft; then un-audit + cancel succeed
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 
 $script:MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
@@ -71,11 +71,20 @@ Ok (($whId -gt 0) -and ($matId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') 
 Step 'S1 material-return leaves: tabs + one entry per leaf'
 # 2026-09-27 三级菜单拆叶子 → **2026-09-28 收敛为两个叶子**（关联退料 / 无单退料；用户口径「物料维修退料这个不需要了」）：
 #   两叶子靠 linked(WITH_ORDER/WITHOUT_ORDER) 区分 ⇒ 列集不同；**每个叶子内混排三种类型**
-#   （订单退料 ORDER / 退货退款 REFUND / 维修返回 REPAIR）⇒ 列表用「类型」列区分、动作按行类型显示。
-#   页签统一为 有效单据 | 已返回完 | 已作废（后端 progress=OPEN / RETURNED、statuses=CANCELLED）。
+#   （订单退料 ORDER / 退货退款 REFUND / 维修返回 REPAIR）⇒ 类型由**一级页签**表达，列表不再有「类型」列。
+#   页签**两级**（2026-09-28 用户口径）：一级=类型（订单退料 | 退货退款 | 维修返回），二级=状态（草稿和已审核 | 已作废）
+#   —— 旧的「有效单据 / 已返回完」两枚页签已随该口径下线（进度改由行内「送修/已返回」列表达）。
 Open '/outsource/material-return' 3000
-Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 关联退料 leaf has tab 有效单据'
-Ok ((BodyHas (ZH 'tab_leaf_void')) -eq 'true') 'S1 关联退料 leaf has tab 已作废单据'
+$lkTabsJs = "(()=>{const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(vis);return String(it.length)+'||'+it.map(e=>(e.innerText||'').replace(/\s+/g,' ').trim()).join(' | ')})()"
+$lkTabs = EvalJs $lkTabsJs
+Write-Host ('S1 关联退料 tabs => ' + $lkTabs)
+Ok ($lkTabs -match '^5\|\|') ('S1 关联退料 leaf has exactly 5 tabs (3 types x 2 statuses) (' + $lkTabs + ')')
+Ok ($lkTabs -match [regex]::Escape((ZH 'opt_type_order'))) 'S1 type tab 订单退料 present'
+Ok ($lkTabs -match [regex]::Escape((ZH 'opt_type_refund'))) 'S1 type tab 退货退款 present'
+Ok ($lkTabs -match [regex]::Escape((ZH 'opt_type_repair'))) 'S1 type tab 维修返回 present'
+Ok ($lkTabs -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 status tab 草稿和已审核 present'
+Ok ($lkTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 status tab 已作废 present'
+Ok (-not ($lkTabs -match [regex]::Escape((ZH 'tab_leaf_effective')))) 'S1 the legacy 有效单据 tab is gone (superseded by the type tabs)'
 Ok (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'lbl_mr_order'))) 'S1 关联退料 leaf shows the linked-order column'
 # 2026-09-24（UI 统一·用户口径）：入口文案都压成「新增」⇒ 不能靠文案区分叶子，
 #   改为断言「当前叶子上恰好一个『新增』按钮」（三入口互斥 ⇒ 一个叶子只看到一个入口）
@@ -101,9 +110,20 @@ Ok ($r1 -match 'REQ=true') ('S1 linked entry marks the order field required (' +
 Ok ((ClickBtn 'btn_back') -match 'OK') 'S1 click BACK on the linked-entry add page'
 Start-Sleep -Milliseconds 2600
 Ok ((CurUrl) -match 'material-return$') ('S1 linked entry BACK stays on the linked leaf url=' + (CurUrl))
-Open '/outsource/material-return/unlinked' 2600
-Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 无单退料 leaf has tab 有效单据'
-Ok (-not (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'lbl_mr_order')))) 'S1 无单退料 leaf has NO linked-order column'
+# 2026-09-28（用户口径）：无单退料叶子改**两级页签** —— 一级=**类型**（退货退款 | 维修返回），
+#   二级=**草稿和已审核 | 已作废**；类型既然上了页签 ⇒ 该叶子**不再显示「类型」列**（关联叶子仍保留）。
+Open '/outsource/material-return/unlinked' 2800
+$mrTabsJs = "(()=>{const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(vis);return String(it.length)+'||'+it.map(e=>(e.innerText||'').replace(/\s+/g,' ').trim()).join(' | ')})()"
+$mrTabs = EvalJs $mrTabsJs
+Write-Host ('S1 无单退料 tabs => ' + $mrTabs)
+Ok ($mrTabs -match '^4\|\|') ('S1 无单退料 leaf has exactly 4 tabs (2 types x 2 statuses) (' + $mrTabs + ')')
+Ok ($mrTabs -match [regex]::Escape((ZH 'tab_type_refund'))) 'S1 type tab 退货退款 present'
+Ok ($mrTabs -match [regex]::Escape((ZH 'tab_type_repair'))) 'S1 type tab 维修返回 present'
+Ok ($mrTabs -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 status tab 草稿和已审核 present'
+Ok ($mrTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 status tab 已作废 present'
+$hu = ((Rows 0).head -join '|')
+Ok (-not ($hu -match [regex]::Escape((ZH 'lbl_mr_order')))) 'S1 无单退料 leaf has NO linked-order column'
+Ok (-not ($hu -match [regex]::Escape((ZH 'col_mr_type')))) 'S1 无单退料 leaf has NO type column (the type is a tab now)'
 $n2 = EvalJs $cntJs
 Ok ($n2 -match 'CNT=1') ('S1 exactly one "new" button on the 无单退料 leaf (' + $n2 + ')')
 # 2026-09-28：无单退料叶子的「新增」相反 ---- URL 带 linked=WITHOUT_ORDER、页签=新增无单退料、
@@ -123,12 +143,18 @@ Ok ((CurUrl) -match '/outsource/material-return/unlinked') ('S1 unlinked entry B
 #   旧地址 /outsource/material-return/repair 已下线（菜单 visible=0 保号 + 前端重定向）⇒ 断言重定向回关联退料叶子。
 Open '/outsource/material-return/repair' 3000
 Ok ((CurUrl) -match '/outsource/material-return$') ('S1 retired repair leaf redirects to 关联退料 url=' + (CurUrl))
-# 两叶子统一的三个页签（2026-09-28）：有效单据 | 已返回完 | 已作废 + 「类型」列
+# **关联退料**叶子（2026-09-28 用户口径）：同样改**两级页签** —— 一级=类型（订单退料|退货退款|维修返回）、
+#   二级=状态（草稿和已审核|已作废）⇒ 恰好 5 个 tab；类型上了页签 ⇒ **不再有「类型」列**。
 Open '/outsource/material-return' 2800
-Ok ((BodyHas (ZH 'tab_leaf_effective')) -eq 'true') 'S1 leaf has tab 有效单据'
-Ok ((BodyHas (ZH 'tab_leaf_returned')) -eq 'true') 'S1 leaf has tab 已返回完'
-Ok ((BodyHas (ZH 'tab_leaf_void')) -eq 'true') 'S1 leaf has tab 已作废'
-Ok (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'col_mr_type'))) 'S1 type column present (three types share a leaf)'
+$rlTabs = EvalJs $mrTabsJs
+Write-Host ('S1 关联退料 tabs => ' + $rlTabs)
+Ok ($rlTabs -match '^5\|\|') ('S1 关联退料 leaf has 5 tabs = 3 types + 2 statuses (' + $rlTabs + ')')
+Ok ($rlTabs -match [regex]::Escape((ZH 'opt_type_order'))) 'S1 type tab 订单退料 present'
+Ok ($rlTabs -match [regex]::Escape((ZH 'opt_type_refund'))) 'S1 type tab 退货退款 present'
+Ok ($rlTabs -match [regex]::Escape((ZH 'opt_type_repair'))) 'S1 type tab 维修返回 present'
+Ok ($rlTabs -match [regex]::Escape((ZH 'tab_unlinked_active'))) 'S1 status tab 草稿和已审核 present'
+Ok ($rlTabs -match [regex]::Escape((ZH 'tab_leaf_void'))) 'S1 status tab 已作废 present'
+Ok (-not (((Rows 0).head -join '|') -match [regex]::Escape((ZH 'col_mr_type')))) 'S1 no type column any more (the type is a tab)'
 Ok ((Errs) -eq '[]') 'S1 no errors after visiting the leaves'
 
 # =====================================================================
@@ -136,11 +162,15 @@ Step 'S2 create REPAIR draft (type picked in the form: no dedicated repair leaf 
 $bStock = D (StockQty $whId 'material_id' $matId 'GOOD')
 $bpay = PaySum $supId
 Write-Host ('BASE wh' + $whId + '.m' + $matId + '=' + $bStock + ' payable' + $supId + '=' + $bpay)
-# 2026-09-28（三态）：维修返回没有独立叶子/独立入口了 ⇒ 在「无单退料」叶子的新增页里把「退货类型」选成维修返回。
+# 2026-09-28（三态 + 两级页签）：维修返回没有独立叶子/独立入口 ⇒ ① 先在无单叶子切到「维修返回」**类型页签**
+#   （类型页签在第二个 tab 行之前 ⇒ 序号 1），② 点「新增」把该类型带进新增页；再兜底在表单里选一次类型。
 Open '/outsource/material-return/unlinked' 2800
+Ok ((ClickTabIdx 1) -match 'OK') 'S2 switch to the 维修返回 type tab'
+Start-Sleep -Milliseconds 2600
 Ok ((ClickBtn 'btn_new_refund') -match 'OK') 'S2 click "new" on the 无单退料 leaf'
 Start-Sleep -Milliseconds 2800
 Ok ((CurUrl) -match 'linked=WITHOUT_ORDER') ('S2 url carries linked=WITHOUT_ORDER url=' + (CurUrl))
+Ok ((CurUrl) -match 'returnType=REPAIR') ('S2 the type tab intent is carried into the add page url=' + (CurUrl))
 Ok ((SelectLabel 'lbl_mr_type' 'opt_type_repair') -match 'OK') 'S2 pick type=维修返回'
 Start-Sleep -Milliseconds 1500
 $tabR = EvalJs "(()=>{const a=document.querySelector('.tab-item.active .tab-label');return a?(a.innerText||'').trim():'NONE'})()"
@@ -184,16 +214,25 @@ $hasRR2 = EvalJs "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob
 Ok ($hasRR2 -eq 'true') 'S3 repair-return button appears after audit'
 
 # =====================================================================
-Step 'S4 register repair return: material comes back'
+Step 'S4 register repair return (draft) then audit it'
 Ok ((ClickBtn 'btn_repair_return') -match 'OK') 'S4 open register dialog'
 Start-Sleep -Milliseconds 1800
 Ok ((SetRowInput 0 0 '3') -match 'OK') 'S4 repair qty=3'
 Ok ((ClickDialogBtn 'btn_repair_confirm') -match 'OK') 'S4 confirm'
 Start-Sleep -Milliseconds 3400
-Write-Host ('S4 after receive wh' + $whId + '.m' + $matId + '=' + (StockQty $whId 'material_id' $matId 'GOOD'))
-Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq $bStock) 'S4 material back into source warehouse'
+Write-Host ('S4 after register wh' + $whId + '.m' + $matId + '=' + (StockQty $whId 'material_id' $matId 'GOOD'))
+# 2026-09-28（用户口径「登记返回需要审核和反审核」）：登记只建**草稿** ⇒ 物料**不**回仓、记录为 DRAFT
+Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq ($bStock - 3)) 'S4 registration (draft) moved NO stock (material still sent out)'
+$rrStatus = SqlOne "SELECT status FROM outsource_material_return_repair WHERE return_order_id=$rid ORDER BY id DESC LIMIT 1"
+Ok ($rrStatus -eq 'DRAFT') ('S4 repair-return record saved as DRAFT (' + $rrStatus + ')')
+Ok ((ClickRowBtn 0 'btn_audit') -match 'OK') 'S4 audit the repair-return record (legs run here now)'
+ConfirmBox 1500 | Out-Null
+Start-Sleep -Milliseconds 3400
+Write-Host ('S4 after audit wh' + $whId + '.m' + $matId + '=' + (StockQty $whId 'material_id' $matId 'GOOD'))
+Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq $bStock) 'S4 material back into source warehouse (at AUDIT)'
 $rc = [int](SqlOne "SELECT COUNT(*) FROM outsource_material_return_repair WHERE return_order_id=$rid")
 Ok ($rc -eq 1) 'S4 repair-return record persisted'
+Ok ((SqlOne "SELECT status FROM outsource_material_return_repair WHERE return_order_id=$rid") -eq 'AUDITED') 'S4 repair-return record is AUDITED after the audit step'
 
 # =====================================================================
 Step 'S5 un-audit blocked while repair-return exists'
@@ -204,15 +243,20 @@ Write-Host ('S5 msg=' + (Txt '.el-message'))
 Ok ((SqlOne "SELECT status FROM outsource_material_return WHERE id=$rid") -eq 'AUDITED') 'S5 still AUDITED (blocked by repair records)'
 
 # =====================================================================
-Step 'S6 cancel repair return, then un-audit + cancel'
+Step 'S6 un-audit the repair record, delete the draft, then un-audit + cancel the doc'
 $rcId = [int](SqlOne "SELECT id FROM outsource_material_return_repair WHERE return_order_id=$rid LIMIT 1")
 Ok ($rcId -gt 0) ('S6 repair record id=' + $rcId)
 Open ("/outsource/material-return/detail/$rid") 2800
-Ok ((ClickRowBtn 0 'btn_revoke') -match 'OK') 'S6 click 撤销 on repair record'
+# 2026-09-28：已审核的返回不能直接删 —— 先「反审核」（对称逆回 + 留痕，记录回草稿），再删草稿
+Ok ((ClickRowBtn 0 'btn_unaudit') -match 'OK') 'S6 un-audit the repair record'
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 3200
-Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq ($bStock - 3)) 'S6 stock rolled back to sent-out state'
-Ok ([int](SqlOne "SELECT COUNT(*) FROM outsource_material_return_repair WHERE return_order_id=$rid") -eq 0) 'S6 repair record removed'
+Ok ((D (StockQty $whId 'material_id' $matId 'GOOD')) -eq ($bStock - 3)) 'S6 un-audit rolled the stock back to the sent-out state'
+Ok ((SqlOne "SELECT status FROM outsource_material_return_repair WHERE id=$rcId") -eq 'DRAFT') 'S6 the record is back to DRAFT (kept: un-audit leaves an audit trail)'
+Ok ((ClickRowBtn 0 'btn_delete') -match 'OK') 'S6 delete the draft record'
+ConfirmBox 1500 | Out-Null
+Start-Sleep -Milliseconds 3200
+Ok ([int](SqlOne "SELECT COUNT(*) FROM outsource_material_return_repair WHERE return_order_id=$rid") -eq 0) 'S6 draft record removed'
 Ok ((ClickBtn 'btn_unaudit') -match 'OK') 'S6 un-audit now allowed'
 ConfirmBox 1500 | Out-Null
 Start-Sleep -Milliseconds 3200

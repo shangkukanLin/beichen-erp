@@ -68,6 +68,9 @@ public class DataInitializer implements ApplicationRunner {
         migrateDashboardTabs();
         migrateUserMenuMode();
         initDocOperatorColumns();
+        migrateRepairReturnFee();
+        migrateMaterialRepairReturnStatus();
+        migrateReturnOrderRepairStatus();
         migrateMaterialOrderFinisher();
         migratePurchaseExchangeCharge();
         migratePurchaseChargePerProduct();
@@ -709,10 +712,9 @@ public class DataInitializer implements ApplicationRunner {
                 // ===== 委外加工（目录 4）=====
                 {401L, "outsource:order"},
                 {402L, "outsource:material-order"},
-                // 2026-09-27：408 改为三级「关联退货」——它的页面主体是**加工退货台账**
-                // （/api/outsource/order-delivery/return-defect/*）⇒ perms 换成台账接口的码；
-                // 原 outsource:return-order 归 421「维修退货」/422「加工返回单」使用（同码，职责更清楚）。
-                {408L, "outsource:order-delivery"},
+                // 2026-09-29：408「关联退货」叶子已下线（visible=0）⇒ 不再写 perms —— 它原先的码与
+                //   420「无单退货」/412「加工收货」相同（outsource:order-delivery），由那两行承担；
+                //   存量库该行的 perms 会残留但**不可见即不生效**（有效权限 = 可见菜单的 perms 集合）。
                 {411L, "outsource:material-return"},
                 {425L, "outsource:material-return"},
                 {420L, "outsource:order-delivery"},

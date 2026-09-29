@@ -26,7 +26,7 @@ public class OutsourceMaterialReturnController {
     private final com.beichen.erp.outsource.service.MaterialOrderService materialOrderService;
 
     /**
-     * 该物料商的物料订单（物料退货页「关联物料订单」下拉；维修退货闭环：收货中/已完成）。
+     * 该物料商的物料订单（物料退货页「关联物料订单」下拉；维修退货闭环：生产中/已完成）。
      * <p>期 3（2026-09-19 读隔离）：原先物料退货页直读 {@code /api/outsource/material-order/page}
      * （需 {@code outsource:material-order}）⇒ 只被授予 {@code outsource:material-return} 的用户会 403。
      * 现走本页前缀，复用物料订单模块的**同一分页查询**。</p>
@@ -117,14 +117,35 @@ public class OutsourceMaterialReturnController {
         return R.ok();
     }
 
-    /** 登记维修返回（维修退货单已审核后，供应商修好把物料送回来 → 入库；不产生应付，2026-09-17） */
+    /**
+     * 登记维修返回（维修退货单已审核后，供应商修好把物料送回来）—— **只建草稿**（2026-09-28 用户口径
+     * 「加工和物料的登记返回都需要审核和反审核」）：校验 + 落库，**不动库存/账务**；审核才落账。
+     */
     @PostMapping("/{id}/repair-return")
     public R<Void> repairReturn(@PathVariable Long id, @RequestBody Map<String, Object> body) {
         returnService.repairReturn(id, body);
         return R.ok();
     }
 
-    /** 撤销维修返回（按记录ID：扣回已入库物料并删除该记录） */
+    /**
+     * 维修返回记录**审核**（2026-09-28）：审核才落账 —— 物料入库 + 核销在厂 + 订单收料数回补 + 实际用料/成本结转。
+     */
+    @PutMapping("/repair-return/{repairRecordId}/audit")
+    public R<Void> auditRepairReturn(@PathVariable Long repairRecordId) {
+        returnService.auditRepairReturn(repairRecordId);
+        return R.ok();
+    }
+
+    /**
+     * 维修返回记录**反审核**（2026-09-28）：逐腿对称逆回，记录回草稿（留痕，区别于"删除草稿"）。
+     */
+    @PutMapping("/repair-return/{repairRecordId}/un-audit")
+    public R<Void> unAuditRepairReturn(@PathVariable Long repairRecordId) {
+        returnService.unAuditRepairReturn(repairRecordId);
+        return R.ok();
+    }
+
+    /** 删除维修返回**草稿**（2026-09-28：只有草稿可删；已审核的须先「反审核」） */
     @DeleteMapping("/repair-return/{repairRecordId}")
     public R<Void> cancelRepairReturn(@PathVariable Long repairRecordId) {
         returnService.cancelRepairReturn(repairRecordId);

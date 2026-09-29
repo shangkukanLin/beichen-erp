@@ -72,7 +72,7 @@ watch(pageTitleText, syncTitle)
  */
 const fetchSuppliers = (kw: string) =>
   request.get('/supplier/page', { params: { pageSize: 500, name: kw, excludeSupplierType: 'product' } })
-/** 该物料商的物料订单（收货中/已结单）：收货中的单审核会扣减收料数，已结单的靠本单跟踪 */
+/** 该物料商的物料订单（生产中/已结单）：生产中的单审核会扣减收料数，已结单的靠本单跟踪 */
 const fetchMaterialOrders = (kw: string) => request.get('/outsource/material-return/material-orders', {
   params: {
     pageSize: 500, code: kw || undefined,
@@ -137,8 +137,10 @@ async function loadWarehouseOptions() {
 
 /** 打开「登记维修返回」：按送修**物料**生成行，数量默认 = 送修 − 已返回（物料库存只有良品一档） */
 async function openRepairReturn() {
+  // 2026-09-28（草稿口径）：只有**已审核**的返回计入"已返回"（草稿未落账、不占额度 ⇒ 仍可继续登记）
   const returned: Record<string, number> = {}
   for (const r of (detail.value.repairReturns || []) as any[]) {
+    if (r.status !== DocStatus.AUDITED) continue
     const k = String(r.materialId)
     returned[k] = (returned[k] || 0) + (Number(r.quantity) || 0)
   }
@@ -173,21 +175,56 @@ async function submitRepairReturn() {
   repairSaving.value = true
   try {
     await request.post(`/outsource/material-return/${id}/repair-return`, { warehouseId: repairWarehouseId.value, repairDate: repairDate.value, items, materials })
-    ElMessage.success('维修返回已登记（物料已入库）')
+    ElMessage.success('维修返回草稿已保存，请在下方「维修返回记录」里审核（审核后才入库）')
     repairVisible.value = false
     await loadData()
     sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
   } catch (e: any) { ElMessage.error(e?.message || '登记失败') } finally { repairSaving.value = false }
 }
 
-async function cancelRepairReturn(row: any) {
-  try { await ElMessageBox.confirm(`确认撤销该条维修返回（${row.materialName || ''} × ${row.quantity}）？撤销后物料库存将扣回。`, '撤销维修返回', { type: 'warning' }) } catch { return }
+/**
+ * ==================== 维修返回记录的 审核 / 反审核 / 删除（2026-09-28 用户口径） ====================
+ * 「加工和物料的登记返回都需要审核和反审核」：登记只建**草稿**（不动库存/账务），
+ * 审核才落账（物料入库 + 核销在厂 + 订单收料数回补 + 实际用料/成本结转）；反审核对称逆回并**留痕**（回草稿）；
+ * 删除只对草稿开放。与「加工退货详情页」的返回记录同一口径。
+ */
+async function auditRepairReturn(row: any) {
   try {
-    await request.delete(`/outsource/material-return/repair-return/${row.id}`)
-    ElMessage.success('已撤销')
+    await ElMessageBox.confirm(
+      `确认审核该条维修返回（${row.materialName || ''} × ${row.quantity}）吗？审核后才会落账：物料入「${row.warehouseName || '入库仓'}」、核销供应商在厂、回补订单收料数，并按实际用料扣子物料与结转成本。`,
+      '确认审核', { type: 'warning' })
+  } catch { return }
+  try {
+    await request.put(`/outsource/material-return/repair-return/${row.id}/audit`)
+    ElMessage.success('已审核')
     await loadData()
     sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
-  } catch (e: any) { ElMessage.error(e?.message || '撤销失败') }
+  } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+}
+
+async function unAuditRepairReturn(row: any) {
+  try {
+    await ElMessageBox.confirm(
+      `确认反审核该条维修返回（${row.materialName || ''} × ${row.quantity}）吗？将对称逆回：扣回已入库物料、恢复在厂、回补实际用料并反结转成本、订单收料数退回；记录回到草稿（留痕可查）。`,
+      '确认反审核', { type: 'warning' })
+  } catch { return }
+  try {
+    await request.put(`/outsource/material-return/repair-return/${row.id}/un-audit`)
+    ElMessage.success('已反审核')
+    await loadData()
+    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+  } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+}
+
+/** 删除维修返回**草稿**（草稿未落账 ⇒ 直接删；已审核的必须先「反审核」） */
+async function cancelRepairReturn(row: any) {
+  try { await ElMessageBox.confirm(`确认删除该条维修返回草稿（${row.materialName || ''} × ${row.quantity}）？该草稿尚未落账（未动库存/账务），删除后不可恢复。`, '删除维修返回草稿', { type: 'warning' }) } catch { return }
+  try {
+    await request.delete(`/outsource/material-return/repair-return/${row.id}`)
+    ElMessage.success('已删除草稿')
+    await loadData()
+    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+  } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
 async function loadData() {
@@ -463,41 +500,68 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
     <!-- 维修返回记录（仅维修返回单，2026-09-17）：登记即入库，可逐行撤销 -->
     <el-card shadow="never" style="margin-top:12px" v-if="isRepair">
       <template #header>
-        <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
           <span style="font-weight:600">维修返回记录
             <span v-if="detail.closedFlag===1" style="margin-left:6px;font-size:var(--app-font-xs);color:var(--app-color-success)">（已结案）</span>
+          </span>
+          <span style="flex:1;text-align:right;font-size:var(--app-font-xs);color:var(--app-text-secondary)">
+            供应商修好送回时点「登记维修返回」→ 存为<b>草稿</b>（不动库存/账务）→ 在本表点<b>审核</b>才落账
+            （物料入库 + 核销在厂 + 回补订单收料数 + 实际用料/成本）；草稿可删除、已审核可反审核。
           </span>
           <el-button type="primary" size="small" v-if="detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="openRepairReturn">登记维修返回</el-button>
         </div>
       </template>
       <el-table :data="detail.repairReturns || []" border size="small">
-        <el-table-column label="返回日期" width="110"><template #default="{row}">{{ $fmtDate(row.repairDate) }}</template></el-table-column>
-        <el-table-column label="入库仓库" width="150"><template #default="{row}">{{ row.warehouseName || '-' }}</template></el-table-column>
-        <el-table-column label="物料名称" min-width="160"><template #default="{row}">{{ row.materialName || ('#' + row.materialId) }}</template></el-table-column>
-        <el-table-column label="单位" width="70"><template #default="{row}">{{ row.unit || '-' }}</template></el-table-column>
-        <el-table-column label="返回数量" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-success);font-weight:500">{{ row.quantity }}</span></template></el-table-column>
-        <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />
-        <!-- 2026-09-25 物料形态化：实际用料（子物料补料）汇总，明细金额 = FIFO 快照合计；旧行无用料显示 — -->
-        <el-table-column label="实际用料" min-width="140" show-overflow-tooltip>
+        <!-- 2026-09-28（用户口径「登记返回需要审核和反审核」）：状态并入「返回日期」第二行（tag，不新开列以守住表宽），
+             动作按状态渲染：草稿 → 审核 / 删除；已审核 → 反审核。 -->
+        <el-table-column label="返回日期" width="110">
+          <template #default="{row}">
+            <div>{{ $fmtDate(row.repairDate) }}</div>
+            <el-tag :type="DocStatusTag[row.status] || 'info'" size="small" style="margin-top:2px">{{ DocStatusLabel[row.status] || row.status }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="入库仓库" width="130"><template #default="{row}">{{ row.warehouseName || '-' }}</template></el-table-column>
+        <el-table-column label="物料名称" min-width="150"><template #default="{row}">{{ row.materialName || ('#' + row.materialId) }}</template></el-table-column>
+        <el-table-column label="返回数量" width="100" align="right"><template #default="{row}"><span style="color:var(--app-color-success);font-weight:500">{{ row.quantity }}</span></template></el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="90" show-overflow-tooltip />
+        <!-- 2026-09-25 物料形态化：实际用料（子物料补料）汇总，明细金额 = FIFO 快照合计；
+             2026-09-28：草稿未落账/旧行无用料 ⇒ 显示 —（金额在审核时按 FIFO 回填） -->
+        <el-table-column label="实际用料" min-width="120" show-overflow-tooltip>
           <template #default="{row}">
             <span v-if="row.materialSummary">{{ row.materialSummary }}<span style="margin-left:6px;color:var(--app-text-secondary)">{{ Number(row.materialAmount || 0).toFixed(2) }}</span></span>
             <span v-else style="color:var(--app-text-placeholder)">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="90" align="center">
-          <template #default="{row}"><el-button type="danger" link size="small" v-if="detail.closedFlag!==1" @click="cancelRepairReturn(row)">撤销</el-button></template>
+        <el-table-column label="审核人" width="80" show-overflow-tooltip><template #default="{row}">{{ row.auditorName || '-' }}</template></el-table-column>
+        <el-table-column label="操作" width="150" align="center">
+          <template #default="{row}">
+            <!-- 2026-09-28：已结案时**隐藏**行内动作（与全页"结案后不再受理返回动作"同口径；后端也一律拦截）。
+                 刻意用 v-if 而非 disabled：全站结案/作废类动作都是"消失"，且守卫按"按钮是否存在"判定。 -->
+            <el-button v-if="row.status===DocStatus.DRAFT && detail.closedFlag!==1" type="success" link size="small" @click="auditRepairReturn(row)">审核</el-button>
+            <el-button v-if="row.status===DocStatus.AUDITED && detail.closedFlag!==1" type="warning" link size="small" @click="unAuditRepairReturn(row)">反审核</el-button>
+            <el-button v-if="row.status===DocStatus.DRAFT && detail.closedFlag!==1" type="danger" link size="small" @click="cancelRepairReturn(row)">删除</el-button>
+          </template>
         </el-table-column>
       </el-table>
       <div v-if="!(detail.repairReturns || []).length" style="color:var(--app-text-secondary);font-size:var(--app-font-xs);padding:8px 0">
-        {{ detail.status!==DocStatus.AUDITED ? '审核（送修）后即可登记维修返回。' : (detail.closedFlag===1 ? '已结案（无维修返回记录）。' : '尚未登记维修返回（供应商修好送回后再登记，登记即入库）。') }}
+        {{ detail.status!==DocStatus.AUDITED ? '审核（送修）后即可登记维修返回。' : (detail.closedFlag===1 ? '已结案（无维修返回记录）。' : '尚未登记维修返回（供应商修好送回后登记，登记先存草稿、审核后才入库）。') }}
       </div>
       <div v-else-if="Number(detail.unreturnedQty) > 0" style="color:var(--app-color-warning);font-size:var(--app-font-xs);padding:8px 0">
         还有 {{ detail.unreturnedQty }} 件未返回（供应商尚未修好送回）；全部返回后可结案。
       </div>
     </el-card>
 
-    <!-- 登记维修返回弹窗 -->
-    <el-dialog v-model="repairVisible" title="登记维修返回" width="var(--app-dialog-md)" :close-on-click-modal="false">
+    <!-- 登记维修返回弹窗（2026-09-28 用户口径：只存草稿，审核才落账 —— 与「加工退货详情页」的返回登记同口径） -->
+    <el-dialog v-model="repairVisible" title="登记维修返回（先存草稿，审核后落账）" width="var(--app-dialog-md)" :close-on-click-modal="false">
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom:12px">
+        <template #title>
+          <span style="font-size:var(--app-font-xs);line-height:1.5">
+            本页保存为<b>草稿</b>（不动库存与账务）；在下方「维修返回记录」里点<b>审核</b>才落账：
+            物料入「入库仓库」→ 核销供应商在厂物料 → 回补关联订单收料数 → 按<b>实际用料</b>从委外仓扣子物料并结转成本。
+            草稿可删除、已审核可反审核。
+          </span>
+        </template>
+      </el-alert>
       <el-form label-width="90px" size="small">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -549,7 +613,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
       <el-button type="primary" link :icon="'Plus'" :disabled="repairCandidates.length === 0" @click="addRepairMaterial">添加用料行</el-button>
       <template #footer>
         <el-button @click="repairVisible = false">取消</el-button>
-        <el-button type="primary" :loading="repairSaving" @click="submitRepairReturn">确认登记（物料入库）</el-button>
+        <el-button type="primary" :loading="repairSaving" @click="submitRepairReturn">确认登记（存草稿）</el-button>
       </template>
     </el-dialog>
   </PageShell>
