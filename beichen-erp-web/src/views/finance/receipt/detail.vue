@@ -212,6 +212,11 @@ function back() { router.push('/finance/receipt') }
             </el-form-item>
           </el-col>
           <el-col :span="12"><el-form-item label="收款日期"><el-date-picker v-model="form.receiptDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item></el-col>
+          <!-- 制单人 / 审核人（2026-09-23 单据详情口径）：**草稿态也要看得见**（只读信息，不进 payload）。
+               2026-09-29：与付款详情同一条遗漏 —— 付款侧当时被 ui-e2e-p16 抓出并补回，**收款侧漏了**；
+               直到库里出现草稿收款单（SK-20260929002）才被同一支守卫暴露出来。 -->
+          <el-col :span="12"><el-form-item label="制单人">{{ detail.createByName || '—' }}</el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="审核人">{{ detail.auditorName || '—' }}</el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2"/></el-form-item></el-col>
         </el-row>
 
