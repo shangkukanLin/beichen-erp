@@ -2,17 +2,29 @@ package com.beichen.erp.finance.controller;
 
 import cn.dev33.satoken.stp.StpUtil;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.beichen.erp.common.ExcelExportHelper;
 import com.beichen.erp.common.R;
 import com.beichen.erp.config.CompanyContext;
+import com.beichen.erp.customer.entity.Customer;
+import com.beichen.erp.customer.mapper.CustomerMapper;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.BillStatementExcelBuilder;
+import com.beichen.erp.finance.common.BillType;
 import com.beichen.erp.finance.entity.FinanceBill;
 import com.beichen.erp.finance.entity.FinanceBillItem;
 import com.beichen.erp.finance.service.FinanceBillService;
 import com.beichen.erp.finance.task.FinanceBillAutoTask;
+import com.beichen.erp.supplier.entity.Supplier;
+import com.beichen.erp.supplier.mapper.SupplierMapper;
 import com.beichen.erp.system.common.SystemConstants;
+import com.beichen.erp.system.entity.Company;
+import com.beichen.erp.system.mapper.CompanyMapper;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.apache.poi.ss.usermodel.Workbook;
 import org.springframework.web.bind.annotation.*;
 
+import java.io.IOException;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -24,6 +36,15 @@ public class FinanceBillController {
 
     private final FinanceBillService service;
     private final FinanceBillAutoTask autoTask;
+
+    /**
+     * 对账单导出要带「公司抬头」与「往来单位联系人/电话」（2026-09-29 用户口径：账单详情加导出功能）。
+     * <p>只读三张主数据表（`sys_company` 抬头 / `supplier` / `customer` 联系方式）；
+     * **不新增权限点** —— 本控制器挂在 `/api/finance/bill` 前缀下，按前缀最长匹配只要求 `finance:bill`。</p>
+     */
+    private final CompanyMapper companyMapper;
+    private final SupplierMapper supplierMapper;
+    private final CustomerMapper customerMapper;
 
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
@@ -85,4 +106,37 @@ public class FinanceBillController {
 
     @PostMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) { service.cancel(id); return R.ok(); }
+
+    /**
+     * 导出「应收/应付对账单」Excel（2026-09-29 用户口径「账单详情要添加导出功能」，按**专业对外单据**形态实现）。
+     *
+     * <p>形态与口径见 {@link BillStatementExcelBuilder}（抬头/标题/单头/明细/公式合计/大写/说明/签字区 + 打印设置）。
+     * 本方法只负责取数与"往来单位联系人/电话"的兜底：账单类型=应付 ⇒ 查 `supplier`，应收 ⇒ 查 `customer`；
+     * 查不到不影响导出（该格留空），**不因主数据缺失而让单据导不出来**。</p>
+     *
+     * <p><b>不限制单据状态</b>：库里绝大多数账单是**草稿**（只放已审核等于该功能对多数账单不可用）；
+     * 草稿/作废由文件内标题后缀「（草稿）/（已作废）」+ 红色警示行**显式标注**，不会被误当生效凭证。</p>
+     *
+     * <p>⚠️ 前端按"文件流"接收（`responseType: 'blob'`）；失败时全局异常处理器回 JSON ⇒ 前端据 blob 类型区分
+     * （与合同导出同一套写法，见 outsource/order/detail.vue 的 exportPdf）。</p>
+     */
+    @GetMapping("/{id}/export")
+    public void export(@PathVariable Long id, HttpServletResponse resp) throws IOException {
+        FinanceBill bill = service.getById(id);
+        if (bill == null) throw new BusinessException("账单不存在");
+        Company company = bill.getCompanyId() != null ? companyMapper.selectById(bill.getCompanyId()) : null;
+        String contact = null;
+        String phone = null;
+        if (bill.getPartnerId() != null) {
+            if (BillType.PAYABLE.name().equalsIgnoreCase(bill.getBillType())) {
+                Supplier s = supplierMapper.selectById(bill.getPartnerId());
+                if (s != null) { contact = s.getContact(); phone = s.getPhone(); }
+            } else {
+                Customer c = customerMapper.selectById(bill.getPartnerId());
+                if (c != null) { contact = c.getContact(); phone = c.getPhone(); }
+            }
+        }
+        Workbook wb = BillStatementExcelBuilder.build(bill, service.getItems(id), company, contact, phone, LocalDate.now());
+        ExcelExportHelper.write(resp, wb, BillStatementExcelBuilder.fileName(bill));
+    }
 }
