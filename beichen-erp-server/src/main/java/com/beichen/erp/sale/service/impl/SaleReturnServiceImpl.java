@@ -817,7 +817,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         SaleReturn last = returnMapper.selectOne(w);
         // F7-109（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
         int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
-        return BillNoSeq.format(pat, seq);
+        return BillNoSeq.formatUnique(pat, seq, cand -> returnMapper.selectCount(new LambdaQueryWrapper<SaleReturn>().eq(SaleReturn::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     private Long getCurrentUserId() {

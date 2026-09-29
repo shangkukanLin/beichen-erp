@@ -945,6 +945,6 @@ public class ReturnSortServiceImpl implements ReturnSortService {
         ReturnSort last = rsMapper.selectOne(w);
         // F7-116（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
         int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
-        return BillNoSeq.format(pat, seq);
+        return BillNoSeq.formatUnique(pat, seq, cand -> rsMapper.selectCount(new LambdaQueryWrapper<ReturnSort>().eq(ReturnSort::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 }

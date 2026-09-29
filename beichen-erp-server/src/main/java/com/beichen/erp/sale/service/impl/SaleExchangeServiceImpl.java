@@ -429,6 +429,24 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         // 批量取产品（退回侧与换出侧同品），避免循环内逐条查库（N+1）
         Map<Long, Product> pMap = productMap(items);
 
+        // F7-248（2026-09-29 批 E 修复）：**非 1:1 换货必须收费**。
+        // 换货**本体不写台账**（等价换货无需挂账，见下方 saveChargeReceivable 的分工），但 outQtyOf 允许
+        // "退 2 换 1 / 退 1 换 2"（:624-627）⇒ 差额货物价值在系统里**无处挂账**：销售退货会写负数应收、
+        // 换货不走那条路；品质折损由后续「退货整理单」的 -LOSS 覆盖，而**数量差不会进整理单**。
+        // 因此：换出数量 ≠ 退回数量的明细必须已填"收费"金额，否则拒绝审核（提示改走退货单或补收费）。
+        for (SaleExchangeItem it : items) {
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
+            BigDecimal needOut = outQtyOf(it);
+            if (needOut.compareTo(BigDecimal.ZERO) > 0 && needOut.compareTo(it.getQuantity()) != 0
+                    && toBig(it.getChargeAmount()).compareTo(BigDecimal.ZERO) <= 0) {
+                String nm = it.getProductName() != null && !it.getProductName().isBlank()
+                        ? it.getProductName() : ("产品" + it.getProductId());
+                throw new BusinessException("换货明细「" + nm + "」退回 " + it.getQuantity().stripTrailingZeros().toPlainString()
+                        + " / 换出 " + needOut.stripTrailingZeros().toPlainString()
+                        + "（非 1:1）：差额货物价值无处挂账，请为该明细填写「收费」金额后再审核，或在销售退货单中处理");
+            }
+        }
+
         for (SaleExchangeItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             // ① 退回：入售后仓，品质待整理（后续走退货整理）
@@ -848,7 +866,7 @@ public class SaleExchangeServiceImpl implements SaleExchangeService {
         SaleExchange last = exchangeMapper.selectOne(w);
         // F7-109（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
         int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
-        return BillNoSeq.format(pat, seq);
+        return BillNoSeq.formatUnique(pat, seq, cand -> exchangeMapper.selectCount(new LambdaQueryWrapper<SaleExchange>().eq(SaleExchange::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     private String warehouseName(Long id) {

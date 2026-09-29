@@ -453,7 +453,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // F7-81②（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位）
         String prefix = BillPrefix.OUTSOURCE_OTHER_IO + dateStr;
         int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(prefix, seq, cand -> otherIoMapper.selectCount(new LambdaQueryWrapper<OutsourceOtherIo>().eq(OutsourceOtherIo::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     private BigDecimal toBD(Object v) {
@@ -811,7 +811,7 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // F7-81②（2026-09-20）：统一走 BillNoSeq（见上）
         String prefix = BillPrefix.OUTSOURCE_DELIVERY + dateStr;
         seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(prefix, seq, cand -> deliveryMapper.selectCount(new LambdaQueryWrapper<OutsourceDelivery>().eq(OutsourceDelivery::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     /** 先进先出计算单价：按交期升序累计订单，直到满足需求量，计算加权均价 */

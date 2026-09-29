@@ -1,5 +1,7 @@
 package com.beichen.erp.common;
 
+import com.beichen.erp.exception.BusinessException;
+
 /**
  * 单号序号解析 / 生成（F7-109 / F7-116 · 2026-09-20）。
  *
@@ -60,5 +62,38 @@ public final class BillNoSeq {
             return prefix + String.format("%03d", seq);
         }
         return prefix + seq;
+    }
+
+    /**
+     * F7-261（2026-09-30 审核批 H 收口）：**生成唯一单号** —— 在 {@link #format} 之上补"占用检测 + 递增重试"，
+     * 与财务侧的 F7-39#3 惯用法（`for (i&lt;999) { if (selectCount(...) == 0) return code; seq++; }`）同口径。
+     *
+     * <p><b>为什么需要</b>：本类原先只做"尾段数字解析 + 格式化"，**不含占用检测**（类注释里写的是"交由唯一索引
+     * 兜底报错"）；调用方一律 `last + 1 → format` 直接返回 ⇒ 两个并发请求读到同一条 `last` 就会生成同一单号，
+     * 第二条 INSERT 撞 `uk_code` 抛**数据库原始异常**（数据本身安全：31 张含单号列的表都有唯一键 ✓，
+     * 但用户看到的是不可读的 SQL 报错、且与财务侧"自动递增重试"的口径不一致）。</p>
+     *
+     * <p>用法（每个调用点只改一行）：</p>
+     * <pre>
+     * return BillNoSeq.formatUnique(prefix, seq,
+     *         cand -&gt; mapper.selectCount(new LambdaQueryWrapper&lt;Xxx&gt;().eq(Xxx::getCode, cand)) &gt; 0);
+     * </pre>
+     *
+     * @param prefix   单号前缀（含日期段）
+     * @param startSeq 起始序号（通常 = 已存在最大尾号 + 1；小于 1 时按 1 处理）
+     * @param exists   占用判定：给定候选单号返回 true 表示已被占用
+     * @return 一个未被占用的单号
+     * @throws BusinessException 连续 999 个候选都被占用（当日单号用尽，需人工介入）
+     */
+    public static String formatUnique(String prefix, int startSeq, java.util.function.Predicate<String> exists) {
+        int seq = Math.max(startSeq, 1);
+        for (int i = 0; i < 999; i++) {
+            String code = format(prefix, seq);
+            if (exists == null || !exists.test(code)) {
+                return code;
+            }
+            seq++;
+        }
+        throw new BusinessException("单号已用尽（前缀 " + prefix + "），请检查当日单据量或联系管理员");
     }
 }

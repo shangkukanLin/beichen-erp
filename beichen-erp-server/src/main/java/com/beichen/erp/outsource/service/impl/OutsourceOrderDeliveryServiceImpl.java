@@ -1235,7 +1235,7 @@ public class OutsourceOrderDeliveryServiceImpl
                 .orderByDesc(OutsourceOrderDelivery::getCode).last("LIMIT 1"));
         int seq = last != null && last.getCode() != null
                 ? BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return BillNoSeq.format(prefix, seq);
+        return BillNoSeq.formatUnique(prefix, seq, cand -> baseMapper.selectCount(new LambdaQueryWrapper<OutsourceOrderDelivery>().eq(OutsourceOrderDelivery::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     /** 校验退不良规格是否合法(A/B/C/DEFECT) */

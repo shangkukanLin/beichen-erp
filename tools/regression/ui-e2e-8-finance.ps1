@@ -13,7 +13,10 @@ Open '/finance/account' 2600
 ClearErrs | Out-Null
 Write-Host ('click new: ' + (ClickBtn 'btn_new_account'))
 Start-Sleep -Milliseconds 1200
-Write-Host ('name: ' + (FillLabel 'lbl_name' 'FIN-ACC'))
+# D-14 (2026-09-29): account names are unique per company now -> use a per-run name so re-runs
+# do not collide with the row left behind by the previous run (this script has no Ok assertions).
+$accName = 'FIN-ACC-' + (Get-Random -Minimum 1000 -Maximum 9999)
+Write-Host ('name: ' + (FillLabel 'lbl_name' $accName))
 Write-Host ('type: ' + (SelectLabelText 'lbl_type' (ZH 'opt_cash')))
 Write-Host ('balance: ' + (FillLabel 'lbl_initial_balance' '10000'))
 Write-Host ('ok: ' + (ClickDialogBtn 'btn_ok'))
@@ -29,7 +32,7 @@ Write-Host ('click new: ' + (ClickBtn 'btn_new_expense'))
 Start-Sleep -Milliseconds 1200
 Write-Host ('type: ' + (SelectLabelText 'lbl_expense_type' (ZH 'opt_expense_office')))
 Write-Host ('amount: ' + (FillLabel 'lbl_expense_amount' '100'))
-Write-Host ('account: ' + (SelectLabelContains 'lbl_pay_account' 'FIN-ACC'))
+Write-Host ('account: ' + (SelectLabelContains 'lbl_pay_account' $accName))
 Write-Host ('ok: ' + (ClickDialogBtn 'btn_ok'))
 Start-Sleep -Milliseconds 2000
 Write-Host ('msg=' + (Txt '.el-message') + ' errs=' + (Errs))
@@ -52,7 +55,7 @@ Start-Sleep -Milliseconds 1500
 Write-Host ('dlg items=' + (EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const d=[...document.querySelectorAll('.el-dialog')].filter(vis).pop();if(!d)return 'NODLG';return JSON.stringify([...d.querySelectorAll('.el-form-item')].map(it=>{const l=it.querySelector('.el-form-item__label');return (l?l.innerText.trim():'?')+'='+(it.querySelector('.el-select')?'select':'input')}))})()"))
 Write-Host ('customer: ' + (SelectLabelContains 'lbl_customer' (ZH 'val_customer')))
 Start-Sleep -Milliseconds 800
-Write-Host ('account: ' + (SelectLabelContains 'lbl_account' 'FIN-ACC'))
+Write-Host ('account: ' + (SelectLabelContains 'lbl_account' $accName))
 Start-Sleep -Milliseconds 700
 Write-Host ('add writeoff: ' + (ClickDialogBtn 'btn_add_writeoff'))
 Start-Sleep -Milliseconds 1200

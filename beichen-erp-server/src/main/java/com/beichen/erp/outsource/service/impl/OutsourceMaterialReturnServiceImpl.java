@@ -1740,7 +1740,7 @@ public class OutsourceMaterialReturnServiceImpl implements OutsourceMaterialRetu
         OutsourceMaterialReturn last = returnMapper.selectOne(new LambdaQueryWrapper<OutsourceMaterialReturn>()
                 .likeRight(OutsourceMaterialReturn::getCode, prefix).orderByDesc(OutsourceMaterialReturn::getCode).last("LIMIT 1"));
         int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(prefix, seq, cand -> returnMapper.selectCount(new LambdaQueryWrapper<OutsourceMaterialReturn>().eq(OutsourceMaterialReturn::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     private Long getCurrentUserId() {

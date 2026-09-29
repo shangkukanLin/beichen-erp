@@ -1126,7 +1126,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         // 序号 ≥1000 时旧实现取后三位得 "000" ⇒ seq=1 ⇒ 撞号），且不再 catch → seq=1 静默回退
         String prefix = BillPrefix.OUTSOURCE_MATERIAL_ORDER + ds;
         int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(prefix, seq, cand -> orderMapper.selectCount(new LambdaQueryWrapper<MaterialOrder>().eq(MaterialOrder::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     /** 处理方式 code → 中文名（用于备注展示） */
@@ -1143,6 +1143,6 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         // F7-65③（2026-09-20）：统一走 BillNoSeq（见上）
         String prefix = BillPrefix.OUTSOURCE_DELIVERY + ds;
         int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(prefix, seq, cand -> deliveryMapper.selectCount(new LambdaQueryWrapper<OutsourceDelivery>().eq(OutsourceDelivery::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 }

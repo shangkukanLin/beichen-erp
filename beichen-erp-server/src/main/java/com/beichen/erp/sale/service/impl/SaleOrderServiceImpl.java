@@ -584,6 +584,6 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         // F7-109（2026-09-20）：统一走 BillNoSeq —— 不再 substring(len-3)（序号 ≥1000 会截错），
         // 也不再 `catch → seq = 1` 静默回退（真撞车交给 uk_code 抛可见错误）。
         int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
-        return BillNoSeq.format(pat, seq);
+        return BillNoSeq.formatUnique(pat, seq, cand -> orderMapper.selectCount(new LambdaQueryWrapper<SaleOrder>().eq(SaleOrder::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 }

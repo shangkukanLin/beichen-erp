@@ -170,6 +170,11 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     /**
      * 审核：**纯出库凭证，不参与库存变动**（F7-105 · 2026-09-20 移除重复扣减）。
      *
+     * <p><b>财务口径（F7-249 · 2026-09-29 批 E）</b>：本单**不写任何财务腿**（audit/unAudit/cancel 三处都
+     * 刻意不触碰台账与资金）—— 应收在**销售单审核**时一次性挂账（{@code finance_receivable}，来源
+     * {@code SALE_ORDER}），出库只是"发货执行凭证"，不重复挂账也不冲账。若将来要让出库单独立挂账，
+     * 必须同时改销售单侧（否则双记）并补"来源销售单"约束。</p>
+     *
      * <p>历史：2026-09-17（D2）起「销售单审核」已统一扣减库存（{@code SaleOrderServiceImpl.audit} →
      * {@code StockChangeType.SALE_OUT / RelatedBillType.SALE_ORDER}），而本方法**也**扣一次，
      * 两者同时启用即**双重扣减**。原实现以"该页面未注册路由、无菜单（点不到）"为由保留代码、仅在注释里警示；
@@ -235,6 +240,6 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         SaleOutbound last = outboundMapper.selectOne(w);
         // F7-116（2026-09-20）：统一走 BillNoSeq（详见该类 javadoc）。
         int seq = BillNoSeq.lastSeq(last == null ? null : last.getCode(), pat) + 1;
-        return BillNoSeq.format(pat, seq);
+        return BillNoSeq.formatUnique(pat, seq, cand -> outboundMapper.selectCount(new LambdaQueryWrapper<SaleOutbound>().eq(SaleOutbound::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 }

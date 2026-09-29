@@ -485,7 +485,7 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
         String fullPrefix = prefix + d;
         seq = (last != null && last.getCode() != null)
                 ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), fullPrefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(fullPrefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(fullPrefix, seq, cand -> lossMapper.selectCount(new LambdaQueryWrapper<OutsourceStockLoss>().eq(OutsourceStockLoss::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     private Long getCurrentUserId() {

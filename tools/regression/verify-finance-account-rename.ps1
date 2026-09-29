@@ -78,11 +78,13 @@ if ($s807 -eq '8') { Ok '807 sits at position 8 (sort_order=8) per the user-orde
 if ($v807 -eq '1') { Ok '807 still visible' } else { Bad ('807 visible = ' + $v807) }
 $leftOld = SqlOne ("SELECT COUNT(*) FROM sys_menu WHERE parent_id=8 AND HEX(menu_name)='" + $oldHex + "'")
 if ($leftOld -eq '0') { Ok 'no finance submenu still carries the old label' } else { Bad ('menus under finance catalog with the old label = ' + $leftOld) }
-# DB-level order check by ID (ASCII only, encoding-proof). User order (2026-09-18):
-# bill > receipt > payment > expense > receivable > payable > cashflow > account > invoice > payable-transfer
+# DB-level order check by ID (ASCII only, encoding-proof). User order (2026-09-18, REVISED 2026-09-29):
+# receipt > payment > bill > expense > receivable > payable > cashflow > account > invoice > payable-transfer
+# (D-16, 2026-09-29: 账单生成 was moved to position 3 by a later user request; this guard still asserted the
+#  original order => a stale expectation, not a product defect. Re-synced with the live DB / sidebar.)
 $dbFinIds = ((SqlLines 'SELECT id FROM sys_menu WHERE parent_id=8 AND visible=1 ORDER BY sort_order, id') -join ',')
 Write-Output ('  finance ids in order = ' + $dbFinIds)
-if ($dbFinIds -eq '803,805,806,809,801,802,804,807,810,811') { Ok 'DB sort_order sequence exactly as user ordered' }
+if ($dbFinIds -eq '805,806,803,809,801,802,804,807,810,811') { Ok 'DB sort_order sequence exactly as user ordered' }
 else { Bad ('DB sequence mismatch: ' + $dbFinIds) }
 Write-Output ('  roles granted 807 = ' + (SqlOne 'SELECT COUNT(*) FROM sys_role_menu WHERE menu_id=807'))
 
@@ -106,7 +108,7 @@ Write-Output ("  finance children (count=$cnt) = " + $list)
 if ($hasNew) { Ok ('new label present in the sidebar at index ' + $idx + ' (0-based)') } else { Bad 'new label missing from the sidebar' }
 if ($hasOld) { Bad 'old label still visible in the sidebar' } else { Ok 'old label no longer appears in the sidebar' }
 if ($cnt -eq '10') { Ok 'finance catalog still has 10 items' } else { Bad ('finance catalog item count = ' + $cnt + ' (expected 10)') }
-$expectFin = @((ZH 'menu_fin_bill'), (ZH 'menu_fin_receipt'), (ZH 'menu_fin_payment'), (ZH 'menu_fin_expense'), (ZH 'menu_fin_receivable'), (ZH 'menu_fin_payable'), (ZH 'menu_fin_cashflow'), (ZH 'menu_finance_account'), (ZH 'menu_fin_invoice'), (ZH 'menu_fin_payable_transfer'))
+$expectFin = @((ZH 'menu_fin_receipt'), (ZH 'menu_fin_payment'), (ZH 'menu_fin_bill'), (ZH 'menu_fin_expense'), (ZH 'menu_fin_receivable'), (ZH 'menu_fin_payable'), (ZH 'menu_fin_cashflow'), (ZH 'menu_finance_account'), (ZH 'menu_fin_invoice'), (ZH 'menu_fin_payable_transfer'))
 if ($list -eq ($expectFin -join '|')) { Ok ('finance catalog order exactly as user ordered (' + ($expectFin -join ' -> ') + ')') }
 else { Bad ('finance catalog order mismatch; expect ' + ($expectFin -join '|') + ' got ' + $list) }
 if ($idx -eq '7') { Ok 'the renamed item sits at position 8 as ordered' } else { Bad ('new label index = ' + $idx + ' (expected 7, i.e. 8th)') }

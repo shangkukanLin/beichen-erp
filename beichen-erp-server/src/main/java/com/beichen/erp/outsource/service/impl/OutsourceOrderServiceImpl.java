@@ -553,6 +553,6 @@ public class OutsourceOrderServiceImpl implements OutsourceOrderService {
         // F7-65③（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位，不再静默回退）
         String prefix = BillPrefix.OUTSOURCE_ORDER + dateStr;
         seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), prefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(prefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(prefix, seq, cand -> orderMapper.selectCount(new LambdaQueryWrapper<OutsourceOrder>().eq(OutsourceOrder::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 }

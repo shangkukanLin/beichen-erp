@@ -303,7 +303,7 @@ public class OutsourceOtherIoController {
         OutsourceOtherIo last = ioMapper.selectOne(w);
         // F7-81②（2026-09-20）：统一走 BillNoSeq（尾段连续数字解析 + 序号超 999 自动扩位，不再静默回退）
         int seq = last != null ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), pat) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(pat, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(pat, seq, cand -> ioMapper.selectCount(new LambdaQueryWrapper<OutsourceOtherIo>().eq(OutsourceOtherIo::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */

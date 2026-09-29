@@ -818,7 +818,7 @@ public class DeliveryServiceImpl implements DeliveryService {
         String fullPrefix = BillPrefix.OUTSOURCE_DELIVERY + dateStr;
         seq = (last != null && last.getCode() != null)
                 ? com.beichen.erp.common.BillNoSeq.lastSeq(last.getCode(), fullPrefix) + 1 : 1;
-        return com.beichen.erp.common.BillNoSeq.format(fullPrefix, seq);
+        return com.beichen.erp.common.BillNoSeq.formatUnique(fullPrefix, seq, cand -> deliveryMapper.selectCount(new LambdaQueryWrapper<OutsourceDelivery>().eq(OutsourceDelivery::getCode, cand)) > 0) /* F7-261 冲突检测+重试 */;
     }
 
     /**
