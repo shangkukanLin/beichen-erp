@@ -14,8 +14,12 @@ public interface FinanceExpenseService {
     /**
      * 按**来源**查未作废的费用单（2026-09-27 新增，跨模块入口的幂等判据）。
      *
-     * <p>供物料页「新增物料 → 同时登记研发支出」这类跨模块入口复用：同一来源对象不得重复建单，
+     * <p>供**研发物料页**「新增物料 → 同时登记研发支出」这类跨模块入口复用（登记口径见
+     * {@link com.beichen.erp.finance.service.RdExpenseService}）：同一来源对象不得重复建单，
      * 但**已作废的不算**（作废后可重新登记）。未命中返回 {@code null}。</p>
+     *
+     * <p>⚠️ 来源类型必须与来源对象**一一对应**（如 {@code RD_DEV_MATERIAL} ↔ {@code dev_purchase_item.id}）：
+     * 不同表的 id 空间不同，复用同一类型会让同号对象互相判定"已登记"。</p>
      *
      * @param sourceBillType 来源类型（见 {@code ExpenseSourceType}）
      * @param sourceId       来源对象 ID（如 {@code outsource_material.id}）

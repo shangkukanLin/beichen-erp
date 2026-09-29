@@ -1324,14 +1324,14 @@ public class DataInitializer implements ApplicationRunner {
     /**
      * 存量库幂等迁移（2026-09-27）：费用单增加**来源引用三列**（source_bill_type / source_id / source_bill_no）+ 索引。
      *
-     * <p>背景：物料信息管理「新增物料 → 同时登记研发支出」需要回答"这笔费用是从哪个物料带出来的"，
-     * 用于 ① **幂等**（同一物料不重复建研发支出）② **可追溯**。命名与 finance_receivable 的来源三列一致。
+     * <p>背景：「研发物料 → 同时登记研发支出」需要回答"这笔费用是从哪个对象带出来的"，
+     * 用于 ① **幂等**（同一对象不重复建研发支出）② **可追溯**。命名与 finance_receivable 的来源三列一致。
      * 新库由 schema.sql 直接建列；老库 ALTER（重复启动无副作用）；**历史费用单三列为 NULL**（视为手工登记）。</p>
      */
     private void migrateFinanceExpenseSource() {
         addColumnIfMissing("finance_expense",
-                "source_bill_type VARCHAR(30) DEFAULT NULL COMMENT '来源类型(存code): RD_MATERIAL=物料研发支出'");
-        addColumnIfMissing("finance_expense", "source_id BIGINT DEFAULT NULL COMMENT '来源对象ID(如 outsource_material.id)'");
+                "source_bill_type VARCHAR(30) DEFAULT NULL COMMENT '来源类型(存code): RD_DEV_MATERIAL=研发物料研发支出；RD_MATERIAL=物料研发支出(历史)'");
+        addColumnIfMissing("finance_expense", "source_id BIGINT DEFAULT NULL COMMENT '来源对象ID(如 dev_purchase_item.id)'");
         addColumnIfMissing("finance_expense", "source_bill_no VARCHAR(50) DEFAULT NULL COMMENT '来源单号'");
         try {
             jdbcTemplate.execute("CREATE INDEX idx_expense_source ON finance_expense (source_bill_type, source_id)");

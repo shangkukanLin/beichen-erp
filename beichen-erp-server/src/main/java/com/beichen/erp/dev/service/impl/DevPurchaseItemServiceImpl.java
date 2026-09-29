@@ -15,6 +15,8 @@ import com.beichen.erp.dev.mapper.DevPurchaseItemMapper;
 import com.beichen.erp.dev.mapper.ProjectMapper;
 import com.beichen.erp.dev.service.DevPurchaseItemService;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.common.ExpenseSourceType;
+import com.beichen.erp.finance.service.RdExpenseService;
 import com.beichen.erp.warehouse.common.WarehouseCategory;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.mapper.WarehouseMapper;
@@ -42,14 +44,18 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
     private final ProjectMapper devProjectMapper;
     private final WarehouseMapper warehouseMapper;
     private final DevMaterialFlowMapper materialFlowMapper;
+    /** 研发支出（费用单）：登记口径全在财务侧共享实现（校验 / 幂等 / 权限闸门 / 自动审核与回滚） */
+    private final RdExpenseService rdExpenseService;
 
     @Autowired
     public DevPurchaseItemServiceImpl(ProjectMapper devProjectMapper,
                                       WarehouseMapper warehouseMapper,
-                                      DevMaterialFlowMapper materialFlowMapper) {
+                                      DevMaterialFlowMapper materialFlowMapper,
+                                      RdExpenseService rdExpenseService) {
         this.devProjectMapper = devProjectMapper;
         this.warehouseMapper = warehouseMapper;
         this.materialFlowMapper = materialFlowMapper;
+        this.rdExpenseService = rdExpenseService;
     }
 
     @Override
@@ -144,6 +150,23 @@ public class DevPurchaseItemServiceImpl extends ServiceImpl<DevPurchaseItemMappe
                 .eq(DevMaterialFlow::getMaterialId, id));
         this.removeById(id);
         if (flows > 0) log.info("删除研发物料时级联清理流转记录 {} 条: materialId={}", flows, id);
+    }
+
+    /**
+     * 为研发物料登记一笔「研发支出」（2026-09-28 用户口径：该功能属**研发管理的研发物料**）。
+     *
+     * <p>来源类型用 {@link ExpenseSourceType#RD_DEV_MATERIAL}（**不复用** {@code RD_MATERIAL}：
+     * 研发物料 `dev_purchase_item.id` 与委外物料 `outsource_material.id` 是两套 id，复用会让幂等串号）。</p>
+     *
+     * <p>登记与列出流水是**两次请求**（物料已建、费用失败可重试）；后端按来源幂等，重试不会重复扣款。</p>
+     */
+    @Override
+    public Map<String, Object> createRdExpense(Long id, Map<String, Object> body) {
+        DevPurchaseItem item = this.getById(id);
+        if (item == null) throw new BusinessException("研发物料不存在：" + id);
+        String name = (item.getName() == null || item.getName().isBlank()) ? ("#" + id) : item.getName();
+        // 备注留空时由共享实现取本默认文案（与旧的物料侧口径一致：「研发支出：{对象名}」）
+        return rdExpenseService.register(ExpenseSourceType.RD_DEV_MATERIAL, id, "研发支出：" + name, body);
     }
 
     /** 必填与取值范围校验（F7-101）：名称必填，数量/金额不允许负数 */

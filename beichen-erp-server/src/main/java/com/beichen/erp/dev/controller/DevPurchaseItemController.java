@@ -75,4 +75,23 @@ public class DevPurchaseItemController {
         devPurchaseItemService.deleteItem(id);
         return R.ok();
     }
+
+    /**
+     * 为研发物料登记一笔「研发支出」费用单（2026-09-28 用户口径：该功能从「物料信息管理」**移到研发物料**）。
+     *
+     * <p><b>两个入口共用本端点</b>：新增研发物料弹窗里勾选「同时登记一笔研发支出」（带 {@code autoAudit=true}
+     * ⇒ 建单即审核、当场扣款；无费用审核权限则降级草稿）、以及列表行「研发支出」补登记（不带 autoAudit ⇒ 落草稿）。</p>
+     *
+     * <p><b>幂等</b>：同一研发物料已有未作废的研发支出 ⇒ 返回原单（{@code existing=true}）；原单是草稿且本次要
+     * 自动审核 ⇒ 补审核；已审核的不再动账（绝不重复扣款）。</p>
+     *
+     * <p>登记口径（金额/账户校验、自动审核、权限降级闸门）见
+     * {@link com.beichen.erp.finance.service.RdExpenseService}；权限走本前缀（{@code dev:material}/{@code dev:project}），
+     * 故研发物料页用户无需财务权限。</p>
+     */
+    @PostMapping("/{id}/rd-expense")
+    public R<Map<String, Object>> createRdExpense(@PathVariable Long id,
+                                                  @RequestBody(required = false) Map<String, Object> body) {
+        return R.ok(devPurchaseItemService.createRdExpense(id, body));
+    }
 }

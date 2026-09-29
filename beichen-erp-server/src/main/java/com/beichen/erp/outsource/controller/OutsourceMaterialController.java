@@ -82,27 +82,9 @@ public class OutsourceMaterialController {
         return R.ok(materialService.create(body));
     }
 
-    /**
-     * 为物料登记一笔「研发支出」费用单（2026-09-27 用户需求：新增物料时提示"要不要根据物料新增研发支出"）。
-     *
-     * <p><b>审核口径</b>（用户 2026-09-27 追加要求「新增物料时勾选，需要自动审核」）：</p>
-     * <ul>
-     *   <li>{@code autoAudit=true}（新增物料页勾选）⇒ 建单后**立即审核**：当场写「费用支出」流水、扣账户余额；
-     *       余额不足则整体回滚（不留半成品），前端提示后可换账户重试。
-     *       **方案 A 闸门**：须持费用审核权限（{@code finance:expense} / {@code finance:cashflow}），
-     *       否则降级为草稿（响应 {@code downgraded=true}）—— 物料页用户通常无此权限，不会借物料页动钱。</li>
-     *   <li>{@code autoAudit=false}（列表行操作「补登记」）⇒ 落**草稿**，由财务在「费用管理」审核。</li>
-     * </ul>
-     *
-     * <p>幂等：同一物料已有未作废的研发支出 ⇒ 返回原单（{@code existing=true}）；原单是草稿且本次要自动审核
-     * ⇒ 补审核；已审核的不再动账（绝不重复扣款）。权限走本前缀（{@code outsource:material-info}），
-     * 故物料页用户无需财务权限。</p>
-     */
-    @PostMapping("/{materialId}/rd-expense")
-    public R<Map<String, Object>> createRdExpense(@PathVariable Long materialId,
-                                                  @RequestBody(required = false) Map<String, Object> body) {
-        return R.ok(materialService.createRdExpense(materialId, body));
-    }
+    // 2026-09-28（用户口径）：原 `POST /{materialId}/rd-expense`（物料登记研发支出）**已移除** ——
+    //   该功能属「研发管理 → 研发物料」，改由 `POST /api/dev/purchase-item/{id}/rd-expense` 提供；
+    //   存量费用单（来源 RD_MATERIAL）保留在财务费用管理里，不受影响。
 
     @PutMapping
     public R<Void> update(@RequestBody Map<String, Object> body) {
