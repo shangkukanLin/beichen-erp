@@ -121,8 +121,13 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         // "读余额校验 → 写支出流水"两步不原子 ⇒ 并发两笔费用可双双通过校验、账户被透支（报告的 P3 残留）。
         Long lockCid = CompanyContext.get();
         if (lockCid != null && lockCid <= 0) lockCid = null;
-        if (accountMapper.selectForUpdate(expense.getAccountId(), lockCid) == null)
-            throw new BusinessException("支出账户不存在");
+        // F7-230（2026-09-29 审核批 C）：行锁取账户后**一并校验停用状态** —— 原先只看"存在"，
+        // 停用账户照样能用于费用支出（前端下拉过滤了 status=1，但直调 API 可绕）。
+        // 与收/付款侧 F7-207/F7-215 同口径（`status` 为 null 的历史行不拦）。
+        FinanceAccount lockedAcc = accountMapper.selectForUpdate(expense.getAccountId(), lockCid);
+        if (lockedAcc == null) throw new BusinessException("支出账户不存在");
+        if (lockedAcc.getStatus() != null && lockedAcc.getStatus() == 0)
+            throw new BusinessException("支出账户「" + lockedAcc.getAccountName() + "」已停用，不能用于费用支出");
         // 余额校验：账户实时余额（期初+收入-支出）须足够支付本笔费用
         // F7-140：用**当前读**取余额（见 accountBalanceForUpdate 的说明：一致性读会读到旧快照 ⇒ 并发可透支）
         BigDecimal balance = accountBalanceForUpdate(expense.getAccountId());
@@ -208,6 +213,11 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         } catch (IllegalArgumentException ex) {
             throw new BusinessException(ex.getMessage());
         }
+        // F7-232（2026-09-29 审核批 C）：**报损损失（LOSS）语义 = 非资金费用**（存货损失不产生现金流出）⇒
+        // 不允许指定支出账户，否则"同一语义两种记法"：选了账户就会写一笔真金白银的支出流水。
+        // （由报损单带出的费用走内部调用、accountId 为空；手工登记页选到 LOSS 时会被这里拒绝。）
+        if (ExpenseType.LOSS.getCode().equals(expense.getExpenseType()) && expense.getAccountId() != null)
+            throw new BusinessException("报损损失为非资金费用，不能指定支出账户（请清空支出账户）");
         if (expense.getAmount() == null || expense.getAmount().compareTo(BigDecimal.ZERO) <= 0) throw new BusinessException("费用金额必须大于 0");
         // 2026-09-29（用户口径「报损需要走财务流程」）：**支出账户可为空** —— 但**仅限"由业务单据带出的
         // 非资金损失费用"**（source_bill_type 非空，如报损损失 ExpenseType.LOSS：存货损失不发生现金流出
@@ -224,6 +234,9 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         if (expense.getAccountId() == null) { expense.setAccountName(null); return; }
         FinanceAccount acc = accountMapper.selectById(expense.getAccountId());
         if (acc == null) throw new BusinessException("支出账户不存在");
+        // F7-230（2026-09-29 审核批 C）：建单/改单即拦停用账户（审核路径另有行锁版同款校验）
+        if (acc.getStatus() != null && acc.getStatus() == 0)
+            throw new BusinessException("支出账户「" + acc.getAccountName() + "」已停用，不能用于费用支出");
         expense.setAccountName(acc.getAccountName());
     }
 
@@ -242,7 +255,10 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
      * 读到的仍是**旧余额** ⇒ 并发第二笔照样通过校验。必须用当前读才能读到"前一笔已提交的流水"。</p>
      */
     private BigDecimal accountBalanceForUpdate(Long accountId) {
-        Map<String, Object> row = accountMapper.sumBalanceForUpdate(accountId);
+        // F7-239（2026-09-29 审核批 C）：与 selectForUpdate 口径一致，显式带上租户条件
+        Long cid = CompanyContext.get();
+        if (cid != null && cid <= 0) cid = null;
+        Map<String, Object> row = accountMapper.sumBalanceForUpdate(accountId, cid);
         if (row == null || row.get("balance") == null) return BigDecimal.ZERO;
         return new BigDecimal(row.get("balance").toString());
     }

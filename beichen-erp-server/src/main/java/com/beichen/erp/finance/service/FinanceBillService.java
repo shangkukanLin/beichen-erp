@@ -12,7 +12,17 @@ public interface FinanceBillService {
     Page<Map<String,Object>> page(String billType, Long partnerId, int pageNum, int pageSize);
     FinanceBill getById(Long id);
     List<FinanceBillItem> getItems(Long billId);
-    FinanceBill generate(String billType, Long partnerId, String partnerName, LocalDate periodStart, LocalDate periodEnd);
+    /**
+     * 生成账单（草稿）。
+     *
+     * <p><b>F7-244（2026-09-29 批 D）</b>：{@code partnerName} 入参**仅作兼容保留**，落库抬头一律按
+     * {@code partnerId} 回查主数据（客户/供应商表），不信任客户端提交值（自动任务本就是回查口径）。</p>
+     *
+     * <p><b>D-19（2026-09-29）</b>：{@code source} 记录出账来源（{@code MANUAL} 手工 / {@code AUTO} 自动任务），
+     * 供事后追溯"这张单是谁出的"。</p>
+     */
+    FinanceBill generate(String billType, Long partnerId, String partnerName, LocalDate periodStart,
+                         LocalDate periodEnd, String source);
     void audit(Long id);
     void unAudit(Long id);
     void cancel(Long id);

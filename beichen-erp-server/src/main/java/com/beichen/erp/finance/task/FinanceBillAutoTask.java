@@ -3,6 +3,7 @@ package com.beichen.erp.finance.task;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.exception.BusinessException;
+import com.beichen.erp.finance.entity.FinanceBill;
 import com.beichen.erp.finance.service.FinanceBillService;
 import com.beichen.erp.system.entity.Company;
 import com.beichen.erp.system.mapper.CompanyMapper;
@@ -61,11 +62,15 @@ public class FinanceBillAutoTask {
             }
             try {
                 run(today);
+            } catch (Exception e) {
+                // F7-245（2026-09-29 批 D）：执行期异常**不再**被归因成"抢锁失败" —— 原实现的 try 覆盖了
+                // run(today)，任何内部异常都被记成"获取实例锁失败，本轮跳过"，排障时严重误导。
+                log.error("自动账单任务执行失败（已取得实例锁，本轮部分公司可能未出账）", e);
             } finally {
                 queryInt(conn, "SELECT RELEASE_LOCK('" + LOCK_NAME + "')");
             }
         } catch (Exception e) {
-            log.error("自动账单任务获取实例锁失败，本轮跳过", e);
+            log.error("自动账单任务获取实例锁/数据库连接失败，本轮跳过", e);
         }
     }
 
@@ -159,18 +164,27 @@ public class FinanceBillAutoTask {
                 CompanyContext.set(c.getId());
                 List<FinanceBillService.AutoBillCommand> plan = billService.autoGeneratePlan(today);
                 int ok = 0;
+                List<String> created = new java.util.ArrayList<>();
+                List<String> failed = new java.util.ArrayList<>();
                 // 逐条独立事务执行：单张账单失败不影响其它
                 for (FinanceBillService.AutoBillCommand cmd : plan) {
                     try {
-                        billService.generate(cmd.billType(), cmd.partnerId(), cmd.partnerName(), cmd.periodStart(), cmd.periodEnd());
+                        // D-19（2026-09-29 批 D）：来源标记 AUTO；F7-245：单号记入摘要，事后可答"昨晚出了哪几张"
+                        FinanceBill createdBill = billService.generate(cmd.billType(), cmd.partnerId(),
+                                cmd.partnerName(), cmd.periodStart(), cmd.periodEnd(), "AUTO");
+                        if (createdBill != null && createdBill.getBillNo() != null) created.add(createdBill.getBillNo());
                         ok++;
                     } catch (Exception ex) {
+                        failed.add(cmd.billType() + "/partner" + cmd.partnerId() + "：" + ex.getMessage());
                         log.error("自动账单生成失败 company={} billType={} partnerId={}", c.getId(), cmd.billType(), cmd.partnerId(), ex);
                     }
                 }
                 total += ok;
                 summary.append("公司[").append(c.getCompanyName()).append("] 计划 ").append(plan.size())
-                        .append(" 张、成功 ").append(ok).append(" 张；");
+                        .append(" 张、成功 ").append(ok).append(" 张");
+                if (!created.isEmpty()) summary.append("（").append(brief(created)).append("）");
+                if (!failed.isEmpty()) summary.append("、失败 ").append(failed.size()).append(" 张：").append(brief(failed));
+                summary.append("；");
             } catch (Exception ex) {
                 log.error("自动账单任务公司处理失败 company={}", c.getId(), ex);
                 summary.append("公司[").append(c.getCompanyName()).append("] 失败：").append(ex.getMessage()).append("；");
@@ -179,5 +193,12 @@ public class FinanceBillAutoTask {
             }
         }
         return total;
+    }
+
+    /** 摘要用：最多列 10 项，其余折叠为"等 N 项"（避免日志/返回值过长）—— F7-245 */
+    private static String brief(List<String> xs) {
+        if (xs == null || xs.isEmpty()) return "";
+        if (xs.size() <= 10) return String.join(",", xs);
+        return String.join(",", xs.subList(0, 10)) + " 等 " + xs.size() + " 项";
     }
 }

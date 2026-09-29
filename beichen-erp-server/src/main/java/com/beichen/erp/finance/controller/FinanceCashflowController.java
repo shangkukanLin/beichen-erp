@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.common.BillPrefix;
 import com.beichen.erp.common.R;
+import com.beichen.erp.exception.BusinessException;
 import com.beichen.erp.finance.common.AccountType;
 import com.beichen.erp.finance.common.CashflowRelatedType;
 import com.beichen.erp.finance.common.CashflowType;
@@ -47,30 +48,26 @@ public class FinanceCashflowController {
     }
 
     /**
-     * 流水余额累计回填：余额 = 账户期初 + 截至该笔流水为止的累计(income - expense)
-     * 按 id 升序逐笔累计，保证跨页、跨账户均正确
+     * 流水余额累计回填：余额 = 账户期初 + 截至该笔流水为止的累计(income - expense)。
+     *
+     * <p>F7-238（2026-09-29 决策 D-15）：改为**只为本页行做一次聚合** —— 原实现把这些账户的**全部流水**读进内存
+     * 逐笔累计（O(账户历史)，账户流水一多就慢，且全量明细进 JVM）。现在由数据库对每行按 `id &lt;= 本行 id`
+     * 求和（索引段扫描），只返回本页这几行的余额 ⇒ 内存 O(页大小)。语义与逐笔累计**完全等价**（含期初行）。</p>
      */
     private void fillCashflowBalance(List<FinanceCashflow> records) {
         if (records == null || records.isEmpty()) return;
-        List<Long> accountIds = records.stream().map(FinanceCashflow::getAccountId)
+        List<Long> ids = records.stream().map(FinanceCashflow::getId)
                 .filter(java.util.Objects::nonNull).distinct().collect(Collectors.toList());
-        if (accountIds.isEmpty()) return;
-        // 查这些账户的全部流水（按 id 升序，用于累计）
-        List<FinanceCashflow> allFlows = cashflowMapper.selectList(new LambdaQueryWrapper<FinanceCashflow>()
-                .in(FinanceCashflow::getAccountId, accountIds)
-                .orderByAsc(FinanceCashflow::getId));
-        // 按账户分组累计，计算每笔流水的变动后余额（期初流水为第一笔，income=期初，无需额外初始值）
-        Map<Long, BigDecimal> runningMap = new java.util.HashMap<>();
+        if (ids.isEmpty()) return;
         Map<Long, BigDecimal> balanceById = new java.util.HashMap<>();
-        for (FinanceCashflow f : allFlows) {
-            BigDecimal running = runningMap.getOrDefault(f.getAccountId(), BigDecimal.ZERO);
-            BigDecimal delta = (f.getIncome() != null ? f.getIncome() : BigDecimal.ZERO)
-                    .subtract(f.getExpense() != null ? f.getExpense() : BigDecimal.ZERO);
-            running = running.add(delta);
-            runningMap.put(f.getAccountId(), running);
-            balanceById.put(f.getId(), running);
+        for (Map<String, Object> row : cashflowMapper.sumBalanceByIds(ids)) {
+            Object idv = row.get("id");
+            Object bv = row.get("balance");
+            if (idv != null) {
+                balanceById.put(Long.valueOf(idv.toString()),
+                        bv == null ? BigDecimal.ZERO : new BigDecimal(bv.toString()));
+            }
         }
-        // 回填到本页记录
         for (FinanceCashflow f : records) {
             f.setBalance(balanceById.getOrDefault(f.getId(), BigDecimal.ZERO));
         }
@@ -115,6 +112,18 @@ public class FinanceCashflowController {
     public R<Void> addAccount(@RequestBody FinanceAccount a) {
         if (a.getOpeningBalance() == null) a.setOpeningBalance(BigDecimal.ZERO);
         if (a.getStatus() == null) a.setStatus(1);
+        // F7-229（2026-09-29 审核批 C）：补最小入参校验 —— 原先只校验类型，账户名可空、期初可为负。
+        if (a.getAccountName() == null || a.getAccountName().isBlank())
+            throw new BusinessException("账户名称不能为空");
+        a.setAccountName(a.getAccountName().trim());
+        // D-14（2026-09-29 决策）：**同名账户收口** —— 原先账户名可重复（库中曾有 6 个 `FIN-ACC` 夹具残留）。
+        // 口径：同公司内账户名不可重复（**含已停用**：停用≠可复用名字）。DB 侧配套
+        // `uk_account_name (company_id, account_name)`（见 docs 报告 §4.5），此处给出可读提示并把口径前置。
+        if (accountMapper.selectCount(new LambdaQueryWrapper<FinanceAccount>()
+                .eq(FinanceAccount::getAccountName, a.getAccountName())) > 0)
+            throw new BusinessException("账户名称「" + a.getAccountName() + "」已存在");
+        if (a.getOpeningBalance().compareTo(BigDecimal.ZERO) < 0)
+            throw new BusinessException("期初余额不能为负数");
         // 2026-09-14：类型统一归一化为小写 code 并做白名单校验（此前自由字符串，曾写入大写 BANK）
         a.setAccountType(AccountType.normalize(a.getAccountType()));
         accountMapper.insert(a);
@@ -125,7 +134,10 @@ public class FinanceCashflowController {
             cf.setAccountId(a.getId());
             cf.setAccountName(a.getAccountName());
             cf.setFlowType(CashflowType.OPENING.getCode());
-            cf.setRelatedBillNo(a.getAccountNo());
+            // F7-227（2026-09-29 审核批 C）：原先写 `account_no`（银行账号，**可空**）⇒ 库中 9/9 条期初流水
+            // 「关联单号」为空、无法按号回溯。改为"有账号写账号，否则退回账户名"，保证期初行也带可读来源。
+            cf.setRelatedBillNo(a.getAccountNo() != null && !a.getAccountNo().isBlank()
+                    ? a.getAccountNo() : a.getAccountName());
             cf.setRelatedBillType(CashflowRelatedType.OPENING.getCode());
             cf.setIncome(a.getOpeningBalance());
             cf.setExpense(BigDecimal.ZERO);
@@ -135,7 +147,14 @@ public class FinanceCashflowController {
         return R.ok();
     }
 
-    /** 生成流水号：FL-日期-3位序号 */
+    /**
+     * 生成流水号：FL-日期-3位序号。
+     *
+     * <p>F7-228（2026-09-29 审核批 C）：**补查重重试** —— 同款生成器在
+     * {@code FinanceExpenseServiceImpl.genFlowNo} / {@code FinancePaymentServiceImpl} 已按 F7-39#3 修好，
+     * 唯独开户这一处漏了：并发开户（或与收付款同时编号）会直接撞 {@code finance_cashflow.uk_flow_no}
+     * 唯一索引、抛数据库原始错（无脏数据，但报错不可读、三处口径不一致）。</p>
+     */
     private String genFlowNo() {
         String d = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
         String pat = BillPrefix.CASHFLOW + d;
@@ -147,7 +166,13 @@ public class FinanceCashflowController {
         if (last != null && last.getFlowNo() != null) {
             try { seq = Integer.parseInt(last.getFlowNo().substring(last.getFlowNo().length() - 3)) + 1; } catch (Exception e) { seq = 1; }
         }
-        return BillPrefix.CASHFLOW + d + String.format("%03d", seq);
+        for (int i = 0; i < 999; i++) {
+            String code = BillPrefix.CASHFLOW + d + String.format("%03d", seq);
+            if (cashflowMapper.selectCount(new LambdaQueryWrapper<FinanceCashflow>()
+                    .eq(FinanceCashflow::getFlowNo, code)) == 0) return code;
+            seq++;
+        }
+        throw new BusinessException("当日资金流水号已用尽（前缀 " + pat + "），请联系管理员");
     }
 
     @PutMapping("/api/finance/account")
@@ -160,6 +185,15 @@ public class FinanceCashflowController {
         // 2026-09-14：类型归一化 + 白名单（未传类型时保持原值，避免局部更新被拒）
         if (a.getAccountType() != null) {
             a.setAccountType(AccountType.normalize(a.getAccountType()));
+        }
+        // D-14（2026-09-29 决策）：**改名同样拦同名**（排除自身）—— 否则把 A 改成与 B 同名即可绕过建户护栏。
+        if (a.getAccountName() != null && !a.getAccountName().isBlank()) {
+            a.setAccountName(a.getAccountName().trim());
+            Long self = a.getId();
+            if (accountMapper.selectCount(new LambdaQueryWrapper<FinanceAccount>()
+                    .eq(FinanceAccount::getAccountName, a.getAccountName())
+                    .ne(self != null, FinanceAccount::getId, self)) > 0)
+                throw new BusinessException("账户名称「" + a.getAccountName() + "」已存在");
         }
         accountMapper.updateById(a);
         return R.ok();

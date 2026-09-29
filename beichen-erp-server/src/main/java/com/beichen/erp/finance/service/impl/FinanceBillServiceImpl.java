@@ -77,15 +77,22 @@ public class FinanceBillServiceImpl implements FinanceBillService {
      *
      * <p><b>幂等护栏（O-6）</b>：同一「账单类型 + 往来单位 + 账期截止日」已存在**未作废**账单时直接拒绝，
      * 避免同一账期被重复出账。手动 {@code POST /api/finance/bill/generate} 与自动任务共用本方法
-     * （自动任务在计划层已做两层去重，这里是最后一道闸）；作废（CANCELLED）后可重新生成。
+     * （自动任务在计划层已做两层去重，这里是最后一道闸）；作废（CANCELLED）后可重新生成。</p>
      *
-     * <p><b>并发保护</b>：在互斥锁内先查重、再以**显式事务**落库并提交，最后才放锁。
-     * 注意不能用 {@code @Transactional} + synchronized：注解事务的提交发生在方法返回（放锁）之后，
-     * 排队线程仍可能读到未提交的库状态而重复出账，故这里改用 {@link TransactionTemplate}。
-     * （多实例部署时互斥锁只在单 JVM 内有效，需再加数据库唯一约束。）
+     * <p><b>并发保护</b>：① JVM 内 {@code synchronized}（单实例串行化）；② **事务内**对往来单位行加锁
+     * （{@link #lockPartnerForGenerate}）实现跨实例串行化 —— 查重键含 partnerId，锁住同一往来单位即覆盖整个键；
+     * ③ 查重与落库同事务提交后才放锁。注意不能用 {@code @Transactional} + {@code synchronized}：
+     * 注解事务的提交发生在方法返回（放锁）之后，排队线程仍可能读到未提交状态而重复出账。</p>
+     *
+     * <p><b>F7-242（2026-09-29 批 D）</b>：原实现的 {@code lockPartnerForGenerate} 在事务**之外**调用 ⇒
+     * `SELECT ... FOR UPDATE` 走自动提交、**语句一结束锁就释放**，所谓"跨实例互斥"实际无效（只剩 JVM 锁）。
+     * 现把行锁移入事务内，锁随事务提交/回滚释放。</p>
+     *
+     * <p><b>F7-244</b>：抬头 {@code partnerName} 不再信任客户端值，一律按 {@code partnerId} 回查主数据。</p>
      */
     @Override
-    public FinanceBill generate(String billType, Long partnerId, String partnerName, LocalDate periodStart, LocalDate periodEnd) {
+    public FinanceBill generate(String billType, Long partnerId, String partnerName, LocalDate periodStart,
+                                LocalDate periodEnd, String source) {
         // F7-39#1（2026-09-19）：三参数改**必填** —— 原实现仅在 billType/partnerId/periodEnd **三者全非空**时才查重，
         // 任一为 null 就整段跳过 ⇒ 无账期/无往来单位即可重复出账（账单是快照、不动钱，但会造成同账期重复单据）。
         if (billType == null || billType.isBlank()) throw new BusinessException("账单类型不能为空");
@@ -95,20 +102,21 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         // 传 PAYABLE/任意字符串都会按应付出账（静默兜底错分支）。
         if (!BillType.RECEIVABLE.getCode().equals(billType) && !BillType.PAYABLE.getCode().equals(billType))
             throw new BusinessException("不支持的账单类型：" + billType + "（仅支持 RECEIVABLE / PAYABLE）");
+        // F7-244（2026-09-29 批 D）：抬头以主数据为准（入参 partnerName 仅作兼容保留，不再采信客户端值）。
+        // 主数据缺失时 partnerName() 返回空串，但紧接着的 lockPartnerForGenerate 会抛"客户/供应商不存在" ⇒ 不会落空抬头。
+        String serverName = partnerName(null, BillType.RECEIVABLE.getCode().equals(billType), partnerId);
         synchronized (generateLock) {
-            // F7-139（2026-09-20）：**跨实例互斥**。原实现只有 JVM 内的 synchronized（其 javadoc 亦自述
-            // "多实例部署时互斥锁只在单 JVM 内有效，需再加数据库唯一约束"）。这里改为**先对往来单位行加锁**：
-            // 查重键是 (billType, partnerId, periodEnd)，把同一 partnerId 串行化即可覆盖整个键 ⇒
-            // 多实例/多线程下都不会重复出账，且**无需新增 DDL**
-            // （比加唯一索引更轻：MySQL 不支持 "WHERE status<>'CANCELLED'" 这种带条件的唯一索引）。
-            lockPartnerForGenerate(billType, partnerId);
-            FinanceBill exist = findActiveBill(billType, partnerId, periodEnd);
-            if (exist != null) {
-                throw new BusinessException("该往来单位在本账期已存在账单 " + exist.getBillNo()
-                        + "，请勿重复生成；如需重做请先作废原账单");
-            }
             TransactionTemplate tt = new TransactionTemplate(txManager);
-            return tt.execute(status -> doGenerate(billType, partnerId, partnerName, periodStart, periodEnd));
+            return tt.execute(status -> {
+                // F7-242：行锁**必须在事务内** —— 否则 autocommit 下语句一结束就释放（跨实例互斥失效）
+                lockPartnerForGenerate(billType, partnerId);
+                FinanceBill exist = findActiveBill(billType, partnerId, periodEnd);
+                if (exist != null) {
+                    throw new BusinessException("该往来单位在本账期已存在账单 " + exist.getBillNo()
+                            + "，请勿重复生成；如需重做请先作废原账单");
+                }
+                return doGenerate(billType, partnerId, serverName, periodStart, periodEnd, source);
+            });
         }
     }
 
@@ -142,12 +150,15 @@ public class FinanceBillServiceImpl implements FinanceBillService {
     }
 
     /** 实际生成逻辑（调用方 {@link #generate} 已保证互斥与查重，本方法不再重复校验） */
-    private FinanceBill doGenerate(String billType, Long partnerId, String partnerName, LocalDate periodStart, LocalDate periodEnd) {
+    private FinanceBill doGenerate(String billType, Long partnerId, String partnerName, LocalDate periodStart,
+                                   LocalDate periodEnd, String source) {
         FinanceBill bill = new FinanceBill();
         bill.setBillNo(genCode());
         bill.setBillType(billType);
         bill.setPartnerId(partnerId);
         bill.setPartnerName(partnerName);
+        // D-19（2026-09-29）：出账来源（MANUAL 手工 / AUTO 自动任务），供事后追溯
+        bill.setSource(source == null || source.isBlank() ? "MANUAL" : source);
         bill.setPeriodStart(periodStart);
         bill.setPeriodEnd(periodEnd);
         // 账单生成后为草稿，需审核后生效（生命周期：草稿→已审核→已作废）
@@ -167,6 +178,10 @@ public class FinanceBillServiceImpl implements FinanceBillService {
                     // 造成账单静默少行（曾漏掉退货负应收 -60，账单金额虚高）
                     .and(w -> w.isNull(FinanceReceivable::getDueDate)
                             .or().le(FinanceReceivable::getDueDate, periodEnd)));
+            // F7-241（2026-09-29 批 D）：**剔除已被其它未作废账单引用的台账** —— 只做"是否出账"的门禁不够：
+            // 自动任务即便入选，这里重查仍会把已覆盖的台账再收一遍（同一台账出现在两张未作废账单里 = 重复对账）。
+            Set<Long> covered = coveredSourceIds(list.stream().map(FinanceReceivable::getId).toList());
+            list = list.stream().filter(r -> !covered.contains(r.getId())).toList();
             for (FinanceReceivable r : list) {
                 FinanceBillItem it = new FinanceBillItem();
                 it.setSourceBillType(r.getSourceBillType());
@@ -189,6 +204,9 @@ public class FinanceBillServiceImpl implements FinanceBillService {
                     // 同应收侧：放行到期日为空的台账，避免静默漏行
                     .and(w -> w.isNull(FinancePayable::getDueDate)
                             .or().le(FinancePayable::getDueDate, periodEnd)));
+            // F7-241：与应收侧对称 —— 剔除已被其它未作废账单引用的台账（防止同一台账被两张账单重复覆盖）
+            Set<Long> covered = coveredSourceIds(list.stream().map(FinancePayable::getId).toList());
+            list = list.stream().filter(r -> !covered.contains(r.getId())).toList();
             for (FinancePayable r : list) {
                 FinanceBillItem it = new FinanceBillItem();
                 it.setSourceBillType(r.getSourceBillType());
@@ -204,6 +222,12 @@ public class FinanceBillServiceImpl implements FinanceBillService {
                 items.add(it);
             }
         }
+        // F7-243（2026-09-29 批 D）：**拒绝空账单** —— 原先取不到任何未结清台账也照样落一张 0 明细/0 金额账单，
+        // 且可审核、可导出"0 元对账单"。库中账单 58 `ZD-20260918002`（RECEIVABLE / AUDITED / 0 明细 / 金额 0）
+        // 就是该路径的痕迹。口径与批 A `F7-205`（0 元收款单）一致：**没有内容就不建单**。
+        if (items.isEmpty())
+            throw new BusinessException("该往来单位在账期 " + periodEnd
+                    + " 内没有可出账的未结清应收/应付（可能已全部包含在其它未作废账单中），无需生成账单");
         bill.setTotalAmount(total);
         bill.setPaidAmount(paid);
         bill.setUnpaidAmount(unpaid);
@@ -297,14 +321,18 @@ public class FinanceBillServiceImpl implements FinanceBillService {
                 .collect(Collectors.groupingBy(FinanceReceivable::getCustomerId, LinkedHashMap::new, Collectors.toList()));
         for (Map.Entry<Long, List<FinanceReceivable>> e : byCustomer.entrySet()) {
             List<FinanceReceivable> batch = e.getValue();
-            // 防重1：本批任一单据已被未作废账单引用 → 跳过（避免与已有账单重复覆盖）
-            if (coveredByActiveBill(batch.stream().map(FinanceReceivable::getId).toList())) continue;
+            // F7-241（2026-09-29 批 D）：**逐张剔除已覆盖台账**后再判断 —— 原先"组内任一单据已被未作废账单引用
+            // ⇒ 整组 continue"，会把同客户**新到期**的台账连坐跳过，且不自愈（periodEnd=today 天天变、覆盖判定
+            // 不变）⇒ 库中客户 A10 的 9 张到期未结清里 2 张已覆盖，其余 7 张永不自动出账。
+            Set<Long> covered = coveredSourceIds(batch.stream().map(FinanceReceivable::getId).toList());
+            List<FinanceReceivable> open = batch.stream().filter(r -> !covered.contains(r.getId())).toList();
+            if (open.isEmpty()) continue;
             // 防重2：该客户当日已有非作废账单（手动生成过）→ 跳过
             if (billExists(BillType.RECEIVABLE.getCode(), e.getKey(), today)) continue;
-            LocalDate start = batch.stream().map(FinanceReceivable::getDueDate)
+            LocalDate start = open.stream().map(FinanceReceivable::getDueDate)
                     .filter(Objects::nonNull).min(LocalDate::compareTo).orElse(today);
             plan.add(new AutoBillCommand(BillType.RECEIVABLE.getCode(), e.getKey(),
-                    partnerName(batch.get(0).getCustomerName(), true, e.getKey()), start, today));
+                    partnerName(open.get(0).getCustomerName(), true, e.getKey()), start, today));
         }
 
         // === 应付：按供应商分组「到期未结清」的应付（对称逻辑） ===
@@ -317,27 +345,37 @@ public class FinanceBillServiceImpl implements FinanceBillService {
                 .collect(Collectors.groupingBy(FinancePayable::getSupplierId, LinkedHashMap::new, Collectors.toList()));
         for (Map.Entry<Long, List<FinancePayable>> e : bySupplier.entrySet()) {
             List<FinancePayable> batch = e.getValue();
-            if (coveredByActiveBill(batch.stream().map(FinancePayable::getId).toList())) continue;
+            // F7-241：与应收侧对称 —— 逐张剔除已覆盖台账，剩余为空才跳过整组
+            Set<Long> covered = coveredSourceIds(batch.stream().map(FinancePayable::getId).toList());
+            List<FinancePayable> open = batch.stream().filter(p -> !covered.contains(p.getId())).toList();
+            if (open.isEmpty()) continue;
             if (billExists(BillType.PAYABLE.getCode(), e.getKey(), today)) continue;
-            LocalDate start = batch.stream().map(FinancePayable::getDueDate)
+            LocalDate start = open.stream().map(FinancePayable::getDueDate)
                     .filter(Objects::nonNull).min(LocalDate::compareTo).orElse(today);
             plan.add(new AutoBillCommand(BillType.PAYABLE.getCode(), e.getKey(),
-                    partnerName(batch.get(0).getSupplierName(), false, e.getKey()), start, today));
+                    partnerName(open.get(0).getSupplierName(), false, e.getKey()), start, today));
         }
         return plan;
     }
 
-    /** 本批应收/应付单据是否已被未作废账单的明细引用（source_id 关联） */
-    private boolean coveredByActiveBill(List<Long> sourceIds) {
-        if (sourceIds == null || sourceIds.isEmpty()) return false;
+    /**
+     * F7-241（2026-09-29 批 D）：**哪些**来源台账已被"未作废账单"的明细引用。
+     *
+     * <p>原实现（{@code coveredByActiveBill}）只回答"组内有没有被覆盖"，调用方据此整组跳过；现返回**待剔除的
+     * source_id 集合**，让调用方把已覆盖的逐张剔掉、其余照常出账（作废账单不计入覆盖 ⇒ 作废后可重出）。</p>
+     */
+    private Set<Long> coveredSourceIds(List<Long> sourceIds) {
+        if (sourceIds == null || sourceIds.isEmpty()) return Set.of();
         List<FinanceBillItem> items = billItemMapper.selectList(new LambdaQueryWrapper<FinanceBillItem>()
                 .in(FinanceBillItem::getSourceId, sourceIds));
-        if (items.isEmpty()) return false;
+        if (items.isEmpty()) return Set.of();
         Set<Long> billIds = items.stream().map(FinanceBillItem::getBillId).collect(Collectors.toSet());
-        Long active = billMapper.selectCount(new LambdaQueryWrapper<FinanceBill>()
-                .in(FinanceBill::getId, billIds)
-                .ne(FinanceBill::getStatus, DocStatus.CANCELLED.getCode()));
-        return active != null && active > 0;
+        Set<Long> activeBills = billMapper.selectList(new LambdaQueryWrapper<FinanceBill>()
+                        .in(FinanceBill::getId, billIds)
+                        .ne(FinanceBill::getStatus, DocStatus.CANCELLED.getCode()))
+                .stream().map(FinanceBill::getId).collect(Collectors.toSet());
+        return items.stream().filter(i -> activeBills.contains(i.getBillId()))
+                .map(FinanceBillItem::getSourceId).collect(Collectors.toSet());
     }
 
     /** 同（账单类型，往来单位，账期截止日）当天是否已有非作废账单（与 generate 的幂等护栏同口径） */

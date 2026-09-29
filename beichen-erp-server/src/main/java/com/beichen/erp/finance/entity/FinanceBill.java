@@ -35,6 +35,8 @@ public class FinanceBill {
     private BigDecimal paidAmount;
     private BigDecimal unpaidAmount;
     private String status;
+    /** D-19（2026-09-29 批 D）：出账来源 —— MANUAL=手工生成 / AUTO=自动任务（事后可追溯"谁出的单"） */
+    private String source;
     private String remark;
     @TableField(fill = FieldFill.INSERT) private Long companyId;
     private LocalDateTime createTime;

@@ -33,10 +33,34 @@ public class FinanceExpenseController {
     public R<FinanceExpense> getById(@PathVariable Long id) { return R.ok(service.getById(id)); }
 
     @PostMapping
-    public R<Void> create(@RequestBody FinanceExpense expense) { service.create(expense); return R.ok(); }
+    public R<Void> create(@RequestBody FinanceExpense expense) {
+        clearSource(expense);
+        service.create(expense);
+        return R.ok();
+    }
 
     @PutMapping
-    public R<Void> update(@RequestBody FinanceExpense expense) { service.update(expense); return R.ok(); }
+    public R<Void> update(@RequestBody FinanceExpense expense) {
+        clearSource(expense);
+        service.update(expense);
+        return R.ok();
+    }
+
+    /**
+     * F7-231（2026-09-29 审核批 C）：**服务端自有的来源三列不接受客户端写入**。
+     *
+     * <p>费用单是实体直绑请求体（{@code @RequestBody FinanceExpense}）+ {@code updateById} ⇒ 原先客户端
+     * 可以自填 {@code source_bill_type/source_id}，把手工费用单伪造成"**由业务单据带出的非资金费用**"：
+     * {@code accountId} 为空也会被放行（`validate` 只按"来源是否为空"判非资金）⇒ 凭空记一笔无现金流的损失。
+     * 来源三列只由服务端内部调用写入（{@code RdExpenseService} 研发支出、报损走财务的费用登记），
+     * 故手工入口一律清空。</p>
+     */
+    private void clearSource(FinanceExpense expense) {
+        if (expense == null) return;
+        expense.setSourceBillType(null);
+        expense.setSourceId(null);
+        expense.setSourceBillNo(null);
+    }
 
     // E1 口径（2026-09-12）：审核族统一 PUT（旧 POST 保留为别名）；反审核统一 /un-audit（旧 /unAudit 保留为别名）
     @RequestMapping(value = "/{id}/audit", method = {RequestMethod.PUT, RequestMethod.POST})

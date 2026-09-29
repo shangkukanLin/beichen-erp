@@ -61,8 +61,11 @@ public interface FinanceAccountMapper extends BaseMapper<FinanceAccount> {
             "FROM finance_account a " +
             "LEFT JOIN finance_cashflow cf ON cf.account_id = a.id " +
             "WHERE a.id = #{accountId} " +
+            // F7-239（2026-09-29 审核批 C）：**补显式租户条件** —— 与同类 selectForUpdate 一致，
+            // 不依赖 mybatis-plus 租户插件是否改写 `GROUP BY + FOR UPDATE` 这类语句（跨公司泄漏面）。
+            "<if test='companyId != null'> AND a.company_id = #{companyId}</if> " +
             "GROUP BY a.id " +
             "FOR UPDATE" +
             "</script>")
-    Map<String, Object> sumBalanceForUpdate(@Param("accountId") Long accountId);
+    Map<String, Object> sumBalanceForUpdate(@Param("accountId") Long accountId, @Param("companyId") Long companyId);
 }

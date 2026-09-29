@@ -331,7 +331,10 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             lockAccount(acc.getAccountId());
             BigDecimal need = acc.getAmount() != null ? acc.getAmount() : BigDecimal.ZERO;
             // F7-140：用**当前读**取余额 —— 一致性读会读到事务开始时的旧快照，导致并发第二笔仍通过校验
-            Map<String, Object> balRow = accountMapper.sumBalanceForUpdate(acc.getAccountId());
+            // F7-239（2026-09-29 审核批 C）：补显式租户条件（口径同 lockAccount / 费用侧）
+            Long balCid = CompanyContext.get();
+            if (balCid != null && balCid <= 0) balCid = null;
+            Map<String, Object> balRow = accountMapper.sumBalanceForUpdate(acc.getAccountId(), balCid);
             BigDecimal accountBal = (balRow == null || balRow.get("balance") == null)
                     ? BigDecimal.ZERO : new BigDecimal(balRow.get("balance").toString());
             if (accountBal.subtract(need).compareTo(BigDecimal.ZERO) < 0)
@@ -565,7 +568,13 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         }
     }
 
-    /** 账单进度联动：按核销流水反查账单明细，同步已付金额并重算账单主表（只算有效核销） */
+    /**
+     * 账单进度联动（**以台账为准的同源重算**）—— F7-240（2026-09-29 批 D 修复，与收款侧同款）。
+     *
+     * <p>原实现把核销流水金额**增量累加**到账单明细（`item.paid += st.amount`），台账侧却是原子 SET
+     * ⇒ 绕过核销流水的订正（直接作废结算流水）账单不会回退、也不自愈（库中应付侧已 1 条：明细 10 vs 台账 0）。
+     * 现改为直接取被引用台账的 `paid/unpaid`（台账=唯一真相），后续任何核销都会顺带抹平既有漂移。</p>
+     */
     private void syncBillProgress(Long paymentId) {
         List<FinanceSettlement> sts = settlementMapper.selectList(
                 new LambdaQueryWrapper<FinanceSettlement>()
@@ -574,13 +583,18 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
                         .eq(FinanceSettlement::getStatus, SettlementRecordStatus.NORMAL.getCode()));
         Set<Long> billIds = new HashSet<>();
         for (FinanceSettlement st : sts) {
+            Long ledgerId = st.getPayableReceivableId();
+            if (ledgerId == null) continue;
+            FinancePayable ledger = payableMapper.selectById(ledgerId);
+            if (ledger == null) continue;
+            // F7-240：以台账当前值为准（不再对明细自身的历史值做加减）
+            BigDecimal paid = ledger.getPaidAmount() != null ? ledger.getPaidAmount() : BigDecimal.ZERO;
+            BigDecimal unpaid = ledger.getUnpaidAmount() != null ? ledger.getUnpaidAmount() : BigDecimal.ZERO;
             List<FinanceBillItem> items = billItemMapper.selectList(
-                    new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getSourceId, st.getPayableReceivableId()));
+                    new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getSourceId, ledgerId));
             for (FinanceBillItem item : items) {
-                BigDecimal newPaid = (item.getPaidAmount() != null ? item.getPaidAmount() : BigDecimal.ZERO).add(st.getAmount());
-                BigDecimal newUnpaid = (item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO).subtract(newPaid);
-                item.setPaidAmount(newPaid);
-                item.setUnpaidAmount(newUnpaid.max(BigDecimal.ZERO));
+                item.setPaidAmount(paid);
+                item.setUnpaidAmount(unpaid);
                 billItemMapper.updateById(item);
                 billIds.add(item.getBillId());
             }
@@ -591,21 +605,35 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         }
     }
 
-    /** 反审核时反向扣减账单明细已付金额：按核销流水冲减，与 syncBillProgress 累加逻辑对称 */
+    /**
+     * 反审核时的账单进度回退（**同源重算**）—— F7-240，与收款侧同款。
+     *
+     * <p>调用点在"冲销台账/作废流水"**之前**，故取「台账当前值 − 本单对该台账的有效核销合计」
+     * = 冲销之后台账将变成的值，直接写进明细 ⇒ 与 {@link #syncBillProgress} 完全同源。</p>
+     */
     private void reverseBillProgress(Long paymentId) {
         List<FinanceSettlement> sts = settlementMapper.selectList(
                 new LambdaQueryWrapper<FinanceSettlement>()
                         .eq(FinanceSettlement::getReceiptPaymentId, paymentId)
                         .eq(FinanceSettlement::getDirection, SettlementDirection.PAY.getCode())
                         .eq(FinanceSettlement::getStatus, SettlementRecordStatus.NORMAL.getCode()));
-        Set<Long> billIds = new HashSet<>();
+        java.util.Map<Long, BigDecimal> deltaByLedger = new java.util.HashMap<>();
         for (FinanceSettlement st : sts) {
+            if (st.getPayableReceivableId() == null) continue;
+            deltaByLedger.merge(st.getPayableReceivableId(),
+                    st.getAmount() != null ? st.getAmount() : BigDecimal.ZERO, BigDecimal::add);
+        }
+        Set<Long> billIds = new HashSet<>();
+        for (java.util.Map.Entry<Long, BigDecimal> e : deltaByLedger.entrySet()) {
+            FinancePayable ledger = payableMapper.selectById(e.getKey());
+            if (ledger == null) continue;
+            BigDecimal paid = (ledger.getPaidAmount() != null ? ledger.getPaidAmount() : BigDecimal.ZERO).subtract(e.getValue());
+            BigDecimal unpaid = (ledger.getUnpaidAmount() != null ? ledger.getUnpaidAmount() : BigDecimal.ZERO).add(e.getValue());
             List<FinanceBillItem> items = billItemMapper.selectList(
-                    new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getSourceId, st.getPayableReceivableId()));
+                    new LambdaQueryWrapper<FinanceBillItem>().eq(FinanceBillItem::getSourceId, e.getKey()));
             for (FinanceBillItem item : items) {
-                BigDecimal newPaid = (item.getPaidAmount() != null ? item.getPaidAmount() : BigDecimal.ZERO).subtract(st.getAmount());
-                item.setPaidAmount(newPaid.max(BigDecimal.ZERO));
-                item.setUnpaidAmount((item.getAmount() != null ? item.getAmount() : BigDecimal.ZERO).subtract(item.getPaidAmount()).max(BigDecimal.ZERO));
+                item.setPaidAmount(paid);
+                item.setUnpaidAmount(unpaid);
                 billItemMapper.updateById(item);
                 billIds.add(item.getBillId());
             }

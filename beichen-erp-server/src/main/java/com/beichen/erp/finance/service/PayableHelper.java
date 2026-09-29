@@ -184,6 +184,14 @@ public class PayableHelper {
      * 导致以行为单位的对账/稽核把「作废留痕行」误判为异常（I29）。</p>
      * <p>原金额写入 {@code remark} 留痕（`[已作废] 原金额=-24`），避免"金额凭空消失"无法追溯；
      * 各统计/汇总口径均按状态排除 CANCELLED，故清零不影响账务结果。</p>
+     *
+     * <p><b>F7-247（2026-09-29 批 E）· 留痕会累积，这是 D1 的既定对价</b>：采购/委外侧每次审核都用
+     * {@link #newBillNo()} 生成**新** YF- 号，反审核只把旧行置 CANCELLED（不回收）⇒「审核↔反审核」每轮 +1 行
+     * （实测量级：{@code PURCHASE_EXCHANGE_RETURN}/{@code _IN} 各 85 条已作废，同源仍活跃 82 条）；销售侧因沿用
+     * "单据号当台账号"而复用同一行，两侧口径**有意不同**（D1 起与委外同体系）。
+     * <b>由此产生的硬性约束</b>：任何按 {@code source_bill_type} 统计/汇总/对账/导出的查询**必须**排除
+     * {@code status='CANCELLED'}，否则同一来源会同时命中"活跃腿 + 已作废腿"（同源 82 活跃 / 85 已作废 ⇒ 漏筛近翻倍）。
+     * 本轮 A~E 已核的所有查询均符合该口径；若要"停止累积"需先推翻 D1 并同步清理存量（见报告 §6.5）。</p>
      */
     public void cancelLedger(FinancePayable fp) {
         if (fp == null) return;

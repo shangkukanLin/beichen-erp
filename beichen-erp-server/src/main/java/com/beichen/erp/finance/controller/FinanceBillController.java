@@ -68,7 +68,9 @@ public class FinanceBillController {
         String partnerName = (String) body.get("partnerName");
         LocalDate periodStart = body.get("periodStart") != null ? LocalDate.parse(body.get("periodStart").toString()) : null;
         LocalDate periodEnd = body.get("periodEnd") != null ? LocalDate.parse(body.get("periodEnd").toString()) : null;
-        return R.ok(service.generate(billType, partnerId, partnerName, periodStart, periodEnd));
+        // D-19（2026-09-29 批 D）：手工入口标记来源 MANUAL；F7-244：partnerName 由服务端按主数据回查，
+        // 这里的入参仅为兼容保留（客户端传什么都不会影响落库抬头）。
+        return R.ok(service.generate(billType, partnerId, partnerName, periodStart, periodEnd, "MANUAL"));
     }
 
     /**
