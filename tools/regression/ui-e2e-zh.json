@@ -317,7 +317,7 @@
   "opt_type_refund": "退货退款",
   "opt_type_repair": "维修返回",
   "txt_mr_order_locked": "只能走「订单退料」",
-  "txt_unaudit_need_revoke": "请先在下方逐条撤销",
+  "txt_unaudit_need_revoke": "请先在下方逐条反审核",
   "title_add_repair_order": "新增客户售后",
   "title_add_repair_material": "新增维修返回",
   "title_add_linked_material": "新增关联退料",

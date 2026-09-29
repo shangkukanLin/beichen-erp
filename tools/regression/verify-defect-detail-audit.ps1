@@ -3,7 +3,8 @@
 #   Gating must match the 收货记录 list / the ledger exactly:
 #     DRAFT              -> [audit]   (PUT /outsource/order-delivery/{id}/audit)
 #     AUDITED            -> [un-audit] (PUT .../un-audit)
-#     a return-back exists -> un-audit refused: the page shows an actionable message and never calls the API
+#     an APPROVED return-back exists -> un-audit refused: the page shows an actionable message and never calls the API
+#     (notation: only AUDITED return-backs count -- a DRAFT return-back moves nothing, so it must not block)
 #                             (the API half of that gate is asserted in verify-defect-ledger.ps1)
 #   Self-built via API + self-cleaned, so it is repeatable. PURE ASCII (Chinese only through ZH keys).
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
@@ -82,6 +83,13 @@ $inWh = [int](SqlOne "SELECT id FROM warehouse WHERE warehouse_category='INVENTO
 $rbBody = @{ factoryId = $fid; productId = $master; quantity = 2; defectQualityType = 'A'; returnQualityType = 'A'; inWarehouseId = $inWh; items = $items } | ConvertTo-Json -Depth 6
 $rb = Invoke-RestMethod -Uri "$API/outsource/order-delivery/$id/return-back" -Method Post -Headers $h -ContentType 'application/json' -Body $rbBody
 Ok ($rb.code -eq 200) ('S3 return-back registered (code=' + $rb.code + ')')
+# 2026-09-29 FIX (stale fixture): registering only creates a DRAFT, and this gate counts AUDITED returns only
+#   (page: auditedReturns / API: returnedQtyBySource) -- so the return must be AUDITED first, otherwise the
+#   click legally goes through and the "revoke first" refusal is never expected.
+$rbIdS3 = [int](SqlOne "SELECT COALESCE(MAX(id),0) FROM outsource_return_back WHERE source_delivery_id=$id")
+Ok ($rbIdS3 -gt 0) ('S3 return-back record id=' + $rbIdS3)
+$rbAudit = Invoke-RestMethod -Uri "$API/outsource/order-delivery/return-back/$rbIdS3/audit" -Method Put -Headers $h
+Ok ($rbAudit.code -eq 200) ('S3 return-back audited (makes the return real): ' + $rbAudit.msg)
 Open $url 2800
 Ok ((ClickBtn 'btn_unaudit') -match 'OK') 'S3 click un-audit'
 Start-Sleep -Milliseconds 1600
@@ -92,6 +100,9 @@ Ok ((Status) -eq 'AUDITED') ('S3 the record is untouched (' + (Status) + ')')
 Step 'S4 revoke the return-back -> un-audit succeeds from the detail page'
 $rbId = [int](SqlOne "SELECT COALESCE(MAX(id),0) FROM outsource_return_back WHERE source_delivery_id=$id")
 Ok ($rbId -gt 0) ('S4 return-back record id=' + $rbId)
+# 2026-09-29 FIX: an AUDITED return cannot be deleted directly (DRAFT only) -- un-audit first, then delete.
+$rbUn = Invoke-RestMethod -Uri "$API/outsource/order-delivery/return-back/$rbId/un-audit" -Method Put -Headers $h
+Ok ($rbUn.code -eq 200) ('S4 return-back un-audited (symmetric reversal): ' + $rbUn.msg)
 $rvk = Invoke-RestMethod -Uri "$API/outsource/order-delivery/return-back/$rbId" -Method Delete -Headers $h
 Ok ($rvk.code -eq 200) 'S4 return-back revoked'
 Open $url 2800
