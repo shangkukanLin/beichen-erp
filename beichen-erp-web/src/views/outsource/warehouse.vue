@@ -99,7 +99,7 @@ onMounted(() => { loadFactories(); loadData() })
         <el-table-column prop="contact" label="联系人" width="80" />
         <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="180" align="center">
-          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="success" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="warning" link @click.stop="handleToggleStatus(row)">停用</el-button></template>
+          <template #default="{row}"><el-button v-perm="'outsource:warehouse'" type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-perm="'outsource:warehouse'" type="success" link @click.stop="handleEdit(row)">编辑</el-button><el-button v-perm="'outsource:warehouse'" type="warning" link @click.stop="handleToggleStatus(row)">停用</el-button></template>
         </el-table-column>
       </el-table>
 
@@ -117,7 +117,7 @@ onMounted(() => { loadFactories(); loadData() })
         <el-table-column prop="contact" label="联系人" width="80" />
         <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="180" align="center">
-          <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button type="success" link @click.stop="handleEdit(row)">编辑</el-button><el-button type="success" link @click.stop="handleToggleStatus(row)">启用</el-button></template>
+          <template #default="{row}"><el-button v-perm="'outsource:warehouse'" type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-perm="'outsource:warehouse'" type="success" link @click.stop="handleEdit(row)">编辑</el-button><el-button v-perm="'outsource:warehouse'" type="success" link @click.stop="handleToggleStatus(row)">启用</el-button></template>
         </el-table-column>
       </el-table>
     </el-card>

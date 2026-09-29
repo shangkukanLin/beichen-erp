@@ -63,7 +63,9 @@ async function handleExport() {
       return
     }
     const d = detail.value || {}
-    const type = String(d.billType) === BillType.PAYABLE ? '应付' : '应收'
+    // F7-246③（2026-09-29 批 D）：复用枚举 label（原先硬编码"应付/应收"，与 BillTypeLabel 不同源）
+    const type = BillTypeLabel[String(d.billType || '')]
+      || (String(d.billType) === BillType.PAYABLE ? '应付' : '应收')
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     link.download = type + '对账单_' + (d.partnerName || '') + '_' + (d.billNo || id.value) + '.xlsx'
@@ -82,6 +84,9 @@ async function loadDetail() {
     detail.value = bill || {}
     const its = await getBillItems(id.value)
     items.value = Array.isArray(its) ? its : []
+  } catch { detail.value = {}; items.value = []
+    // F7-246②（2026-09-29 批 D）：原先只有 try/finally ⇒ 加载失败是**未处理 rejection**，且明细不再请求、
+    // 页面"半新半旧"且无提示（提示由拦截器给出，这里补状态兜底）
   } finally { loading.value = false }
 }
 
@@ -119,10 +124,11 @@ onActivated(() => { loadDetail() })
   <PageShell :loading="loading" back-fallback="/finance/bill">
     <template #actions>
       <!-- 2026-09-29 用户口径「账单详情要添加导出功能」：后端渲染专业对账单（页头动作最左，与"改单据"类动作分开） -->
-      <el-button :icon="'Download'" size="small" :loading="exporting" @click="handleExport">导出 Excel</el-button>
-      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
-      <el-button type="danger" size="small" v-if="detail.status!==DocStatus.CANCELLED" @click="handleCancel">作废</el-button>
+      <!-- F7-246①（2026-09-29 批 D）：四个动作按 finance:bill 显示（后端 /api/finance/bill 前缀守卫同码） -->
+      <el-button :icon="'Download'" size="small" :loading="exporting" v-perm="'finance:bill'" @click="handleExport">导出 Excel</el-button>
+      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" v-perm="'finance:bill'" @click="handleAudit">审核</el-button>
+      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" v-perm="'finance:bill'" @click="handleUnAudit">反审核</el-button>
+      <el-button type="danger" size="small" v-if="detail.status!==DocStatus.CANCELLED" v-perm="'finance:bill'" @click="handleCancel">作废</el-button>
     </template>
 
     <el-card shadow="never">

@@ -561,6 +561,26 @@ const finSummary = ref<any>({})
 const pending = ref<DashboardPending>({})
 let trendChart: echarts.ECharts | null = null
 
+/**
+ * F7-259（2026-09-30 审核批 G 修复）：**分页取全**，替代固定 `pageSize: 200` 的静默截断。
+ *
+ * <p>原先首页直接取 200 条就把"库存总值 / 总量 / 仓库分布 / 低库存预警"聚合完 —— 产品 > 200 时
+ * `prodMap` 查不到成本价与安全库存（**总值低估 + 预警漏报**），库存行 > 200 时合计与分布直接少算，
+ * 且页面无任何"数据不全"提示。改为按 `total` 翻页取全（上限 20 页 = 4000 行，防异常数据打爆首页）。</p>
+ */
+async function fetchAllRecords(path: string, params: Record<string, any> = {}): Promise<{ records: any[]; total: number }> {
+  const size = 200
+  const first = await request.get<any, any>(path, { params: { ...params, pageNum: 1, pageSize: size } }).catch(() => ({}))
+  const total = Number(first?.total) || 0
+  let records: any[] = Array.isArray(first?.records) ? first.records : []
+  const pages = Math.min(Math.ceil(total / size), 20)
+  for (let p = 2; p <= pages; p++) {
+    const res = await request.get<any, any>(path, { params: { ...params, pageNum: p, pageSize: size } }).catch(() => ({}))
+    if (Array.isArray(res?.records) && res.records.length) records = records.concat(res.records)
+  }
+  return { records, total }
+}
+
 async function loadOverview() {
   // 经营分析 KPI（第一排区间 4 指标 + 第二排固定本年）：不 await，与其余数据并行加载
   loadOverviewKpi()
@@ -1106,9 +1126,10 @@ async function loadStats() {
   try {
     if (hasModule.stock) {
       const [prodRes, whRes, stkRes] = await Promise.all([
-        request.get<any, any>('/product/page', { params: { pageSize: 200 } }).catch(() => ({})),
+        // F7-259：产品与库存行**分页取全**（原先各取 200 条 ⇒ 成本/安全库存查不到、合计少算）
+        fetchAllRecords('/product/page'),
         request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } }).catch(() => ({})),
-        request.get<any, any>('/warehouse/stock/product-stock/page', { params: { pageSize: 200 } }).catch(() => ({})),
+        fetchAllRecords('/warehouse/stock/product-stock/page'),
       ])
       productTotal.value = prodRes?.total || 0
       warehouseTotal.value = whRes?.total || 0

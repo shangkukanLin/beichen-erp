@@ -156,7 +156,7 @@ onMounted(() => {
           <template #default="{row}">
             <el-button type="primary" link @click.stop="router.push(`/outsource/order/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link @click.stop="handleDownloadContract(row)">下载合同</el-button>
-            <el-button type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED" @click.stop="handleCancel(row)">作废</el-button>
+            <el-button v-perm="'outsource:order'" type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED" @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

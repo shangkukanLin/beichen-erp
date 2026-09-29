@@ -86,7 +86,9 @@ function exportTax() {
     keys.forEach(k => (a[k] = (a[k] || 0) + Number(r[k])))
     return a
   }, {})
-  const pct = (p: number, total: number) => (total ? Math.round((p / total) * 10000) / 100 : 0)
+  // F7-260（2026-09-30 审核批 G 修复）：占比小数位与其余分析页统一为 **1 位**（原 2 位；
+  // 口径与 `utils/format.ts` 的 fmtPct 一致 —— 该项目"费率/占比"一律 1 位，金额 2 位）。
+  const pct = (p: number, total: number) => (total ? Math.round((p / total) * 1000) / 10 : 0)
   const aoa: (string | number)[][] = [[
     '月份', '销售-已税', '销售-销项税额', '销售-未税', '销售-已税占比%',
     '采购-已税', '采购-进项税额', '采购-未税', '采购-已税占比%',

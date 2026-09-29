@@ -274,8 +274,8 @@ onActivated(async () => { await loadOptions(); await loadData() })
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作（审核/反审核/保存） -->
   <PageShell :loading="loading" back-fallback="/outsource/order">
     <template #actions>
-      <el-button v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
-      <el-button v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
+      <el-button v-perm="'outsource:order'" v-if="form.status===OutsourceOrderStatus.PENDING" type="success" size="small" @click="handleAudit">审核</el-button>
+      <el-button v-perm="'outsource:order'" v-if="form.status===OutsourceOrderStatus.PRODUCING" type="danger" size="small" @click="handleUnaudit">反审核</el-button>
       <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="form.status===OutsourceOrderStatus.CANCELLED">保存</el-button>
     </template>
 

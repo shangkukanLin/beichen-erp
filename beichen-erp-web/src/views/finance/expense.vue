@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import { getExpensePage, createExpense, auditExpense, cancelExpense, getAccountPage, type FinanceExpense, type FinanceAccount } from '@/api/finance'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
 import { ExpenseTypeLabel as EXPENSE_TYPE_LABELS } from '@/api/enums'
@@ -34,10 +35,21 @@ function handleAdd() { Object.assign(form, { id: undefined, expenseType: 'OFFICE
 function goDetail(row: FinanceExpense) { router.push(`/finance/expense/detail/${row.id}`) }
 /* 2026-09-24（用户口径）：列表弹窗只保留「新增」；草稿编辑已收进详情页 ⇒ handleEdit / updateExpense 分支一并删除
    （updateExpense 现仅在详情页使用）。 */
+/**
+ * F7-235（2026-09-29 审核批 C）：费用动作按**后端同源的两码任一**显示 ——
+ * `ApiPermGuard.rule("/api/finance/expense", "finance:expense", "finance:cashflow")`；
+ * `v-perm` 只接受单个码，故用 store 计算"或"，避免"看得见但必 403"的死按钮。
+ */
+const userStore = useUserStore()
+const canExpense = computed(() => userStore.hasPerm('finance:expense') || userStore.hasPerm('finance:cashflow'))
+/** F7-232 配套：报损损失（LOSS）是**非资金费用**（不写流水、不扣账户）⇒ 前端不再要求、也不允许选支出账户 */
+const isNonCash = computed(() => form.expenseType === 'LOSS')
+
 async function save() {
   if (!form.expenseType) { ElMessage.warning('请选择费用类型'); return }
   if (!form.amount || form.amount <= 0) { ElMessage.warning('费用金额必须大于 0'); return }
-  if (!form.accountId) { ElMessage.warning('请选择支出账户'); return }
+  if (isNonCash.value) form.accountId = undefined   // 非资金费用：后端同一口径（F7-232 会拒绝带账户的 LOSS）
+  if (!isNonCash.value && !form.accountId) { ElMessage.warning('请选择支出账户'); return }
   try { await createExpense(form); ElMessage.success('已新增'); dialog.value = false; loadData() } catch {}
 }
 async function audit(row: any) {
@@ -73,7 +85,7 @@ onMounted(() => { loadData(); loadAccounts() })
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="page.pageNum=1;loadData()">查询</el-button>
           <el-button :icon="'Refresh'" @click="query.expenseType='';query.status='';page.pageNum=1;loadData()">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
+          <el-button v-if="canExpense" type="success" :icon="'Plus'" @click="handleAdd">新增</el-button>
         </div>
       </div>
     </el-card>
@@ -95,8 +107,8 @@ onMounted(() => { loadData(); loadAccounts() })
         <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status==='DRAFT'" type="success" link @click="audit(row)">审核</el-button>
-            <el-button v-if="row.status==='DRAFT'" type="danger" link @click="cancel(row)">作废</el-button>
+            <el-button v-if="row.status==='DRAFT' && canExpense" type="success" link @click="audit(row)">审核</el-button>
+            <el-button v-if="row.status==='DRAFT' && canExpense" type="danger" link @click="cancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -109,10 +121,12 @@ onMounted(() => { loadData(); loadAccounts() })
         </el-form-item>
         <el-form-item required label="金额"><el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%"/></el-form-item>
         <el-form-item label="费用日期"><el-date-picker v-model="form.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
-        <el-form-item required label="支出账户">
-          <el-select v-model="form.accountId" placeholder="请选择" style="width:100%">
+        <!-- F7-232 配套：报损损失非资金 ⇒ 不要求、也不允许选支出账户（后端同口径拒绝带账户的 LOSS） -->
+        <el-form-item :required="!isNonCash" label="支出账户">
+          <el-select v-model="form.accountId" :disabled="isNonCash" :placeholder="isNonCash ? '非资金费用，无需账户' : '请选择'" style="width:100%">
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName}（余额 ${fmt(a.balance)}）`" :value="a.id ?? ''"/>
           </el-select>
+          <span v-if="isNonCash" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">报损损失不产生现金流出 ⇒ 不写资金流水、不扣账户</span>
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea"/></el-form-item>
       </el-form>

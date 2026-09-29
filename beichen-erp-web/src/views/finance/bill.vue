@@ -3,7 +3,8 @@ import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBillPage, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill } from '@/api/finance'
-import { BillType, BillTypeLabel, sourceBillTypeLabel, FINANCE_BILL_DIRTY_KEY } from '@/api/enums'
+// F7-246④（2026-09-29 批 D）：移除未使用的 sourceBillTypeLabel（死导入；列表无「来源类型」列）
+import { BillType, BillTypeLabel, FINANCE_BILL_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -128,7 +129,8 @@ async function handleGenerate() {
   genLoading.value = true
   try {
     const res = await generateBill(genForm)
-    ElMessage.success(`账单「${res.billNo}」生成成功，共${fmt(res.totalAmount)}元`)
+    // F7-246②（2026-09-29 批 D）：原实现裸解引用 `res.billNo`（200 空体会 NPE）⇒ 改可选链；失败也不再静默
+    ElMessage.success(`账单「${res?.billNo || ''}」生成成功，共${fmt(res?.totalAmount)}元`)
     genDialog.value = false
     // 把列表筛选对齐到刚生成的账单并回到第一页：
     // 否则账单类型/往来单位与当前筛选不符、或正停在其他页时，新账单会被过滤掉看不见
@@ -136,7 +138,8 @@ async function handleGenerate() {
     query.partnerId = genForm.partnerId ?? ''
     page.pageNum = 1
     afterChange()
-  } catch {} finally { genLoading.value = false }
+  } catch { /* F7-246②：失败提示由 request 拦截器统一给出（原先 catch{} 连"没反应"都看不出） */ }
+  finally { genLoading.value = false }
 }
 
 // 详情已独立成页，列表不再用抽屉展示
@@ -182,7 +185,8 @@ async function handleCancel(row: FinanceBill) {
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
         <el-button :icon="'Refresh'" @click="reset_">重置</el-button>
-        <el-button type="success" :icon="'Plus'" @click="genDialog=true">生成账单</el-button>
+        <!-- F7-246①：按 finance:bill 显示（后端 /api/finance/bill 前缀守卫同码） -->
+        <el-button type="success" :icon="'Plus'" v-perm="'finance:bill'" @click="genDialog=true">生成账单</el-button>
       </div>
       </div>
     </el-card>
@@ -215,8 +219,9 @@ async function handleCancel(row: FinanceBill) {
         <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 170→132（详情/审核/作废 3 个按钮）。 -->
       <el-table-column label="操作" width="132" align="center" fixed="right"><template #default="{row}">
           <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
-          <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
-          <el-button v-if="row.status!==DocStatus.CANCELLED" type="danger" link @click.stop="handleCancel(row)">作废</el-button>
+          <!-- F7-246①：审核/作废按 finance:bill 显示（与后端前缀守卫同码，避免"点必失败"入口） -->
+          <el-button v-if="row.status===DocStatus.DRAFT" type="success" link v-perm="'finance:bill'" @click.stop="handleAudit(row)">审核</el-button>
+          <el-button v-if="row.status!==DocStatus.CANCELLED" type="danger" link v-perm="'finance:bill'" @click.stop="handleCancel(row)">作废</el-button>
         </template></el-table-column>
       </el-table>
       <div class="pagination"><el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize" :page-sizes="[10,20,50,100]" :total="page.total" layout="total,sizes,prev,pager,next,jumper" background @size-change="loadData" @current-change="loadData"/></div>

@@ -210,9 +210,9 @@ onActivated(() => { loadDetail() })
   <PageShell :loading="loading" back-fallback="/inventory/warehouse-move">
     <template #actions>
       <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
-      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
-      <el-button type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
+      <el-button v-perm="'stock:warehouse-move'" type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button v-perm="'stock:warehouse-move'" type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
+      <el-button v-perm="'stock:warehouse-move'" type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
     </template>
 
     <el-card shadow="never">

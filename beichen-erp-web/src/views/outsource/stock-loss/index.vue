@@ -71,8 +71,8 @@
         <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="goDetail(row)">详情</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" link type="success" @click="onAudit(row)">审核</el-button>
-            <el-button v-if="row.status === DocStatus.DRAFT" link type="danger" @click="onCancel(row)">作废</el-button>
+            <el-button v-perm="'outsource:stock-loss'" v-if="row.status === DocStatus.DRAFT" link type="success" @click="onAudit(row)">审核</el-button>
+            <el-button v-perm="'outsource:stock-loss'" v-if="row.status === DocStatus.DRAFT" link type="danger" @click="onCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

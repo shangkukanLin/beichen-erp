@@ -70,7 +70,23 @@ const preview = computed(() => {
 
 function handleAdd() { Object.assign(form, emptyForm()); inputMode.value = 'total'; dialogTitle.value = '登记发票'; dialog.value = true }
 function handleEdit(row: FinanceInvoice) {
-  Object.assign(form, JSON.parse(JSON.stringify(row)))
+  // F7-236④（2026-09-29 审核批 C）：**只挑可编辑字段**回填 —— 原先整行 `JSON.parse(JSON.stringify(row))`
+  // 灌进表单并随 updateInvoice 回传（含 status/createTime/companyId 等只读字段）。与 account.vue 已修的
+  // F7-170 同类；字段清单与 emptyForm() 对齐。（后端 update 虽会重置 status/companyId，但"不回传只读字段"更干净。）
+  Object.assign(form, {
+    id: row.id,
+    invoiceNo: row.invoiceNo || '',
+    direction: row.direction || 'SALE',
+    invoiceKind: row.invoiceKind || 'special',
+    invoiceDate: row.invoiceDate ? String(row.invoiceDate).slice(0, 10) : localDate(),
+    partnerName: row.partnerName || '',
+    amount: row.amount,
+    taxRate: row.taxRate ?? 13,
+    taxAmount: row.taxAmount,
+    totalAmount: row.totalAmount,
+    sourceBillCode: (row as any).sourceBillCode || '',
+    remark: (row as any).remark || '',
+  })
   inputMode.value = 'total'
   dialogTitle.value = '编辑发票'; dialog.value = true
 }
@@ -122,7 +138,7 @@ onMounted(() => { loadData() })
         <div class="toolbar">
           <el-button type="primary" :icon="'Search'" @click="page.pageNum=1;loadData()">查询</el-button>
           <el-button :icon="'Refresh'" @click="query.direction='';query.status='';query.keyword='';query.dateRange=null;page.pageNum=1;loadData()">重置</el-button>
-          <el-button type="success" :icon="'Plus'" @click="handleAdd">登记发票</el-button>
+          <el-button type="success" :icon="'Plus'" v-perm="'finance:invoice'" @click="handleAdd">登记发票</el-button>
         </div>
       </div>
     </el-card>
@@ -161,8 +177,9 @@ onMounted(() => { loadData() })
         <el-table-column label="操作" width="106" align="center" fixed="right">
           <template #default="{row}">
             <template v-if="row.status==='REGISTERED'">
-              <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
-              <el-button type="danger" link @click="cancel(row)">作废</el-button>
+              <!-- F7-235：按 finance:invoice 显示（后端 /api/finance/invoice 收口同码） -->
+              <el-button type="primary" link v-perm="'finance:invoice'" @click="handleEdit(row)">编辑</el-button>
+              <el-button type="danger" link v-perm="'finance:invoice'" @click="cancel(row)">作废</el-button>
             </template>
           </template>
         </el-table-column>

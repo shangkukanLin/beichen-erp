@@ -151,8 +151,8 @@ onActivated(() => {
           <template #default="{row}">
             <el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link size="small" @click.stop="handleDownloadContract(row)">下载合同</el-button>
-            <el-button v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click.stop="handleConfirm(row)">审核</el-button>
-            <el-button v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click.stop="handleCancel(row)">作废</el-button>
+            <el-button v-perm="'outsource:material-order'" v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click.stop="handleConfirm(row)">审核</el-button>
+            <el-button v-perm="'outsource:material-order'" v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

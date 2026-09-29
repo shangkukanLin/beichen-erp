@@ -79,6 +79,16 @@ const TABS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
   REPAIR: [{ key: 'PENDING', label: '待返回' }, { key: 'DONE', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }]
 }
 const tabs = computed(() => TABS[leaf.value])
+/**
+ * D-25 ②（2026-09-30）：本文件同时服务两个叶子（`UNLINKED`=工厂售后、`REPAIR`=客户售后），
+ * 两叶子的菜单码不同（`outsource:order-delivery` / `outsource:return-order`）⇒ 行内按钮的 `v-perm`
+ * 用**本计算属性**给出对应码。
+ *
+ * <p>为什么不在模板里写三元：模板中这些按钮位于 `v-if="leaf === 'UNLINKED'"` 等分支内，vue-tsc 会把
+ * `leaf` 收窄成字面量，三元里的另一分支被判为"无重叠比较"（`TS2367`）。放在 `<script setup>` 里比较
+ * `ComputedRef.value` 则没有收窄问题。</p>
+ */
+const actionPerm = computed(() => (leaf.value === 'REPAIR' ? 'outsource:return-order' : 'outsource:order-delivery'))
 const activeTab = ref<TabKey>('PENDING')
 /** 页签角标：各页签条数（用 pageSize=1 的轻量请求取 total —— 零后端改动） */
 const tabCounts = reactive<Record<string, number>>({})
@@ -433,8 +443,8 @@ onMounted(() => {
           <el-table-column label="操作" width="132" align="center" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" link @click.stop="openDetail(row)">详情</el-button>
-              <el-button type="success" link v-if="row.status === DocStatus.DRAFT" @click.stop="auditLedger(row)">审核</el-button>
-              <el-button type="danger" link v-if="row.status === DocStatus.DRAFT" @click.stop="cancelLedger(row)">作废</el-button>
+              <el-button v-perm="actionPerm" type="success" link v-if="row.status === DocStatus.DRAFT" @click.stop="auditLedger(row)">审核</el-button>
+              <el-button v-perm="actionPerm" type="danger" link v-if="row.status === DocStatus.DRAFT" @click.stop="cancelLedger(row)">作废</el-button>
             </template>
           </el-table-column>
         </el-table>
@@ -509,11 +519,11 @@ onMounted(() => {
           <el-table-column label="操作" width="132" align="center" fixed="right">
             <template #default="{ row }">
               <el-button type="primary" link @click.stop="goReturnDetail(row)">详情</el-button>
-              <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
-              <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>
+              <el-button v-perm="actionPerm" type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
+              <el-button v-perm="actionPerm" type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>
               <!-- 结案（仅维修退货）：未返回=0 才出现 -->
-              <el-button type="success" link v-if="row.returnType===OutsourceReturnType.REPAIR && row.status===DocStatus.AUDITED && row.closedFlag!==1 && Number(row.unreturnedQty)===0" @click.stop="handleClose(row)">结案</el-button>
-              <el-button type="warning" link v-if="row.closedFlag===1" @click.stop="handleReOpen(row)">撤销结案</el-button>
+              <el-button v-perm="actionPerm" type="success" link v-if="row.returnType===OutsourceReturnType.REPAIR && row.status===DocStatus.AUDITED && row.closedFlag!==1 && Number(row.unreturnedQty)===0" @click.stop="handleClose(row)">结案</el-button>
+              <el-button v-perm="actionPerm" type="warning" link v-if="row.closedFlag===1" @click.stop="handleReOpen(row)">撤销结案</el-button>
             </template>
           </el-table-column>
         </el-table>

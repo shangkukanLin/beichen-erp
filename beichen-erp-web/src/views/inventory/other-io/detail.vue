@@ -215,9 +215,9 @@ onActivated(() => { loadDetail() })
   <PageShell :loading="loading" back-fallback="/inventory/other-io">
     <template #actions>
       <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
-      <el-button type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-      <el-button type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
-      <el-button type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
+      <el-button v-perm="'stock:other-io'" type="success" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button v-perm="'stock:other-io'" type="warning" size="small" v-if="detail.status===DocStatus.AUDITED" @click="handleUnAudit">反审核</el-button>
+      <el-button v-perm="'stock:other-io'" type="danger" size="small" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
     </template>
 
     <!-- 草稿：直接可编辑的表单；已审核/已作废：只读信息 -->

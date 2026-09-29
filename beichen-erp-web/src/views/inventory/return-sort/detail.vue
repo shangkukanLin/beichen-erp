@@ -192,8 +192,8 @@ onActivated(() => { loadDetail() })
     <template #actions>
       <!-- 草稿：保存(主) + 审核（2026-09-24：草稿态就地编辑，不再跳独立编辑页） -->
       <el-button v-if="isDraft" type="primary" :loading="saving" @click="doSave">保存</el-button>
-      <el-button v-if="isDraft" type="success" :loading="acting" @click="doAudit">审核</el-button>
-      <el-button v-if="isAudited" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
+      <el-button v-perm="'stock:return-sort'" v-if="isDraft" type="success" :loading="acting" @click="doAudit">审核</el-button>
+      <el-button v-perm="'stock:return-sort'" v-if="isAudited" type="warning" :loading="acting" @click="doUnAudit">反审核</el-button>
     </template>
 
     <el-card shadow="never">

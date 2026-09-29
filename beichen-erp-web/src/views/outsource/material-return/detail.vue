@@ -357,12 +357,12 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
     <template #actions>
       <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑，不再跳独立编辑页） -->
       <el-button type="primary" v-if="isDraft" :loading="saving" @click="doSave">保存</el-button>
-      <el-button type="success" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
-      <el-button type="warning" v-if="detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="handleUnAudit">反审核</el-button>
-      <el-button type="danger" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
+      <el-button v-perm="'outsource:material-return'" type="success" v-if="detail.status===DocStatus.DRAFT" @click="handleAudit">审核</el-button>
+      <el-button v-perm="'outsource:material-return'" type="warning" v-if="detail.status===DocStatus.AUDITED && detail.closedFlag!==1" @click="handleUnAudit">反审核</el-button>
+      <el-button v-perm="'outsource:material-return'" type="danger" v-if="detail.status===DocStatus.DRAFT" @click="handleCancel">作废</el-button>
       <!-- 结案 / 撤销结案（仅维修返回，2026-09-17）：未返回=0 才可结案 -->
-      <el-button type="success" v-if="isRepair && detail.status===DocStatus.AUDITED && detail.closedFlag!==1 && Number(detail.unreturnedQty)===0" @click="handleClose">结案</el-button>
-      <el-button type="warning" v-if="isRepair && detail.closedFlag===1" @click="handleReOpen">撤销结案</el-button>
+      <el-button v-perm="'outsource:material-return'" type="success" v-if="isRepair && detail.status===DocStatus.AUDITED && detail.closedFlag!==1 && Number(detail.unreturnedQty)===0" @click="handleClose">结案</el-button>
+      <el-button v-perm="'outsource:material-return'" type="warning" v-if="isRepair && detail.closedFlag===1" @click="handleReOpen">撤销结案</el-button>
     </template>
 
     <el-card shadow="never">
@@ -548,8 +548,8 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           <template #default="{row}">
             <!-- 2026-09-28：已结案时**隐藏**行内动作（与全页"结案后不再受理返回动作"同口径；后端也一律拦截）。
                  刻意用 v-if 而非 disabled：全站结案/作废类动作都是"消失"，且守卫按"按钮是否存在"判定。 -->
-            <el-button v-if="row.status===DocStatus.DRAFT && detail.closedFlag!==1" type="success" link size="small" @click="auditRepairReturn(row)">审核</el-button>
-            <el-button v-if="row.status===DocStatus.AUDITED && detail.closedFlag!==1" type="warning" link size="small" @click="unAuditRepairReturn(row)">反审核</el-button>
+            <el-button v-perm="'outsource:material-return'" v-if="row.status===DocStatus.DRAFT && detail.closedFlag!==1" type="success" link size="small" @click="auditRepairReturn(row)">审核</el-button>
+            <el-button v-perm="'outsource:material-return'" v-if="row.status===DocStatus.AUDITED && detail.closedFlag!==1" type="warning" link size="small" @click="unAuditRepairReturn(row)">反审核</el-button>
             <el-button v-if="row.status===DocStatus.DRAFT && detail.closedFlag!==1" type="danger" link size="small" @click="cancelRepairReturn(row)">删除</el-button>
           </template>
         </el-table-column>

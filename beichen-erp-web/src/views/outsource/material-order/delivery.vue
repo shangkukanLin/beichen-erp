@@ -365,7 +365,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
           <el-button v-if="canReturn" type="danger" size="small" @click="openReturn()">物料退货</el-button>
           <!-- 结单 / 反结单（2026-09-29 用户口径「结单也收到收退详情」）：原在「物料订单详情」与收货列表行内，
                现统一收到本页；后端结单不校验收满（未收满时二次确认），纯状态变更、无账务副作用。 -->
-          <el-button v-if="canFinish" type="warning" size="small" @click="handleFinish">结单</el-button>
+          <el-button v-perm="'outsource:material-delivery'" v-if="canFinish" type="warning" size="small" @click="handleFinish">结单</el-button>
           <el-button v-if="canReopen" type="warning" size="small" @click="handleReopen">反结单</el-button>
         </div>
       </div>
@@ -417,8 +417,8 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openRecordDetail(row)">详细</el-button>
             <template v-if="isMaterialDelivery(row)">
-              <el-button v-if="row.status === DocStatus.DRAFT" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
-              <el-button v-else-if="row.status === DocStatus.AUDITED" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
+              <el-button v-perm="'outsource:material-delivery'" v-if="row.status === DocStatus.DRAFT" type="primary" link size="small" @click="auditDelivery(row)">审核</el-button>
+              <el-button v-perm="'outsource:material-delivery'" v-else-if="row.status === DocStatus.AUDITED" type="warning" link size="small" @click="unauditDelivery(row)">反审核</el-button>
             </template>
           </template>
         </el-table-column>

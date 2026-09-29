@@ -319,8 +319,8 @@ onMounted(async () => { await load(); await loadReturns() })
     <template #actions>
       <!-- 审核 / 反审核（2026-09-28 用户口径「加工退货详情需要有审核和反审核功能」）：
            与收货记录列表/加工退货台账同一对通用端点；条件与它们一致（草稿可审核、已审核可反审核） -->
-      <el-button v-if="detail.status===DocStatus.DRAFT" type="success" @click="handleAudit">审核</el-button>
-      <el-button v-if="detail.status===DocStatus.AUDITED" type="warning" @click="handleUnAudit">反审核</el-button>
+      <el-button v-perm="'outsource:order-delivery'" v-if="detail.status===DocStatus.DRAFT" type="success" @click="handleAudit">审核</el-button>
+      <el-button v-perm="'outsource:order-delivery'" v-if="detail.status===DocStatus.AUDITED" type="warning" @click="handleUnAudit">反审核</el-button>
       <!-- 2026-09-27 用户口径：工厂修好送回时**就在本页登记返回**（不再去「加工返回单」叶子开单） -->
       <el-button v-if="canReturn" type="primary" @click="openReturn">登记返回</el-button>
     </template>

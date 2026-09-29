@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onActivated, onUnmounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
@@ -31,7 +31,7 @@ function pct(part: number, total: number) {
   return (Math.round((part / total) * 1000) / 10).toFixed(1)
 }
 /** 百分比展示（后端已 ×100、保留 2 位；2026-09-15 由 1 位改 2 位，避免 0.06% 显示成 0.1%） */
-function fmtPct(v?: any) { return (Number(v) || 0).toFixed(2) + '%' }
+function fmtPct(v?: any) { return (Number(v) || 0).toFixed(1) + '%' }
 /** 数量展示：千分位、最多 2 位小数（去尾零，件数不显示 .00） */
 function fmtQty(v?: any) {
   if (v == null) return '0'

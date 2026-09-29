@@ -180,8 +180,8 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
   <PageShell :loading="loading" back-fallback="/outsource/order">
     <template #actions>
       <el-button type="primary" :disabled="report.reportStatus===CloseReportStatus.FINISHED" @click="handleSave">保存</el-button>
-      <el-button type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
-      <el-button v-if="report.reportStatus===CloseReportStatus.FINISHED" type="warning" @click="handleReopen">反结单</el-button>
+      <el-button v-perm="'outsource:order'" type="success" :disabled="!canConfirm" @click="handleConfirm">确认结单</el-button>
+      <el-button v-perm="'outsource:order'" v-if="report.reportStatus===CloseReportStatus.FINISHED" type="warning" @click="handleReopen">反结单</el-button>
       <el-button type="info" @click="handleExport">导出Excel</el-button>
     </template>
 
@@ -318,7 +318,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
       </el-checkbox>
       <template #footer>
         <el-button @click="showForceDialog=false">取消</el-button>
-        <el-button type="danger" :disabled="!forceReturn" @click="doConfirm(true)">确认结单（强制退料）</el-button>
+        <el-button v-perm="'outsource:order'" type="danger" :disabled="!forceReturn" @click="doConfirm(true)">确认结单（强制退料）</el-button>
       </template>
     </el-dialog>
   </PageShell>

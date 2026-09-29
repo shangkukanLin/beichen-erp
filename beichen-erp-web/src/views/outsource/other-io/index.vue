@@ -112,10 +112,10 @@ onMounted(()=>{ loadWarehouses(); loadData() })
              一律进详情。操作列 200→140。 -->
         <el-table-column label="操作" width="148" align="center" fixed="right">
           <template #default="{row}">
-            <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleApprove(row)">审核</el-button>
-            <el-button v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnapprove(row)">反审核</el-button>
+            <el-button v-perm="'outsource:other-io'" v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleApprove(row)">审核</el-button>
+            <el-button v-perm="'outsource:other-io'" v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnapprove(row)">反审核</el-button>
             <el-button type="primary" link @click.stop="handleEdit(row)">详情</el-button>
-            <el-button type="danger" link @click.stop="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">作废</el-button>
+            <el-button v-perm="'outsource:other-io'" type="danger" link @click.stop="handleCancel(row)" :disabled="row.status===DocStatus.CANCELLED || row.status===DocStatus.AUDITED">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

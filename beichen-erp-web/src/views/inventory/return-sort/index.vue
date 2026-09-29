@@ -555,7 +555,7 @@ onActivated(() => {
             <el-table-column label="操作" width="132" align="center" fixed="right">
               <template #default="{ row }">
                 <el-button type="primary" link @click.stop="openRow(row)">详情</el-button>
-                <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
+                <el-button v-perm="'stock:return-sort'" v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>
                 <el-button v-if="row.status === DocStatus.DRAFT" type="danger" link @click.stop="handleDelete(row)">删除</el-button>
               </template>
             </el-table-column>

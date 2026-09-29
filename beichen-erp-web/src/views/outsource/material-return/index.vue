@@ -340,11 +340,11 @@ onMounted(() => {
         <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
-            <el-button type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
-            <el-button type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>
+            <el-button v-perm="'outsource:material-return'" type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>
+            <el-button v-perm="'outsource:material-return'" type="danger" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleCancel(row)">作废</el-button>
             <!-- 结案（**仅维修返回**，2026-09-28 起按行类型判定而非按叶子）：未返回=0 时才出现，代表跟踪终点 -->
-            <el-button type="success" link v-if="isRepairRow(row) && row.status===DocStatus.AUDITED && row.closedFlag!==1 && Number(row.unreturnedQty)===0" @click.stop="handleClose(row)">结案</el-button>
-            <el-button type="warning" link v-if="isRepairRow(row) && row.closedFlag===1" @click.stop="handleReOpen(row)">撤销结案</el-button>
+            <el-button v-perm="'outsource:material-return'" type="success" link v-if="isRepairRow(row) && row.status===DocStatus.AUDITED && row.closedFlag!==1 && Number(row.unreturnedQty)===0" @click.stop="handleClose(row)">结案</el-button>
+            <el-button v-perm="'outsource:material-return'" type="warning" link v-if="isRepairRow(row) && row.closedFlag===1" @click.stop="handleReOpen(row)">撤销结案</el-button>
           </template>
         </el-table-column>
       </el-table>

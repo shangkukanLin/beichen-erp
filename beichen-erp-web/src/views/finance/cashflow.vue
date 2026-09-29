@@ -27,6 +27,18 @@ async function loadFlow() {
 function fq_() { page.pageNum = 1; loadFlow() }
 function fr_() { fquery.accountId = undefined; fquery.flowType = ''; page.pageNum = 1; loadFlow() }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
+/**
+ * F7-236①（2026-09-29 审核批 C）：类型标签配色**按该笔流水的方向**取，不再硬编码类型名。
+ *
+ * 原先写死"只有 `RECEIPT`/`OPENING` 判绿、其余一律判危红"，与 7 类枚举不齐：期初被当"收入"尚可，
+ * 但 `RECEIPT_REVERSE`（收款冲正，实际是**出账**）与 `EXPENSE_REVERSE`（费用冲正，实际是**入账**）
+ * 会被判成相反的颜色，误导阅读。方向以行自身的 income/expense 为准，天然自洽。
+ */
+function flowTagType(row: any): 'success' | 'danger' | 'info' {
+  if (Number(row?.income) > 0) return 'success'
+  if (Number(row?.expense) > 0) return 'danger'
+  return 'info'
+}
 
 // 账户下拉（仅筛选用）
 const accounts = ref<FinanceAccount[]>([])
@@ -40,6 +52,8 @@ onMounted(() => { loadFlow(); loadAccounts() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="fquery" class="qf">
+        <!-- F7-236②：本下拉是**筛选**用 ⇒ 故意不过滤 status（停用账户的历史流水仍要能筛出来）；
+             与 expense.vue 的"支出账户"下拉不同（那是**建单选择**，故只列启用账户）—— 两处差异是有意的。 -->
         <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id ?? ''"/></el-select></el-form-item>
         <el-form-item label="类型"><el-select v-model="fquery.flowType" placeholder="全部" clearable style="width:130px"><el-option v-for="t in flowTypes" :key="t.code" :label="t.label" :value="t.code"/></el-select></el-form-item>
       </el-form>
@@ -59,7 +73,7 @@ onMounted(() => { loadFlow(); loadAccounts() })
         <el-table-column prop="flowNo" label="流水号" width="140"/>
         <el-table-column label="时间" width="96"><template #default="{row}">{{ $fmtDate(row.createTime) }}</template></el-table-column>
         <el-table-column prop="accountName" label="账户" min-width="120"/>
-        <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="row.flowType==='RECEIPT'||row.flowType==='OPENING'?'success':'danger'" size="small">{{flowTypeLabel(row.flowType)}}</el-tag></template></el-table-column>
+        <el-table-column label="类型" width="90" align="center"><template #default="{row}"><el-tag :type="flowTagType(row)" size="small">{{flowTypeLabel(row.flowType)}}</el-tag></template></el-table-column>
         <el-table-column label="收入" width="104" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{fmt(row.income)}}</span></template></el-table-column>
         <el-table-column label="支出" width="104" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{fmt(row.expense)}}</span></template></el-table-column>
         <el-table-column prop="balance" label="余额" width="100" align="right"><template #default="{row}">{{fmt(row.balance)}}</template></el-table-column>

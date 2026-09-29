@@ -165,12 +165,12 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
     <template #actions>
       <!-- F7-127（2026-09-20）：与后端白名单一致 —— 非待审核不可保存（原仅禁 CANCELLED） -->
       <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status!==MaterialOrderStatus.PENDING">保存</el-button>
-      <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
-      <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
+      <el-button v-perm="'outsource:material-order'" v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
+      <el-button v-perm="'outsource:material-order'" v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
       <!-- 结单 / 反结单（2026-09-29 用户口径）：**统一收到「物料收退详情」**（本页不再放这两个按钮） -->
       <!-- 收货/退货/结单 2026-09-16 移出为独立菜单页「物料收退」（原名「物料收货」），此处只留跳转入口 -->
       <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收退</el-button>
-      <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
+      <el-button v-perm="'outsource:material-order'" v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
     </template>
 
     <el-tabs v-model="activeTab" style="margin-bottom:12px">
@@ -204,12 +204,12 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
           <div style="display:flex;gap:8px;margin-top:12px">
             <!-- F7-127（2026-09-20）：与后端白名单一致 —— 非待审核不可保存（原仅禁 CANCELLED） -->
             <el-button type="primary" size="small" :loading="saving" @click="handleSave" :disabled="order.status!==MaterialOrderStatus.PENDING">保存</el-button>
-            <el-button v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
-            <el-button v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
+            <el-button v-perm="'outsource:material-order'" v-if="order.status===MaterialOrderStatus.PENDING" type="success" size="small" @click="handleConfirm">审核</el-button>
+            <el-button v-perm="'outsource:material-order'" v-if="order.status===MaterialOrderStatus.RECEIVING" type="warning" size="small" @click="handleUnAudit">反审核</el-button>
             <!-- 结单 / 反结单（2026-09-29 用户口径）：**统一收到「物料收退详情」**（本页不再放这两个按钮） -->
             <!-- 收货/退货/结单 2026-09-16 移出为独立菜单页「物料收退」（原名「物料收货」），此处只留跳转入口 -->
             <el-button type="warning" size="small" @click="router.push(`/outsource/material-order/delivery/${id}`)">物料收退</el-button>
-            <el-button v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
+            <el-button v-perm="'outsource:material-order'" v-if="order.status!==MaterialOrderStatus.FINISHED && order.status!==MaterialOrderStatus.CANCELLED" type="danger" size="small" @click="handleCancel">作废</el-button>
           </div>
         </el-form>
       </el-card>

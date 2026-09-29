@@ -5,9 +5,9 @@
       <template v-if="head">
         <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑，不再跳独立编辑页） -->
         <el-button v-if="isDraft" type="primary" :loading="saving" @click="onSave">保存</el-button>
-        <el-button v-if="isDraft" type="success" @click="onAudit">审核</el-button>
-        <el-button v-if="isAudited" type="warning" @click="onUnAudit">反审核</el-button>
-        <el-button v-if="isDraft" type="danger" @click="onCancel">作废</el-button>
+        <el-button v-perm="'outsource:stock-loss'" v-if="isDraft" type="success" @click="onAudit">审核</el-button>
+        <el-button v-perm="'outsource:stock-loss'" v-if="isAudited" type="warning" @click="onUnAudit">反审核</el-button>
+        <el-button v-perm="'outsource:stock-loss'" v-if="isDraft" type="danger" @click="onCancel">作废</el-button>
       </template>
     </template>
 

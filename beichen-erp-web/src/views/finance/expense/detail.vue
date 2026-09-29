@@ -2,6 +2,7 @@
 import { computed, reactive, ref, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import { localDate } from '@/utils/date'
 import PageShell from '@/components/PageShell.vue'
 import {
@@ -29,6 +30,12 @@ const saving = ref(false)
 const head = ref<FinanceExpense>({})
 const isDraft = computed(() => head.value.status === DocStatus.DRAFT)
 const isAudited = computed(() => head.value.status === DocStatus.AUDITED)
+/**
+ * F7-235（2026-09-29 审核批 C）：费用动作权限与后端**同源两码任一**
+ * （`ApiPermGuard.rule("/api/finance/expense", "finance:expense", "finance:cashflow")`）。
+ */
+const userStore = useUserStore()
+const canExpense = computed(() => userStore.hasPerm('finance:expense') || userStore.hasPerm('finance:cashflow'))
 
 /** 可编辑副本（白名单：单号/状态/账户名回显/制单人 不回传；金额与账户由后端复核） */
 const form = reactive({ expenseType: 'OFFICE', amount: undefined as number | undefined, expenseDate: localDate(), accountId: undefined as any, remark: '' })
@@ -48,7 +55,10 @@ async function loadData() {
     form.expenseDate = head.value.expenseDate ? String(head.value.expenseDate).slice(0, 10) : localDate()
     form.accountId = head.value.accountId ?? undefined
     form.remark = head.value.remark || ''
-  } finally { loading.value = false }
+  } catch { head.value = {} }
+  // F7-237（2026-09-29 审核批 C）：原先**只有 finally 没有 catch** ⇒ 详情加载失败会成为未处理的
+  // Promise rejection，页面状态半新半旧（消息由拦截器弹出，但页面无兜底）。
+  finally { loading.value = false }
 }
 
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
@@ -58,7 +68,9 @@ function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
 async function doSave() {
   if (!form.expenseType) { ElMessage.warning('请选择费用类型'); return }
   if (!form.amount || form.amount <= 0) { ElMessage.warning('费用金额必须大于 0'); return }
-  if (!form.accountId) { ElMessage.warning('请选择支出账户'); return }
+  // F7-232 配套：报损损失（LOSS）= 非资金费用 ⇒ 不要求账户，提交前清空（后端同口径会拒绝带账户的 LOSS）
+  if (form.expenseType === 'LOSS') form.accountId = undefined as any
+  if (form.expenseType !== 'LOSS' && !form.accountId) { ElMessage.warning('请选择支出账户'); return }
   saving.value = true
   try {
     await updateExpense({
@@ -75,13 +87,18 @@ async function doAudit() {
     await ElMessageBox.confirm(`确认审核费用单 ${head.value.expenseNo}？审核后将从「${head.value.accountName}」扣款 ${fmt(head.value.amount)} 元`, '审核确认', { type: 'warning' })
   } catch { return }
   acting.value = true
-  try { await auditExpense(id()); ElMessage.success('已审核'); await loadData() } finally { acting.value = false }
+  // F7-237：接口调用补 catch（原先仅 finally ⇒ 失败无局部兜底、产生未处理 rejection）
+  try { await auditExpense(id()); ElMessage.success('已审核'); await loadData() }
+  catch { /* 提示由拦截器统一给出 */ }
+  finally { acting.value = false }
 }
 
 async function doUnAudit() {
   try { await ElMessageBox.confirm('反审核将生成「费用冲正」流水把钱冲回账户，确认继续？', '反审核确认', { type: 'warning' }) } catch { return }
   acting.value = true
-  try { await unAuditExpense(id()); ElMessage.success('已反审核'); await loadData() } finally { acting.value = false }
+  try { await unAuditExpense(id()); ElMessage.success('已反审核'); await loadData() }
+  catch { /* 提示由拦截器统一给出 */ }
+  finally { acting.value = false }
 }
 
 async function doCancel() {
@@ -91,7 +108,8 @@ async function doCancel() {
     await cancelExpense(id())
     ElMessage.success('已作废')
     router.push('/finance/expense')
-  } finally { acting.value = false }
+  } catch { /* 提示由拦截器统一给出 */ }
+  finally { acting.value = false }
 }
 
 // 单据数据每次进入都重新拉取（keep-alive 下 onMounted 不会再触发）
@@ -102,12 +120,13 @@ onActivated(() => { loadData(); loadAccounts() })
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta) → 右端操作 -->
   <PageShell :loading="loading" back-fallback="/finance/expense">
     <template #actions>
-      <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑） -->
-      <el-button type="primary" v-if="isDraft" :loading="saving" @click="doSave">保存</el-button>
-      <el-button type="success" v-if="isDraft" :loading="acting" @click="doAudit">审核</el-button>
-      <el-button type="danger" v-if="isDraft" :loading="acting" @click="doCancel">作废</el-button>
+      <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑）
+           F7-235：四个动作按 finance:expense|finance:cashflow（后端同源两码任一）显示 -->
+      <el-button type="primary" v-if="isDraft && canExpense" :loading="saving" @click="doSave">保存</el-button>
+      <el-button type="success" v-if="isDraft && canExpense" :loading="acting" @click="doAudit">审核</el-button>
+      <el-button type="danger" v-if="isDraft && canExpense" :loading="acting" @click="doCancel">作废</el-button>
       <!-- 反审核：生成「费用冲正」流水把钱冲回账户（撤销类操作，2026-09-24 从列表移入详情） -->
-      <el-button type="warning" v-if="isAudited" :loading="acting" @click="doUnAudit">反审核</el-button>
+      <el-button type="warning" v-if="isAudited && canExpense" :loading="acting" @click="doUnAudit">反审核</el-button>
     </template>
 
     <el-card shadow="never">

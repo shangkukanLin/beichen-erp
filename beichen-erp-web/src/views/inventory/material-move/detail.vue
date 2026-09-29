@@ -4,9 +4,9 @@
     <template #actions>
       <!-- 草稿态：就地编辑 + 保存（与成品移仓单一致，不再跳转新增页） -->
       <el-button v-if="isDraft" type="primary" :loading="saving" @click="handleSave">保存</el-button>
-      <el-button v-if="isDraft" type="success" @click="handleAudit">审核</el-button>
-      <el-button v-if="isDraft" type="danger" @click="handleCancel">作废</el-button>
-      <el-button v-if="isAudited" type="warning" @click="handleUnAudit">反审核</el-button>
+      <el-button v-perm="'stock:material-move'" v-if="isDraft" type="success" @click="handleAudit">审核</el-button>
+      <el-button v-perm="'stock:material-move'" v-if="isDraft" type="danger" @click="handleCancel">作废</el-button>
+      <el-button v-perm="'stock:material-move'" v-if="isAudited" type="warning" @click="handleUnAudit">反审核</el-button>
     </template>
 
     <el-card shadow="never" class="query-card">

@@ -103,8 +103,8 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
         <el-table-column label="操作" width="132" align="center" fixed="right">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
-            <el-button type="success" link @click.stop="handleAudit(row)" v-if="row.status===DocStatus.DRAFT">审核</el-button>
-            <el-button type="danger" link @click.stop="handleCancel(row)" v-if="row.status===DocStatus.DRAFT">作废</el-button>
+            <el-button v-perm="'stock:other-io'" type="success" link @click.stop="handleAudit(row)" v-if="row.status===DocStatus.DRAFT">审核</el-button>
+            <el-button v-perm="'stock:other-io'" type="danger" link @click.stop="handleCancel(row)" v-if="row.status===DocStatus.DRAFT">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

@@ -395,7 +395,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <el-button type="danger" size="small" @click="openDefectReturn">加工退货</el-button>
             <!-- 2026-09-21（用户口径「加工单详情页面的结单按钮放到成品收货里」）：结单入口（跳结单报表页）；
                  未收满时二次确认（后端不拦未收满即结单，而结单后本页就不能再收货） -->
-            <el-button type="warning" size="small" @click="goClose">结单</el-button>
+            <el-button v-perm="'outsource:order-delivery'" type="warning" size="small" @click="goClose">结单</el-button>
           </template>
           <!-- 2026-09-21（用户口径「统一命名」）：本页退回一律走「加工退货」红冲收货（原名「退不良」→「加工退货」→ 定稿「加工退货」，
                与「加工退货」页的「加工退货」页签同一个词）⇒ 原「退货」按钮已移除 -->
@@ -448,14 +448,14 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <!-- 详情：仓库/物流单号/备注/附件/SKU/等级明细/创建时间等明细字段都在**详情页**看
                  （2026-09-23 由抽屉改为独立页 /outsource/order/delivery/record/:id） -->
             <el-button type="primary" link size="small" @click="openDetail(row)">详情</el-button>
-            <el-button type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
+            <el-button v-perm="'outsource:order-delivery'" type="success" link size="small" v-if="row.status === DocStatus.DRAFT" @click="handleAudit(row)">审核</el-button>
             <!-- 2026-09-29（用户口径）：已审核的收货记录可**反审核**（对称逆回：库存/应付/已收数量，
                  后端按单据类型分派；见 DeliveryServiceImpl.unaudit）。草稿不走这里（它的动作是 审核/编辑/删除·作废）。 -->
-            <el-button type="danger" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
+            <el-button v-perm="'outsource:order-delivery'" type="danger" link size="small" v-if="row.status === DocStatus.AUDITED" @click="handleUnaudit(row)">反审核</el-button>
             <el-button type="primary" link size="small" v-if="row.status === DocStatus.DRAFT" @click="openEdit(row)">编辑</el-button>
             <!-- 2026-09-29（用户口径）：加工退货（红冲）草稿 = **作废**（留痕可查，与原台账一致）；
                  普通收货草稿仍是 **删除**（物理删草稿）⇒ 两分支互斥、按钮数不变（操作列宽 176 不动） -->
-            <el-button type="danger" link size="small" v-if="row.status === DocStatus.DRAFT && row.deliveryType === DeliveryType.DEFECT_RETURN" @click="handleCancel(row)">作废</el-button>
+            <el-button v-perm="'outsource:order-delivery'" type="danger" link size="small" v-if="row.status === DocStatus.DRAFT && row.deliveryType === DeliveryType.DEFECT_RETURN" @click="handleCancel(row)">作废</el-button>
             <el-button type="danger" link size="small" v-else-if="row.status === DocStatus.DRAFT" @click="handleDelete(row)">删除</el-button>
           </template>
         </el-table-column>

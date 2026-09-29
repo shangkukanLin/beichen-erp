@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, onMounted, onActivated, onUnmounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
@@ -101,7 +101,7 @@ function renderTrendChart() {
   const marginOf = (p: any) => {
     const sale = num(p, 'saleAmount')
     if (sale === 0) return null
-    return Number(((num(p, 'netProfit') / sale) * 100).toFixed(2))
+    return Number(((num(p, 'netProfit') / sale) * 100).toFixed(1))
   }
   trendEmpty.value = pts.length === 0 || pts.every((p: any) => KEYS.every((k) => num(p, k) === 0))
   trendChart = trendChart || echarts.init(el)
