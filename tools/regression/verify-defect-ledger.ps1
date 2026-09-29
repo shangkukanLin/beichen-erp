@@ -1,4 +1,4 @@
-# Regression (2026-09-21 user decision): the defect-return LEDGER must show
+﻿# Regression (2026-09-21 user decision): the defect-return LEDGER must show
 # "linked to a work order" and "not linked to a work order" in ONE table.
 #   Both kinds are the very same rows of outsource_order_delivery (delivery_type=DEFECT_RETURN,
 #   is_reverse=1, negative quantity) - only order_id differs, which is exactly what the page's
@@ -122,10 +122,45 @@ $ra = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-deliver
 Ok ($ra.code -eq 200) ('audit no-order draft: ' + $ra.code + ' ' + $ra.msg)
 $dn = Invoke-RestMethod -Uri ($dUrl + $idNo + '/detail') -Headers $h
 Ok ($dn.data.settled -eq $true) 'audited: settled=true'
-Ok (@($dn.data.materials).Count -ge 1) ('audited: material lines returned (' + @($dn.data.materials).Count + ')')
-Ok ("$(@($dn.data.materials)[0].materialName)" -ne '') ('audited: first returned material has a name')
-Ok ([decimal]$dn.data.payableAmount -lt 0) ('audited: payable credited (' + $dn.data.payableAmount + ')')
-Ok ("$($dn.data.payableStatus)" -eq 'UNSETTLED') ('audited: payable status=' + $dn.data.payableStatus)
+# 2026-09-25 P1-1 起「工厂售后」（原无单加工退货）的新口径：**不还料、不冲应付**，只扣成品 + 以 PRODUCT_DEFECT 形态转入加工厂委外仓。
+# 原断言（materials 非空 + 负应付 + payableStatus=UNSETTLED）是 P1-1 **之前**的旧口径 ⇒ 自那时起一直是存量红，
+# 2026-09-28 复核「加工退货详情补审核/反审核」时顺手订正为本口径。
+Ok (@($dn.data.materials).Count -eq 0) ('audited (order-less): NO material lines returned (' + @($dn.data.materials).Count + ')')
+Ok ("$($dn.data.outsourceIn)" -ne '') ('audited (order-less): product moved into the factory outsource wh (' + "$($dn.data.outsourceIn)" + ')')
+Ok ([decimal]($dn.data.payableAmount) -eq 0) ('audited (order-less): no payable leg (' + "$($dn.data.payableAmount)" + ')')
+
+# 2026-09-28 (user request "加工退货详情需要有审核和反审核功能"): the detail page now offers un-audit, so the
+# service layer must refuse it while an approved 加工返回 (return-back) exists -- otherwise the reversal would
+# silently mismatch the goods already brought back into our own warehouse.
+Step 'un-audit is BLOCKED while a return-back record exists (new 2026-09-28 gate)'
+$inWh = [int](SqlOne "SELECT id FROM warehouse WHERE warehouse_category='INVENTORY' AND warehouse_type='FINISHED' LIMIT 1")
+Ok ($inWh -gt 0) ('fixture: own finished warehouse id=' + $inWh)
+$cands = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idNo/return-back-material-candidates") -Headers $h
+$items = @()
+if (@($cands.data).Count -gt 0) {
+  $c0 = @($cands.data)[0]
+  $items = @(@{ materialId = [int]$c0.materialId; quantity = [decimal]$c0.perSetQuantity * $qty })
+}
+$rb = @{ factoryId = $fid; productId = $master; quantity = $qty; defectQualityType = 'A'; returnQualityType = 'A'; inWarehouseId = $inWh; items = $items } | ConvertTo-Json -Depth 6
+$rr = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idNo/return-back") -Method Post -Headers $h -ContentType 'application/json' -Body $rb
+Ok ($rr.code -eq 200) ('registered a return-back: ' + $rr.code + ' ' + $rr.msg)
+$rbId = [int](SqlOne "SELECT COALESCE(MAX(id),0) FROM outsource_return_back WHERE source_delivery_id=$idNo")
+Ok ($rbId -gt 0) ('return-back record id=' + $rbId)
+# 2026-09-29 订正本守卫：**登记只建草稿**（2026-09-28 用户口径），而闸门只认**已审核**的返回
+#   （returnedQtyBySource / RETURNED_QTY_SQL 均 .eq(status,'AUDITED')）—— 草稿没落账，自然不该挡反审核。
+#   原断言"登记完就要求反审核被拒"自 2026-09-28 起一直红 ⇒ 现在先审核返回，再验闸门。
+$arb = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/return-back/$rbId/audit") -Method Put -Headers $h
+Ok ($arb.code -eq 200) ('audit the return-back (makes 已返回 real): ' + $arb.code + ' ' + $arb.msg)
+$blocked = $null
+try { $blocked = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idNo/un-audit") -Method Put -Headers $h } catch { $blocked = $null }
+Ok ($null -eq $blocked -or $blocked.code -ne 200) 'un-audit REJECTED while an APPROVED return-back exists'
+Ok ((SqlOne "SELECT status FROM outsource_order_delivery WHERE id=$idNo") -eq 'AUDITED') 'status stays AUDITED (no partial rollback)'
+# 撤回口径同 2026-09-28：已审核的返回先反审核（对称逆回），再删草稿 —— 直接 DELETE 会被拒
+$unrb = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/return-back/$rbId/un-audit") -Method Put -Headers $h
+Ok ($unrb.code -eq 200) ('return-back un-audited (symmetric reversal): ' + $unrb.code + ' ' + $unrb.msg)
+$rvk = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/return-back/$rbId") -Method Delete -Headers $h
+Ok ($rvk.code -eq 200) 'return-back revoked (so the un-audit below is allowed again)'
+
 $ru = Invoke-RestMethod -Uri ("http://localhost:8080/api/outsource/order-delivery/$idNo/un-audit") -Method Put -Headers $h
 Ok ($ru.code -eq 200) 'un-audited (back to draft so the cleanup below works)'
 $dz = Invoke-RestMethod -Uri ($dUrl + $idNo + '/detail') -Headers $h

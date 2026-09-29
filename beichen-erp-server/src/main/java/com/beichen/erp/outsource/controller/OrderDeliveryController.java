@@ -194,6 +194,9 @@ public class OrderDeliveryController {
      * + 料款生成对加工厂的**赔料应收** + FIFO 成本结转。登记即生效（无草稿/审核两步）。
      * <p>body: quantity / returnQualityType / inWarehouseId / returnDate / remark / items[]，其余
      * （工厂/产品/在厂规格）由来源单自动带入并复核。</p>
+     * <p><b>用料单价（2026-09-29 用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」）</b>：
+     * {@code items[].unitPrice} 可填人工单价（配 {@code priceManual=true} 标记留痕），不填则由后端按
+     * **登记时点**的默认 FIFO 价快照（前端预填值来自 {@code GET /{id}/return-back-material-price}）。</p>
      */
     @PostMapping("/{id}/return-back")
     public R<com.beichen.erp.outsource.entity.OutsourceReturnBack> registerReturnBack(
@@ -212,6 +215,23 @@ public class OrderDeliveryController {
     @GetMapping("/{id}/return-backs")
     public R<List<Map<String, Object>>> returnBacks(@PathVariable Long id) {
         return R.ok(returnBackService.listBySource(id));
+    }
+
+    /**
+     * 登记返回弹窗用：某物料在**本次用量**下的**默认单价**（2026-09-29 用户口径「登记返回时可以填写具体价格，
+     * 默认 FIFO 可修改」）—— 口径与落账一致（FIFO 四级链：① 物料移动加权成本 → ② 交期 FIFO →
+     * ③ 物料主数据参考价 → ④ 0），只作**前端预填**；最终以登记时提交的 {@code items[].unitPrice} 为准
+     * （后端按登记时点快照到明细行，审核据此生成对工厂的赔料应收）。
+     *
+     * @param id         来源工厂售后（原无单加工退货）单ID（路径与登记接口一致，便于权限/来源校验同口径）
+     * @param materialId 委外物料ID
+     * @param quantity   本次用量（FIFO 按量取批次 ⇒ 数量会影响到默认价；缺省按 0 计算）
+     */
+    @GetMapping("/{id}/return-back-material-price")
+    public R<Map<String, Object>> returnBackMaterialPrice(@PathVariable Long id,
+                                                          @RequestParam Long materialId,
+                                                          @RequestParam(required = false) java.math.BigDecimal quantity) {
+        return R.ok(returnBackService.defaultMaterialPrice(materialId, quantity));
     }
 
     /**

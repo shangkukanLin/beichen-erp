@@ -684,7 +684,9 @@ CREATE TABLE IF NOT EXISTS outsource_return_back (
     INDEX idx_company_id (company_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='委外加工返回单';
 
--- 用料明细：数量允许**超过 BOM 标准用量**（按实际耗用记账），审核时逐行按 FIFO 计料款
+-- 用料明细：数量允许**超过 BOM 标准用量**（按实际耗用记账）。
+-- 2026-09-29 用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」：单价改在**登记时**快照
+-- （人工定价 或 登记时点的默认 FIFO 价）⇒ 行料款 = 对加工厂的赔料应收；成本结转仍按审核时点的 FIFO。
 CREATE TABLE IF NOT EXISTS outsource_return_back_item (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
     return_back_id BIGINT NOT NULL COMMENT '返回单ID(outsource_return_back.id)',
@@ -692,8 +694,10 @@ CREATE TABLE IF NOT EXISTS outsource_return_back_item (
     material_name VARCHAR(100) COMMENT '物料名称快照',
     unit VARCHAR(20) COMMENT '单位',
     quantity DECIMAL(18,0) NOT NULL COMMENT '实际用料数量(可超BOM标准用量)',
-    unit_price DECIMAL(18,4) COMMENT 'FIFO结转单价快照(审核时)',
-    amount DECIMAL(18,2) COMMENT '行料款=单价×数量(审核时)',
+    unit_price DECIMAL(18,4) COMMENT '单价快照(登记时：人工定价或默认FIFO价)；行料款=赔料应收',
+    amount DECIMAL(18,2) COMMENT '行料款=单价×数量(审核时落账)',
+    -- 2026-09-29 用户口径：单价是否人工填写（1=人工定价，可与 FIFO 不同，含 0 元）
+    price_manual TINYINT DEFAULT 0 COMMENT '单价是否人工填写: 1=人工定价 / 0=默认(登记时点的FIFO快照)',
     company_id BIGINT COMMENT '公司ID',
     INDEX idx_return_back_id (return_back_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='加工返回单用料明细';

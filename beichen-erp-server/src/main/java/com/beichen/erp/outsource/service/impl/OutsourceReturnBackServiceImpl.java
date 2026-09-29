@@ -24,6 +24,7 @@ import com.beichen.erp.outsource.entity.BomSnapshotItem;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.entity.OutsourceReturnBack;
 import com.beichen.erp.outsource.entity.OutsourceReturnBackItem;
+
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.mapper.OutsourceReturnBackItemMapper;
 import com.beichen.erp.outsource.mapper.OutsourceReturnBackMapper;
@@ -84,6 +85,8 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
     private final CostService costService;
     private final FinanceReceivableMapper receivableMapper;
     private final ReceivableHelper receivableHelper;
+    /** 审核盖章用（2026-09-28）：取 sys_user.username 写 auditor_id/auditor_name */
+    private final com.beichen.erp.auth.mapper.UserMapper userMapper;
     /** 2026-09-27（用户口径）：「实际用料」可选范围收口到来源无单退货单的 BOM 快照 —— 见 materialCandidates */
     private final com.beichen.erp.outsource.mapper.BomSnapshotItemMapper bomSnapshotItemMapper;
     /** 复用"最近一次被加工单用过的快照"解析（与无单退货建单同口径，单一实现） */
@@ -125,6 +128,10 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         m.put("sourceDeliveryId", b.getSourceDeliveryId());
         m.put("sourceCode", sourceCodeOf(b.getSourceDeliveryId()));
         m.put("quantity", b.getQuantity());
+        // 2026-09-28：**返回单自带草稿/审核状态与审核人** ⇒ 详情页的「返回记录」按状态渲染
+        // 「审核 / 反审核 / 删除」（原先登记即生效，前端只会渲染"撤销"）
+        m.put("status", b.getStatus());
+        m.put("auditorName", b.getAuditorName());
         m.put("defectQualityType", b.getDefectQualityType());
         m.put("returnQualityType", b.getReturnQualityType());
         m.put("inWarehouseId", b.getInWarehouseId());
@@ -168,8 +175,10 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         if (body != null) b.putAll(body);
         b.put("sourceDeliveryId", sourceDeliveryId);
         OutsourceReturnBack rb = create(b);          // 校验：来源单/工厂/产品/规格/防超返 + 用料范围
-        audit(rb.getId());                           // 三腿落账：核销在厂 + 修好回仓 + 用料 + 赔料应收 + 成本结转
-        log.info("加工返回已登记(登记即生效): id={}, code={}, source={}", rb.getId(), rb.getCode(), sourceDeliveryId);
+        // 2026-09-28（用户口径「加工和物料的登记返回都需要审核和反审核功能」）：登记**只建草稿**，
+        // 三腿落账（核销在厂 + 修好回仓 + 用料 + 赔料应收 + 成本结转）改在「审核」时执行。
+        // 草稿未审核 ⇒ 不计入"已返回量"（聚合只算 AUDITED），也不会挡住来源单的反审核（见 returnedQtyBySource）。
+        log.info("加工返回草稿已保存: id={}, code={}, source={}", rb.getId(), rb.getCode(), sourceDeliveryId);
         return getById(rb.getId());
     }
 
@@ -180,10 +189,25 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void revoke(Long id) {
-        getById(id);                                 // 不存在直接报错（避免静默成功）
-        unAudit(id);
-        deleteDraft(id);                             // unAudit 已把状态置回 DRAFT ⇒ deleteDraft 的"仅草稿"守卫可过
-        log.info("加工返回已撤销(逆回后删除): id={}", id);
+        OutsourceReturnBack db = getById(id);        // 不存在直接报错（避免静默成功）
+        // 2026-09-28（用户口径）：删除只对**草稿**开放；已审核的要先「反审核」（对称逆回 + 留痕）再删。
+        if (!DocStatus.DRAFT.getCode().equals(db.getStatus()))
+            throw new BusinessException("只有草稿可以删除；已审核的返回请先「反审核」（逆回库存/账务并留痕）再删除");
+        deleteDraft(id);
+        log.info("加工返回草稿已删除: id={}", id);
+    }
+
+    /** 当前登录账户ID（未登录返回 null）—— 审核盖章用（与全站单据同口径） */
+    private Long getCurrentUserId() {
+        try { return cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong(); } catch (Exception e) { return null; }
+    }
+
+    /** 当前登录账户名（查不到返回 null） */
+    private String getCurrentUserName() {
+        try {
+            com.beichen.erp.auth.entity.User u = userMapper.selectById(cn.dev33.satoken.stp.StpUtil.getLoginIdAsLong());
+            return u != null ? u.getUsername() : null;
+        } catch (Exception e) { return null; }
     }
 
     @Override
@@ -215,6 +239,7 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         List<OutsourceReturnBackItem> items = itemsOf(body);
         if (items.isEmpty() && !pool.isEmpty()) throw new BusinessException("用料明细不能为空（至少一行实际用料）");
         assertMaterialsInPool(pool, items);
+        snapshotDefaultPrices(items);
         replaceItems(b.getId(), items, cid);
         log.info("加工返回单已保存(草稿): id={}, code={}, factoryId={}, productId={}, qty={}",
                 b.getId(), b.getCode(), b.getFactoryId(), b.getProductId(), b.getQuantity());
@@ -249,6 +274,7 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         List<OutsourceReturnBackItem> items = itemsOf(body);
         if (items.isEmpty() && !pool.isEmpty()) throw new BusinessException("用料明细不能为空（至少一行实际用料）");
         assertMaterialsInPool(pool, items);
+        snapshotDefaultPrices(items);
         replaceItems(id, items, cid);
     }
 
@@ -315,40 +341,56 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
                 StockChangeType.OUTSOURCE_BACK_IN, b.getCode(), RelatedBillType.OUTSOURCE_RETURN_BACK,
                 "", id, returnQt);
 
-        // ③ 实际用料逐行从委外仓扣（允许扣负：工厂已实际耗用，账面可能不足）+ FIFO 计价快照
-        BigDecimal materialAmount = BigDecimal.ZERO;
+        // ③ 实际用料逐行从委外仓扣（允许扣负：工厂已实际耗用，账面可能不足）。
+        //    2026-09-29（用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」）：**两笔钱分开算** ——
+        //      · 赔料应收 = **登记时快照的单价**（人工定价，或登记时点的默认 FIFO 价）× 数量；
+        //      · 成本结转 = **审核时点**的 FIFO（人工定价只改"向工厂要多少钱"，不污染库存成本）。
+        BigDecimal receivableAmount = BigDecimal.ZERO;
+        BigDecimal fifoCostAmount = BigDecimal.ZERO;
+        boolean anyManual = false;
         for (OutsourceReturnBackItem it : items) {
             BigDecimal q = it.getQuantity();
             stockService.changeMaterialStockAllowNegative(factoryWhId, it.getMaterialId(), q.negate(),
                     StockChangeType.OUTSOURCE_BACK_MATERIAL.getCode(), b.getCode(), RelatedBillType.OUTSOURCE_RETURN_BACK,
                     null, null, id, WarehouseStock.FORM_MATERIAL);
-            BigDecimal unit = pricingService.fifoPriceWithFallback(it.getMaterialId(), q);
+            // 应收单价：登记时快照（人工/默认）；历史草稿没有快照（2026-09-29 之前的行）才现算 FIFO 兜底
+            BigDecimal unit = it.getUnitPrice() != null
+                    ? it.getUnitPrice()
+                    : nzAmount(pricingService.fifoPriceWithFallback(it.getMaterialId(), q));
             BigDecimal amount = unit.multiply(q).setScale(2, RoundingMode.HALF_UP);
+            // 成本单价：始终按审核时点的 FIFO（与库存计价口径一致）
+            BigDecimal fifoUnit = nzAmount(pricingService.fifoPriceWithFallback(it.getMaterialId(), q));
+            fifoCostAmount = fifoCostAmount.add(fifoUnit.multiply(q).setScale(2, RoundingMode.HALF_UP));
+            if (it.getPriceManual() != null && it.getPriceManual() == 1) anyManual = true;
             OutsourceReturnBackItem u = new OutsourceReturnBackItem();
             u.setId(it.getId());
             u.setUnitPrice(unit);
             u.setAmount(amount);
             itemMapper.updateById(u);
-            materialAmount = materialAmount.add(amount);
+            receivableAmount = receivableAmount.add(amount);
         }
 
-        // ④ 成本结转：物料耗用 FIFO 结转到修好入库的成品（提升移动加权成本；反审核按单冲销批次）
-        if (materialAmount.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal unitCost = materialAmount.divide(qty, 4, RoundingMode.HALF_UP);
+        // ④ 成本结转：**物料耗用 FIFO** 结转到修好入库的成品（提升移动加权成本；反审核按单冲销批次）
+        if (fifoCostAmount.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal unitCost = fifoCostAmount.divide(qty, 4, RoundingMode.HALF_UP);
             costService.applyProduct(b.getProductId(), qty, unitCost,
                     StockChangeType.OUTSOURCE_BACK_IN.getCode(), id, b.getCode());
         }
 
         // ⑤ 赔料应收（对加工厂，幂等复用同 billNo 行——反审核后重新审核不撞唯一键）
-        upsertReceivable(b, materialAmount);
+        upsertReceivable(b, receivableAmount, anyManual);
 
         OutsourceReturnBack u = new OutsourceReturnBack();
         u.setId(id);
-        u.setMaterialAmount(materialAmount);
+        u.setMaterialAmount(receivableAmount);
         u.setAuditTime(java.time.LocalDateTime.now());
+        // 2026-09-28（用户口径「登记返回需要审核和反审核」）：审核时**盖审核人章**
+        // —— 原实现只写 auditTime，详情页「审核人」恒为空；现与全站其他单据同口径（unAudit 会清空三者）
+        u.setAuditorId(getCurrentUserId());
+        u.setAuditorName(getCurrentUserName());
         backMapper.updateById(u);
-        log.info("加工返回单审核 {}：核销在厂 {} / 回仓 {} / 用料 {} 行 / 料款应收 {}",
-                b.getCode(), qty, qty, items.size(), materialAmount);
+        log.info("加工返回单审核 {}：核销在厂 {} / 回仓 {} / 用料 {} 行 / 赔料应收 {}{}（成本结转按 FIFO {}）",
+                b.getCode(), qty, qty, items.size(), receivableAmount, anyManual ? " (含人工定价)" : "", fifoCostAmount);
     }
 
     @Override
@@ -665,13 +707,66 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
             OutsourceReturnBackItem it = new OutsourceReturnBackItem();
             it.setMaterialId(materialId);
             it.setQuantity(q);
+            // 2026-09-29（用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」）：
+            // 人工填价（unitPrice + priceManual=true）原样收下；没填的由 snapshotDefaultPrices 补登记时点的默认价。
+            boolean manual = Boolean.TRUE.equals(row.get("priceManual"));
+            Object upObj = row.get("unitPrice");
+            if (upObj != null && !upObj.toString().isBlank()) {
+                BigDecimal up;
+                try {
+                    up = new BigDecimal(upObj.toString());
+                } catch (NumberFormatException e) {
+                    throw new BusinessException("用料明细行单价格式不正确：" + upObj);
+                }
+                if (up.compareTo(BigDecimal.ZERO) < 0) throw new BusinessException("用料明细行单价不能为负数");
+                it.setUnitPrice(up);
+                it.setPriceManual(manual ? 1 : 0);
+            } else {
+                if (manual) throw new BusinessException("勾选人工定价的用料行必须填写单价");
+                it.setPriceManual(0);
+            }
             list.add(it);
         }
         return list;
     }
 
+    /**
+     * 登记时的**默认价快照**（2026-09-29 用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」）：
+     * 只给**没带单价**的用料行补默认值（口径 = FIFO 四级链，与审核落账一致），并落在
+     * {@code outsource_return_back_item.unit_price} 上 —— 审核直接用该快照算赔料应收，
+     * 因此登记到审核之间的价格漂移不会改变本单金额；人工填价的行（{@code price_manual=1}）原样保留。
+     */
+    private void snapshotDefaultPrices(List<OutsourceReturnBackItem> items) {
+        if (items == null) return;
+        for (OutsourceReturnBackItem it : items) {
+            if (it.getUnitPrice() != null) continue;
+            if (it.getMaterialId() == null || it.getQuantity() == null) continue;
+            it.setUnitPrice(nzAmount(pricingService.fifoPriceWithFallback(it.getMaterialId(), it.getQuantity())));
+            it.setPriceManual(0);
+        }
+    }
+
+    /** BigDecimal 兜底（null → 0），金额/单价计算用 */
+    private static BigDecimal nzAmount(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
+    }
+
+    @Override
+    public Map<String, Object> defaultMaterialPrice(Long materialId, BigDecimal quantity) {
+        Map<String, Object> m = new java.util.LinkedHashMap<>();
+        m.put("materialId", materialId);
+        m.put("quantity", quantity);
+        if (materialId == null) {
+            m.put("unitPrice", BigDecimal.ZERO);
+            return m;
+        }
+        // 与登记/审核同一口径：FIFO 四级链（成本价 → 交期 FIFO → 参考价 → 0）
+        m.put("unitPrice", nzAmount(pricingService.fifoPriceWithFallback(materialId, quantity)));
+        return m;
+    }
+
     /** 幂等落应收台账（对加工厂，subjectType=SUPPLIER） */
-    private void upsertReceivable(OutsourceReturnBack b, BigDecimal amount) {
+    private void upsertReceivable(OutsourceReturnBack b, BigDecimal amount, boolean anyManual) {
         FinanceReceivable exist = receivableMapper.selectOne(new LambdaQueryWrapper<FinanceReceivable>()
                 .eq(FinanceReceivable::getBillNo, b.getCode()));
         FinanceReceivable fr = exist != null ? exist : new FinanceReceivable();
@@ -687,8 +782,11 @@ public class OutsourceReturnBackServiceImpl implements OutsourceReturnBackServic
         fr.setUnpaidAmount(amount);
         fr.setDueDate(b.getReturnDate());
         fr.setStatus(SettlementStatus.UNSETTLED.getCode());
-        if (b.getRemark() != null && !b.getRemark().isBlank()) fr.setRemark("加工返回料款（工厂赔料） " + b.getRemark());
-        else fr.setRemark("加工返回料款（工厂赔料）");
+        // 2026-09-29：含人工定价行时在备注里点明（财务看到金额与 FIFO 不符时的依据）
+        String tail = anyManual ? "（含人工定价用料）" : "";
+        if (b.getRemark() != null && !b.getRemark().isBlank())
+            fr.setRemark("加工返回料款（工厂赔料）" + tail + " " + b.getRemark());
+        else fr.setRemark("加工返回料款（工厂赔料）" + tail);
         Long cid = CompanyContext.get();
         if (cid != null && cid > 0) fr.setCompanyId(cid);
         if (exist != null) receivableMapper.updateById(fr);

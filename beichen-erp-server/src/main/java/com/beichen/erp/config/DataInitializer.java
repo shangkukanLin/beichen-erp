@@ -78,6 +78,7 @@ public class DataInitializer implements ApplicationRunner {
         migrateMaterialRepairOnsiteLeg();
         migrateMaterialOrderReturnedQty();
         migrateOverReceipt();
+        migrateReturnBackPriceManual();
         migrateFinanceExpenseSource();
         initSuperAdmin();
         initMaterialTypes();
@@ -1306,6 +1307,18 @@ public class DataInitializer implements ApplicationRunner {
                 "over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=录入时已二次确认(审核期不再复核数量上限) / 0=否'");
         addColumnIfMissing("outsource_delivery",
                 "over_receipt TINYINT DEFAULT 0 COMMENT '是否已确认超收: 1=建单时已二次确认(审核期不再复核数量上限) / 0=否'");
+    }
+
+    /**
+     * 存量库幂等迁移（2026-09-29）：加工返回单用料明细增加 {@code price_manual} 列 ——
+     * 用户口径「登记返回时可以填写具体价格，默认 FIFO 可修改」：单价改在**登记时**快照
+     * （人工定价 或 登记时点的默认 FIFO 价），本列标记"该行是否人工定价"（仅留痕与提示用，不参与金额计算）。
+     * <p>新库由 schema.sql 直接建列；老库 ALTER（重复启动无副作用）。存量行置 0 —— 与"审核时现算 FIFO"
+     * 的历史行为一致（历史行的 unit_price 是审核时写入的 FIFO 价，不是人工价）。</p>
+     */
+    private void migrateReturnBackPriceManual() {
+        addColumnIfMissing("outsource_return_back_item",
+                "price_manual TINYINT DEFAULT 0 COMMENT '单价是否人工填写: 1=人工定价 / 0=默认(登记时点的FIFO快照)'");
     }
 
     /**

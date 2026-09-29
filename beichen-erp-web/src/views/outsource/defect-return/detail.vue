@@ -91,7 +91,9 @@ const specOptions = [
 const returnDlg = reactive({ visible: false, saving: false })
 const returnForm = reactive({
   quantity: '' as any, returnQualityType: 'A', inWarehouseId: undefined as any,
-  returnDate: '', remark: '', items: [] as Array<{ materialId: any, quantity: any }>
+  returnDate: '', remark: '',
+  // 2026-09-29：每行用料带「单价（默认 FIFO，可人工改）+ 是否人工定价」—— 见 refreshDefaultPrice 注释
+  items: [] as Array<{ materialId: any, quantity: any, unitPrice: any, priceManual?: boolean }>
 })
 /** 回仓仓库（我方自有成品仓） */
 const fetchFinishedWarehouses = (kw: string) =>
@@ -110,11 +112,41 @@ function onPickMaterial(it: any) {
   if (!c) return
   const n = Math.round(Number(returnForm.quantity) || 0)
   it.quantity = Math.max(1, Math.round(Number(c.perSetQuantity || 0) * (n > 0 ? n : 1)))
+  it.priceManual = false          // 换料 ⇒ 单价回到默认（重新带 FIFO）
+  refreshDefaultPrice(it)
 }
+
+/**
+ * ==================== 用料单价（2026-09-29 用户口径） ====================
+ * 「登记返回的时候，可以填写具体价格，默认 FIFO 可修改」：单价默认由后端按**登记时点**的默认价带出
+ * （FIFO 四级链：物料移动加权成本 → 交期 FIFO → 物料主数据参考价 → 0），用户可人工改写（`priceManual` 随单提交，留痕）。
+ * ⚠️ 人工定价只影响**对加工厂的赔料应收**；修好入库成品的**成本结转仍按审核时点的 FIFO**（后端保证）。
+ */
+async function refreshDefaultPrice(it: any) {
+  if (it.priceManual) return                                   // 人工改过 ⇒ 不再被默认值覆盖
+  if (!it.materialId || !(Number(it.quantity) > 0)) { it.unitPrice = undefined; return }
+  try {
+    const r = await request.get<any, any>(`/outsource/order-delivery/${route.params.id}/return-back-material-price`,
+      { params: { materialId: it.materialId, quantity: Number(it.quantity) } })
+    it.unitPrice = Number(r?.unitPrice ?? 0)
+  } catch { /* 取默认价失败不挡登记：留空由后端按登记时点兜底快照 */ }
+}
+/** 用量变化：未人工定价 ⇒ 重取默认价（FIFO 按量取批次，量变价可能变） */
+function onQtyChange(it: any) {
+  it.quantity = Math.max(0, Math.round(Number(it.quantity) || 0))
+  refreshDefaultPrice(it)
+}
+/** 人工改单价 ⇒ 标记（后续不再被默认价覆盖） */
+function onPriceInput(it: any) { it.priceManual = true }
+/** 行料款 = 单价 × 用量（= 该行的赔料应收） */
+function lineAmount(it: any) { return (Number(it.unitPrice) || 0) * (Number(it.quantity) || 0) }
+/** 赔料应收合计（默认 FIFO，可人工定价） */
+const returnTotal = computed(() => returnForm.items.reduce((s: number, it: any) => s + lineAmount(it), 0))
+
 function isMaterialPicked(mid: any, cur: any) {
   return returnForm.items.some((it: any) => it !== cur && String(it.materialId) === String(mid))
 }
-function addItem() { returnForm.items.push({ materialId: undefined, quantity: undefined }) }
+function addItem() { returnForm.items.push({ materialId: undefined, quantity: undefined, unitPrice: undefined, priceManual: false }) }
 function removeItem(i: number) { returnForm.items.splice(i, 1) }
 
 function openReturn() {
@@ -133,10 +165,17 @@ async function submitReturn() {
   if (qty > unreturnedQty.value) { ElMessage.warning(`返回数量不能超过未返回量（${unreturnedQty.value}）`); return }
   if (!returnForm.inWarehouseId) { ElMessage.warning('请选择回仓仓库'); return }
   const items = returnForm.items
-    .map((it: any) => ({ materialId: it.materialId, quantity: Math.round(Number(it.quantity) || 0) }))
+    .map((it: any) => ({
+      materialId: it.materialId, quantity: Math.round(Number(it.quantity) || 0),
+      // 2026-09-29（用户口径）：单价随单提交（人工定价必带价；默认价也一起提交，后端按登记时点快照）
+      unitPrice: (it.unitPrice === '' || it.unitPrice == null) ? undefined : Number(it.unitPrice),
+      priceManual: !!it.priceManual
+    }))
     .filter((it: any) => it.materialId && it.quantity > 0)
   // 池非空时必须至少一行有效用料；池空（来源单没绑 BOM 快照/该产品无 BOM）允许只登记返回（料款应收 0）
   if (!items.length && candidates.value.length > 0) { ElMessage.warning('请至少填写一行有效用料（物料+数量）'); return }
+  if (items.some((it: any) => it.priceManual && it.unitPrice == null)) { ElMessage.warning('人工定价的用料行必须填写单价'); return }
+  if (items.some((it: any) => it.unitPrice != null && it.unitPrice < 0)) { ElMessage.warning('用料单价不能为负数'); return }
   returnDlg.saving = true
   try {
     await request.post(`/outsource/order-delivery/${route.params.id}/return-back`, {
@@ -368,19 +407,31 @@ onMounted(async () => { await load(); await loadReturns() })
             </el-alert>
             <div v-else style="margin-bottom:8px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">
               只能从<b>本加工退货单的 BOM 快照</b>里选；选料后自动带出默认用量（可改），数量可超 BOM。
+              单价默认按 <b>FIFO</b> 带出、可<b>人工填写</b>具体价格（人工定价只影响对工厂的赔料应收，
+              成品成本仍按 FIFO 结转）。
             </div>
-            <div v-for="(it, i) in returnForm.items" :key="i" style="display:flex;gap:8px;margin-bottom:8px">
+            <div v-for="(it, i) in returnForm.items" :key="i" style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
               <el-select v-model="it.materialId" filterable clearable style="flex:1" placeholder="从 BOM 快照里选物料"
                 :disabled="candidates.length === 0" @change="onPickMaterial(it)">
                 <el-option v-for="c in candidates" :key="c.materialId" :value="c.materialId"
                   :disabled="isMaterialPicked(c.materialId, it)"
                   :label="(c.materialName || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 单套用量 ' + c.perSetQuantity" />
               </el-select>
-              <el-input v-model="it.quantity" type="number" placeholder="用量(可超BOM)" style="width:150px"
-                @change="it.quantity = Math.round(Number(it.quantity) || 0)" />
+              <el-input v-model="it.quantity" type="number" placeholder="用量(可超BOM)" style="width:110px"
+                @change="onQtyChange(it)" />
+              <!-- 2026-09-29（用户口径「可以填写具体价格，默认 FIFO 可修改」）：单价可改，人工改过后不再被默认值覆盖 -->
+              <el-input v-model="it.unitPrice" type="number" placeholder="单价(默认FIFO)" style="width:120px"
+                title="默认按 FIFO 带出；可人工填写具体价格（人工定价只影响对工厂的赔料应收，成品成本仍按 FIFO）"
+                @input="onPriceInput(it)" />
+              <span style="width:86px;text-align:right;font-weight:600" title="行料款 = 单价 × 用量">{{ lineAmount(it).toFixed(2) }}</span>
               <el-button type="danger" link @click="removeItem(i)">删除</el-button>
             </div>
-            <el-button type="primary" link :icon="'Plus'" :disabled="candidates.length === 0" @click="addItem">添加用料行</el-button>
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <el-button type="primary" link :icon="'Plus'" :disabled="candidates.length === 0" @click="addItem">添加用料行</el-button>
+              <span style="font-size:var(--app-font-xs);color:var(--app-text-secondary)">
+                赔料应收合计：<b style="color:var(--app-color-danger)">{{ returnTotal.toFixed(2) }}</b> 元
+              </span>
+            </div>
           </div>
         </el-form-item>
         <el-form-item label="返回日期">
