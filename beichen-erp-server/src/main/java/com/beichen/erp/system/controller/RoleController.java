@@ -46,7 +46,10 @@ public class RoleController {
             @RequestParam(required = false) String roleName,
             @RequestParam(required = false) Integer status) {
         Page<Role> page = new Page<>(pageNum, pageSize);
+        // S-9②（2026-09-30 批 C）：公司上下文只看本公司角色（原实现无过滤 ⇒ 迁移后跨公司可见）
+        Long cid = SystemConstants.tenantCompany();
         LambdaQueryWrapper<Role> wrapper = new LambdaQueryWrapper<Role>()
+                .eq(cid != null, Role::getCompanyId, cid)
                 .like(roleName != null && !roleName.isBlank(), Role::getRoleName, roleName)
                 .eq(status != null, Role::getStatus, status)
                 .orderByDesc(Role::getId);
@@ -60,7 +63,14 @@ public class RoleController {
 
     @PostMapping
     public R<Void> add(@Valid @RequestBody RoleDTO dto) {
+        // S-9②（批 C · 口径「角色按公司隔离」）：角色必须归属到**具体公司** ⇒ 平台上下文（超管未选公司）
+        // 直接拒绝，避免再产生 company_id=0 的"客户端口角色"（这正是现网 7 个角色全为 0 的成因）。
+        Long cid = SystemConstants.tenantCompany();
+        if (cid == null) {
+            throw new BusinessException("请先选择公司（当前为平台上下文，无法新建公司角色）");
+        }
         Long count = roleService.lambdaQuery()
+                .eq(Role::getCompanyId, cid)
                 .eq(Role::getRoleCode, dto.getRoleCode())
                 .count();
         if (count != null && count > 0) {
@@ -71,8 +81,7 @@ public class RoleController {
         role.setRoleCode(dto.getRoleCode());
         role.setStatus(dto.getStatus());
         role.setRemark(dto.getRemark());
-        // 显式设置 companyId，避免 CompanyContext 为 null 时自动填充失败导致角色 company_id 为 NULL（成为孤儿角色）
-        role.setCompanyId(CompanyContext.get());
+        role.setCompanyId(cid);
         roleService.save(role);
         return R.ok();
     }
@@ -92,7 +101,9 @@ public class RoleController {
                 || SystemConstants.ADMIN_ROLE_CODE.equals(exist.getRoleCode())) {
             throw new BusinessException("内置角色不可编辑");
         }
+        // S-9②：编码唯一性按**公司内**判定（与 uk_role_code 改为 (company_id, role_code) 一致）
         Long count = roleService.lambdaQuery()
+                .eq(Role::getCompanyId, exist.getCompanyId())
                 .eq(Role::getRoleCode, dto.getRoleCode())
                 .ne(Role::getId, dto.getId())
                 .count();

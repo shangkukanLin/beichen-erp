@@ -169,7 +169,12 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         user.setPhone(dto.getPhone());
         user.setDept(dto.getDept());
         user.setStatus(dto.getStatus());
-        // 归属当前租户；超管上下文为 null 时不设置 companyId（留待后续明确）
+        // 归属当前租户。F8-10（2026-09-30 设置模块批 E 修复）：原先"超管上下文为 null 时不设置 companyId"
+        // ⇒ **静默写入 company_id=NULL 的用户**（既不属于任何公司、又能在平台模式看到全部数据，
+        // 且按公司过滤的查询永远查不到他）。现改为必须显式选定公司，否则明确报错。
+        if (currentCompany == null) {
+            throw new BusinessException("当前为平台（超管）模式：请先选择要创建用户的公司后再试");
+        }
         user.setCompanyId(currentCompany);
         try {
             baseMapper.insert(user);
@@ -199,6 +204,9 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             throw new BusinessException(403, "无权限操作该用户");
         }
         // 不改密码不改 username
+        // F8-07（批 B · 口径 S-9①）：**超管的状态只能本人改** —— 原实现直接写 status，
+        // 同公司 admin 可把超管置 0（实测 code=200 且 status 变 0）⇒ 锁死超管；对照 toggleStatus 本就拒绝。
+        assertSuperAdminSelfOnly(exist, "修改资料/状态");
         User update = new User();
         update.setId(dto.getId());
         update.setPhone(dto.getPhone());
@@ -207,9 +215,14 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         baseMapper.updateById(update);
 
         // 替换角色关联
+        // F8-08（批 B）：先记下"原本是否持有 super_admin" —— saveUserRoles 会跳过超管（防经用户管理分配），
+        // 若不补回，编辑超管一次就把超管静默降级（实测 5→4 行）。
+        boolean hadSuperAdmin = roleService.getRoleCodesByUserId(dto.getId())
+                .contains(SystemConstants.SUPER_ADMIN_ROLE_CODE);
         userRoleMapper.delete(new LambdaQueryWrapper<UserRole>()
                 .eq(UserRole::getUserId, dto.getId()));
         saveUserRoles(dto.getId(), dto.getRoleIds());
+        if (hadSuperAdmin) restoreSuperAdminRoleIfHad(dto.getId());
         saveDashboardTabs(dto.getId(), dto.getDashboardTabs());
     }
 
@@ -248,10 +261,55 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
             // 跨公司越权：语义上是"禁止"，返回 403（与 SaToken NotRoleException 一致），而非默认 500
             throw new BusinessException(403, "无权限操作该用户");
         }
+        // F8-06（2026-09-30 设置模块审核批 B · 用户口径 S-9①「**超管账号只能由超管本人操作**」）：
+        // 原缺口 —— 本方法只校验了"跨公司"，同公司的 admin 即可重置**超管**口令 ⇒ 登录超管账号（companyId=0
+        // 会话，可切任意公司）= 跨租户接管。实测过：code=200 且用新口令登录成功。现与 deleteUser/toggleStatus
+        // 的保护口径对齐，并把"仅本人可为"这一维补齐（超管本人改自己口令仍然允许）。
+        assertSuperAdminSelfOnly(user, "重置密码");
         User update = new User();
         update.setId(dto.getId());
         update.setPassword(passwordEncoder.encode(dto.getPassword()));
         baseMapper.updateById(update);
+    }
+
+    /**
+     * F8-06/07/08（2026-09-30 批 B · 口径 S-9①）：**超管账号只能由超管本人操作**。
+     *
+     * <p>背景：`deleteUser`(超管不可删) 与 `toggleStatus`(超管不可禁用) 早有护栏，但
+     * `resetPassword`（改口令 ⇒ 直接接管）与 `updateUser`（改状态/角色 ⇒ 锁死或降权）**没有**，
+     * 形成"同公司 admin 可接管/削弱超管"的缺口（三条均以 E2 实证）。</p>
+     */
+    private void assertSuperAdminSelfOnly(User target, String action) {
+        if (target == null || !SystemConstants.SUPER_ADMIN_USERNAME.equals(target.getUsername())) {
+            return;
+        }
+        long currentUserId = StpUtil.getLoginIdAsLong();
+        if (target.getId() == null || target.getId().longValue() != currentUserId) {
+            throw new BusinessException(403, "超级管理员账号只能由本人操作（" + action + "）");
+        }
+    }
+
+    /**
+     * F8-08（2026-09-30 批 B）：**编辑用户不得静默剥夺 `super_admin` 角色**。
+     *
+     * <p>根因：`updateUser` 先删光该用户全部角色行再 `saveUserRoles` 重建，而 `saveUserRoles` 为"禁止经用户管理
+     * 分配超管"而 `continue` 跳过超管 ⇒ 该跳过在编辑路径上等价于**删除后不恢复** ⇒ 对超管做一次普通"编辑保存"
+     * 即把超管降级（实测 `sys_user_role` 5→4 行、只剩 `admin`）。修法：编辑前记录"原本有超管角色"，重建后补回。</p>
+     */
+    private void restoreSuperAdminRoleIfHad(Long userId) {
+        Role superAdminRole = roleMapper.selectOne(new LambdaQueryWrapper<Role>()
+                .eq(Role::getRoleCode, SystemConstants.SUPER_ADMIN_ROLE_CODE));
+        if (superAdminRole == null) return;
+        if (userRoleMapper.selectCount(new LambdaQueryWrapper<UserRole>()
+                .eq(UserRole::getUserId, userId)
+                .eq(UserRole::getRoleId, superAdminRole.getId())) > 0) {
+            return;
+        }
+        UserRole ur = new UserRole();
+        ur.setUserId(userId);
+        ur.setRoleId(superAdminRole.getId());
+        userRoleMapper.insert(ur);
+        log.info("F8-08：已为编辑操作补回 super_admin 角色（userId={}）", userId);
     }
 
     @Override

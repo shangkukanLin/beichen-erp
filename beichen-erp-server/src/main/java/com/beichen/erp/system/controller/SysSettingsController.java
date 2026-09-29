@@ -40,18 +40,27 @@ public class SysSettingsController {
     // ==================== 系统参数 ====================
     @GetMapping("/params")
     public R<List<SysParam>> getParams() {
+        // F8-03（2026-09-30 设置模块审核批 A）：**按公司过滤** —— `sys_*` 被 CompanyTenantHandler 显式忽略
+        // ⇒ 无插件兜底，必须显式带 company_id，否则多公司下会读到别家公司的参数（此前只有 orderByAsc）。
         return R.ok(paramMapper.selectList(new LambdaQueryWrapper<SysParam>()
+                .eq(SysParam::getCompanyId, getCompanyId())
                 .orderByAsc(SysParam::getId)));
     }
 
     @PutMapping("/params")
     public R<Void> saveParams(@RequestBody List<SysParam> params) {
-        Long cid = CompanyContext.get();
+        Long cid = getCompanyId();
         for (SysParam p : params) {
             if (p.getId() == null) {
-                if (cid != null && cid > 0) p.setCompanyId(cid);
+                p.setCompanyId(cid);
                 paramMapper.insert(p);
             } else {
+                // F8-03：改既有行前**校验归属**（原实现按客户端给的 id 直接 updateById ⇒ 可改他公司参数）
+                SysParam exist = paramMapper.selectById(p.getId());
+                if (exist == null) throw new BusinessException("系统参数不存在（ID=" + p.getId() + "）");
+                if (exist.getCompanyId() != null && !exist.getCompanyId().equals(cid))
+                    throw new BusinessException("不能修改其他公司的系统参数（ID=" + p.getId() + "）");
+                p.setCompanyId(cid);
                 paramMapper.updateById(p);
             }
         }
@@ -67,7 +76,10 @@ public class SysSettingsController {
             @RequestParam(required = false) String username,
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate) {
+        Long cid = CompanyContext.get();   // F8-03：见下方查询条件
         LambdaQueryWrapper<OperationLog> w = new LambdaQueryWrapper<OperationLog>()
+                // F8-03：按公司过滤（`sys_*` 无租户插件兜底）；超管会话 companyId=0 ⇒ 不加条件（可看全部）
+                .eq(cid != null && cid > 0, OperationLog::getCompanyId, cid)
                 .eq(module != null && !module.isBlank(), OperationLog::getModule, module)
                 .like(username != null && !username.isBlank(), OperationLog::getUsername, username)
                 .ge(startDate != null && !startDate.isBlank(), OperationLog::getCreateTime, startDate)

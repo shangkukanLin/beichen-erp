@@ -7,6 +7,8 @@ import com.beichen.erp.auth.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+
+import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.context.request.RequestContextHolder;
@@ -28,6 +30,35 @@ public class SaTokenConfig implements WebMvcConfigurer {
 
     /** 2026-09-23：仅为兜底解析"操作人姓名"（会话里没有 username 时查一次并回写会话） */
     private final UserMapper userMapper;
+
+    /**
+     * 拦截器**排除清单**（F8-01/F8-02，2026-09-30 设置模块审核批 A）。
+     *
+     * <p><b>为什么必须显式列出并写明理由</b>：本类 `addInterceptors()` 用**同一条**拦截器做两层校验 ——
+     * `StpUtil.checkLogin()`（登录）与 `apiPermGuard.check(...)`（页面级权限）。因此**排除了路径 = 同时绕开登录与权限**
+     * （等价于对匿名用户开放）。这正是 F8-01 的成因：`/api/company/list` 曾被列在此处，导致**无 token 即可拉取全部公司**。</p>
+     *
+     * <p><b>纪律</b>：① 每条必须是"**未登录也必须能调**"的场景；② 能只放"最小信息"的接口就不要再放"整表列表"；
+     * ③ 新增/删除本条清单时，必须同步 {@code ApiPermGuardSelfCheck} 的 {@code EXEMPT_PATH_ALLOWED}
+     * （否则启动自检会报 ERROR —— 该断言就是为了让"新加一条排除"不再静默）。</p>
+     */
+    public static final List<String> EXEMPT_PATHS = List.of(
+            "/api/auth/login",            // 登录（未登录必须可达）
+            "/api/auth/captcha",          // 验证码
+            "/api/auth/company-name",     // 登录页展示公司名（仅名称，无敏感字段）
+            "/api/company/admin/verify",  // 超管口令校验（用于换取超管会话，本身在登录前）
+            // 登录页「选择公司」下拉（登录前必须可达）。**F8-01 修复**：该接口已改为**按调用者身份分层返回** ——
+            // 未登录/非超管只拿到 `id + companyName`（最小投影，不再暴露税号/电话/地址/联系人），
+            // 仅超管（公司管理页）取完整档案；控制器见 CompanyController.list()。
+            "/api/company/list",
+            "/api/system/menu/tree/user", // 侧栏菜单树（控制器内按**当前用户**过滤角色菜单）
+            // ---- 文档 / 静态资源（与业务无关）----
+            "/doc.html",
+            "/swagger-ui/**",
+            "/swagger-ui.html",
+            "/v3/api-docs/**",
+            "/webjars/**"
+    );
 
     /**
      * 跨域白名单（P0 配置外置 · 2026-09-14）：逗号分隔，默认 {@code *} 仅限开发联调。
@@ -69,19 +100,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
                     apiPermGuard.check(currentRequestPath(), currentRequestMethod());
                 }))
                 .addPathPatterns("/api/**")
-                .excludePathPatterns(
-                        "/api/auth/login",
-                        "/api/auth/captcha",
-                        "/api/auth/company-name",
-                        "/api/company/admin/verify",
-                        "/api/company/list",
-                        "/api/system/menu/tree/user",
-                        "/doc.html",
-                        "/swagger-ui/**",
-                        "/swagger-ui.html",
-                        "/v3/api-docs/**",
-                        "/webjars/**"
-                );
+                .excludePathPatterns(EXEMPT_PATHS.toArray(new String[0]));
 
         // 请求完成后清除 CompanyContext / UserContext（线程池复用必须清理，否则串号）
         registry.addInterceptor(new HandlerInterceptor() {

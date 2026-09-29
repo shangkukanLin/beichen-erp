@@ -47,6 +47,21 @@ public class ApiPermGuardSelfCheck implements ApplicationRunner {
     private static final Set<String> EXEMPT_WRITE_ALLOWED = Set.of(
             "/api/auth", "/api/company", "/api/memo", "/api/dev/file", "/api/system");
 
+    /**
+     * F8-02（2026-09-30 设置模块审核批 A）：**允许出现在 {@code SaTokenConfig.EXEMPT_PATHS}（拦截器排除清单）里的
+     * `/api` 路径** —— 排除即"同时绕开登录与权限"，所以每条都必须对应一处"**未登录也必须能调**"的场景，白名单化。
+     *
+     * <p>新加一条排除却忘了在此登记 ⇒ 启动即 ERROR，避免像 F8-01（`/api/company/list` 匿名可读租户档案）那样静默放开。</p>
+     */
+    private static final Set<String> EXEMPT_PATH_ALLOWED = Set.of(
+            "/api/auth/login",            // 登录
+            "/api/auth/captcha",          // 验证码
+            "/api/auth/company-name",     // 登录页仅展示公司名
+            "/api/company/admin/verify",  // 登录前的超管口令校验
+            "/api/company/list",          // 登录页公司下拉（F8-01 修复后已收为 id+companyName 最小投影）
+            "/api/system/menu/tree/user"  // 侧栏菜单树（控制器内按当前用户过滤）
+    );
+
     private final RequestMappingHandlerMapping handlerMapping;
 
     @Override
@@ -88,6 +103,27 @@ public class ApiPermGuardSelfCheck implements ApplicationRunner {
             }
             log.error("[perm-selfcheck] 处理方式：把该前缀移出 EXEMPT、按码登记到 RULES/WRITE_RULES；"
                     + "若确属「登录即可」（如登录/改密/个人备忘录），加入 ApiPermGuardSelfCheck.EXEMPT_WRITE_ALLOWED 白名单并写明理由。");
+        }
+
+        // F8-02（2026-09-30 批 A）：拦截器排除清单的**白名单断言** —— 不是"必须落在 EXEMPT 内"，
+        // 而是"必须在 EXEMPT_PATH_ALLOWED 显式登记并写明理由"（EXEMPT 前缀写得太宽，宽到 E 了 F8-01）。
+        Set<String> strayExempt = new TreeSet<>();
+        for (String p : SaTokenConfig.EXEMPT_PATHS) {
+            if (p != null && p.startsWith("/api/") && !EXEMPT_PATH_ALLOWED.contains(p)) {
+                strayExempt.add(p);
+            }
+        }
+        if (strayExempt.isEmpty()) {
+            log.info("[perm-selfcheck] 拦截器排除清单 OK：{} 条 /api 排除项全部在显式白名单内（F8-02）",
+                    EXEMPT_PATH_ALLOWED.size());
+        } else {
+            log.error("[perm-selfcheck] SaTokenConfig.EXEMPT_PATHS 含 {} 个**未登记**的 /api 排除项"
+                    + "（排除 = 同时绕开登录与权限，等同匿名开放，参见 F8-01）：", strayExempt.size());
+            for (String p : strayExempt) {
+                log.error("[perm-selfcheck]   未登记排除 -> {}", p);
+            }
+            log.error("[perm-selfcheck] 处理方式：确认该路径确需「未登录可调」，再登记到 "
+                    + "ApiPermGuardSelfCheck.EXEMPT_PATH_ALLOWED 并写明理由；否则从 SaTokenConfig.EXEMPT_PATHS 移除。");
         }
 
         if (unguarded.isEmpty()) {

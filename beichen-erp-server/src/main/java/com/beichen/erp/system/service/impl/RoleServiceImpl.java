@@ -33,8 +33,12 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
 
     @Override
     public List<Role> listEnabled() {
+        // S-9②（2026-09-30 批 C · 口径「角色按公司隔离」）：公司上下文只看**本公司**角色；
+        // 平台上下文（超管，companyId=0/null）看全部。原先无过滤 ⇒ 迁移后公司之间会互相看到角色。
+        Long cid = SystemConstants.tenantCompany();
         return this.list(new LambdaQueryWrapper<Role>()
                 .eq(Role::getStatus, 1)
+                .eq(cid != null, Role::getCompanyId, cid)
                 .orderByAsc(Role::getId));
     }
 
@@ -73,7 +77,8 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
         roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenu>()
                 .eq(RoleMenu::getRoleId, roleId));
         // 批量插入新关联，并校验每个菜单归属，防止把其他公司的私有菜单授权出去
-        Long currentCompany = CompanyContext.get();
+        // F8-12：用统一哨兵判据（0/null ⇒ 平台上下文 ⇒ 跳过归属校验）
+        Long currentCompany = SystemConstants.tenantCompany();
         if (menuIds != null && !menuIds.isEmpty()) {
             List<RoleMenu> roleMenus = new ArrayList<>();
             for (Long menuId : menuIds) {
@@ -101,8 +106,11 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
         if (role == null) {
             throw new BusinessException("角色不存在");
         }
-        // 超管（CompanyContext 为 null）可操作全部角色
-        Long currentCompany = CompanyContext.get();
+        // 平台/超管上下文可操作全部角色
+        // F8-11（2026-09-30 批 C）：原判据是 `CompanyContext.get() == null`，但**超管会话的 companyId 是 0 哨兵**
+        // （admin/verify 写入 0）⇒ 超管被当成"公司 0"，平台级角色一律 403 而**谁都改不了**（现网 7 个角色
+        // company_id 全为 0 ⇒ 角色菜单授权功能整体不可用）。改用统一判据 SystemConstants.tenantCompany()。
+        Long currentCompany = SystemConstants.tenantCompany();
         if (currentCompany == null) {
             return;
         }
