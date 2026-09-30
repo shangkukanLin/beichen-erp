@@ -11,6 +11,7 @@ import {
   type MenuVO,
   type MenuDTO
 } from '@/api/system'
+import { invalidate, useDomainRefresh } from '@/utils/dataFreshness'
 
 /* ============== 扁平化菜单数据 ============== */
 
@@ -154,7 +155,7 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
-      sessionStorage.setItem(SYSTEM_MENU_DIRTY_KEY, '1')
+      invalidate('menu')
       loadData()
       userStore.fetchMenus()
     } catch {
@@ -178,7 +179,7 @@ async function handleDelete(row: FlatMenu) {
   try {
     await deleteMenu(row.id as number | string)
     ElMessage.success('已删除')
-    sessionStorage.setItem(SYSTEM_MENU_DIRTY_KEY, '1')
+    invalidate('menu')
     loadData()
     userStore.fetchMenus()
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
@@ -200,12 +201,9 @@ onMounted(() => {
   loadData()
 })
 // 2026-09-20（F7-184）：本路由在 keep-alive 内 ⇒ 切回 Tab 时 onMounted 不再触发；按需刷新（脏标志由本页写操作置位）
-onActivated(() => {
-  if (sessionStorage.getItem(SYSTEM_MENU_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(SYSTEM_MENU_DIRTY_KEY)
+useDomainRefresh('menu', () => {
     loadData()
-  }
-})
+}, SYSTEM_MENU_DIRTY_KEY)
 
 </script>
 

@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { DocStatus, DocStatusLabel, DocStatusTag,
   ExchangeChargeTypeLabel, SALE_EXCHANGE_DIRTY_KEY } from '@/api/enums'
 import { getSaleExchangePage, auditSaleExchange, unAuditSaleExchange, cancelSaleExchange } from '@/api/sale'
+import { invalidate, useDomainRefresh } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -34,12 +35,9 @@ onMounted(async () => {
     router.replace(`/sale/exchange/add?saleOrderId=${soId}`)
   }
 })
-onActivated(() => {
-  if (sessionStorage.getItem(SALE_EXCHANGE_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(SALE_EXCHANGE_DIRTY_KEY)
+useDomainRefresh('saleExchange', () => {
     loadData()
-  }
-})
+}, SALE_EXCHANGE_DIRTY_KEY)
 
 // ============ 跳转 ============
 function goAdd() { router.push('/sale/exchange/add') }
@@ -60,21 +58,21 @@ async function handleAudit(row: any) {
     await ElMessageBox.confirm(`确认审核「${row.code}」？审核后退回货品入成品仓(待整理)，换出货品从成品仓扣减。${chargeTip}`, '审核确认', { type: 'warning' })
   } catch { return }
   await auditSaleExchange(row.id)
-  ElMessage.success('已审核'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
+  ElMessage.success('已审核'); invalidate('saleExchange'); loadData()
 }
 async function handleUnAudit(row: any) {
   try {
     await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换出的库存。`, '提示', { type: 'warning' })
   } catch { return }
   await unAuditSaleExchange(row.id)
-  ElMessage.success('已反审核'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
+  ElMessage.success('已反审核'); invalidate('saleExchange'); loadData()
 }
 async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确认作废换货单「${row.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
   } catch { return }
   await cancelSaleExchange(row.id)
-  ElMessage.success('已作废'); sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1'); loadData()
+  ElMessage.success('已作废'); invalidate('saleExchange'); loadData()
 }
 </script>
 

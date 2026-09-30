@@ -8,6 +8,7 @@ import request from '@/utils/request'
 import { OutsourceOrderStatus, OutsourceOrderStatusLabel, OutsourceOrderStatusTag, OUTSOURCE_ORDER_DIRTY_KEY } from '@/api/enums'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import EntityLinks from '@/components/EntityLinks.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const activeTab = ref('PENDING_PRODUCING')
@@ -49,13 +50,10 @@ function handleDownloadContract(row: any) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a)
 }
 
-onActivated(() => {
-  // 新增/修改页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(OUTSOURCE_ORDER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(OUTSOURCE_ORDER_DIRTY_KEY)
+// 新增/修改页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('outsourceOrder', () => {
     loadData()
-  }
-})
+}, OUTSOURCE_ORDER_DIRTY_KEY)
 onMounted(() => {
   loadData()
 })
@@ -68,7 +66,7 @@ onMounted(() => {
       <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="加工单号" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="加工厂"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:180px" /></el-form-item>
+        <el-form-item label="加工厂"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:180px" domain="vendor" /></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>

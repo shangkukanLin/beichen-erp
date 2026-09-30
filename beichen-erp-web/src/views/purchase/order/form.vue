@@ -126,14 +126,14 @@ onMounted(async () => { await load(); takeBaseline() })
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="供货商" prop="supplierId">
-              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }">
+              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }" domain="supplier" >
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="入库仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }" domain="warehouse" >
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -161,7 +161,7 @@ onMounted(async () => { await load(); takeBaseline() })
         <el-table :data="items" border>
           <el-table-column label="产品" min-width="180">
             <template #default="{ row }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="productLabel" placeholder="选择物料（可输SKU）" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onMaterialChange(v, row) }">
+              <RemoteSelect v-model="row.productId" :fetch="fetchMaterials" :label-key="productLabel" placeholder="选择物料（可输SKU）" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onMaterialChange(v, row) }" domain="material" >
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </template>

@@ -13,12 +13,12 @@
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="供货商" prop="supplierId">
-              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" />
+              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" domain="supplier" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -126,6 +126,7 @@
 
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
+import { invalidate } from '@/utils/dataFreshness'
 defineOptions({ name: 'PurchaseReturnAdd' })
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { PURCHASE_RETURN_DIRTY_KEY, WarehouseCategory, WarehouseType, PurchaseChargeType, PurchaseChargeTypeLabel } from '@/api/enums'
@@ -385,7 +386,7 @@ async function handleSubmit() {
       } else {
         await createPurchaseReturn(body)
       }
-      ElMessage.success(isEdit ? '更新成功' : '新增成功'); sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
+      ElMessage.success(isEdit ? '更新成功' : '新增成功'); invalidate('purchaseReturn')
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
       markClean()
       tabStore.closeTabAndBack(route.path)

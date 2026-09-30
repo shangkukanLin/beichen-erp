@@ -43,13 +43,13 @@
             <el-col :span="8">
               <el-form-item label="退回出库仓" required>
                 <RemoteSelect v-model="form.warehouseOutId" :fetch="fetchFinishedWarehouses"
-                  label-key="warehouseName" placeholder="退给供货商，从我方仓扣减" style="width:100%" />
+                  label-key="warehouseName" placeholder="退给供货商，从我方仓扣减" style="width:100%" domain="warehouse" />
               </el-form-item>
             </el-col>
             <el-col :span="8">
               <el-form-item label="换入入库仓" required>
                 <RemoteSelect v-model="form.warehouseInId" :fetch="fetchFinishedWarehouses"
-                  label-key="warehouseName" placeholder="换回良品入我方仓（可与退回仓相同）" style="width:100%" />
+                  label-key="warehouseName" placeholder="换回良品入我方仓（可与退回仓相同）" style="width:100%" domain="warehouse" />
               </el-form-item>
             </el-col>
             <el-col :span="8">
@@ -311,6 +311,7 @@ import {
 } from '@/api/purchase'
 
 import PageShell from '@/components/PageShell.vue'
+import { invalidate } from '@/utils/dataFreshness'
 
 /**
  * 采购换货单详情（2026-09-24 用户口径：草稿态就地可编辑，列表不再给「编辑」）
@@ -556,7 +557,7 @@ async function onSave() {
       }))
     })
     ElMessage.success('已保存')
-    sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+    invalidate('purchaseExchange')
     await loadDetail(Number(route.params.id))
   } catch (e: any) {
     ElMessage.error(e?.msg || e?.message || '保存失败')
@@ -579,7 +580,7 @@ async function doAudit() {
   try {
     await auditPurchaseExchange(Number(route.params.id))
     ElMessage.success('已审核')
-    sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+    invalidate('purchaseExchange')
     loadDetail(Number(route.params.id))
   } finally { acting.value = false }
 }
@@ -592,7 +593,7 @@ async function doUnAudit() {
   try {
     await unAuditPurchaseExchange(Number(route.params.id))
     ElMessage.success('已反审核')
-    sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+    invalidate('purchaseExchange')
     loadDetail(Number(route.params.id))
   } finally { acting.value = false }
 }
@@ -604,7 +605,7 @@ async function doCancel() {
   try {
     await cancelPurchaseExchange(Number(route.params.id))
     ElMessage.success('已作废')
-    sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+    invalidate('purchaseExchange')
     router.push('/inventory/purchase-exchange')
   } finally { acting.value = false }
 }

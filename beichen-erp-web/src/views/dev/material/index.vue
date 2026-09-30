@@ -6,6 +6,7 @@ import request from '@/utils/request'
 import { localDate } from '@/utils/date'
 import { DevMaterialTypeLabel, DevMaterialStatusLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 // 资金账户（支出账户下拉）：属共享主数据（GET 放行），研发支出登记用
 import { getAccountPage, type FinanceAccount } from '@/api/finance'
 
@@ -90,13 +91,10 @@ async function submitRdExpense() {
   } finally { rdSubmitting.value = false }
 }
 
-onActivated(() => {
-  // 详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(DEV_MATERIAL_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(DEV_MATERIAL_DIRTY_KEY)
+// 详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('devMaterial', () => {
     loadList()
-  }
-})
+}, DEV_MATERIAL_DIRTY_KEY)
 onMounted(() => { loadProjectOptions(); loadList() })
 
 </script>
@@ -108,7 +106,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
       <el-form :inline="true" @submit.prevent>
         <el-form-item label="物料名称"><el-input v-model="query.name" placeholder="模糊搜索" clearable style="width:160px" @keyup.enter="handleSearch" /></el-form-item>
         <el-form-item label="关联项目">
-          <RemoteSelect v-model="query.projectId" :fetch="fetchProjects" placeholder="全部" clearable style="width:160px">
+          <RemoteSelect v-model="query.projectId" :fetch="fetchProjects" placeholder="全部" clearable style="width:160px" domain="devProject" >
             <el-option label="未关联项目" :value="''" />
           </RemoteSelect>
         </el-form-item>

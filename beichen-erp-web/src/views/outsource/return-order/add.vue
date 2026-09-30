@@ -10,6 +10,7 @@ import { applyPageTitle } from '@/utils/pageTitle'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const route = useRoute()
@@ -428,7 +429,7 @@ async function handleSubmit() {
     // E4：编辑草稿走 PUT（后端仅允许 DRAFT 编辑，明细整体替换；草稿不动库存/应付）
     if (editId) { await request.put(`/outsource/return-order/${editId}`, payload); ElMessage.success('退货单已更新') }
     else { await request.post('/outsource/return-order', payload); ElMessage.success('退货单草稿已保存，请在列表中审核生效') }
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
     resetForm()
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()
@@ -551,10 +552,10 @@ async function loadMaterialTypes() {
               <span style="color:#909399;font-size:var(--app-font-xs)">类型固定，不可更改</span>
             </el-form-item>
           </el-col>
-          <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择加工厂" @update:modelValue="onFactoryChange" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择加工厂" @update:modelValue="onFactoryChange" domain="supplier" /></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item :label="isRepair ? '送修出库仓' : '成品出库仓'" required>
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" :placeholder="isRepair ? '送修品所在仓（我方成品仓）' : '出库仓（我方成品仓）'" @update:modelValue="onWarehouseChange" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" :placeholder="isRepair ? '送修品所在仓（我方成品仓）' : '出库仓（我方成品仓）'" @update:modelValue="onWarehouseChange" domain="warehouse" />
             </el-form-item>
           </el-col>
           <!-- 关联加工单（2026-09-17 需求）：**可选可清空** —— 选了就落 order_id（并按该单那一版 BOM 快照带料），清空=不关联；维修退货固定不关联 -->

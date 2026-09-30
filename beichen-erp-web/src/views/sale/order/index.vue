@@ -11,6 +11,7 @@ import {
   getSaleOrderPage, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, SALE_ORDER_DIRTY_KEY,
   type SaleOrder
 } from '@/api/sale'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 
@@ -101,12 +102,9 @@ function goExchange(row: SaleOrder) { router.push(`/sale/exchange/add?saleOrderI
 
 onMounted(() => { loadCustomers(); loadWarehouses(); loadData() })
 // 数据变动（新增/编辑页、详情页编辑/审核/反审核/作废）后返回列表时按需刷新，保留查询条件与分页现场
-onActivated(() => {
-  if (sessionStorage.getItem(SALE_ORDER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(SALE_ORDER_DIRTY_KEY)
+useDomainRefresh('saleOrder', () => {
     loadData()
-  }
-})
+}, SALE_ORDER_DIRTY_KEY)
 </script>
 
 <template>
@@ -120,7 +118,7 @@ onActivated(() => {
             <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
           </el-form-item>
           <el-form-item label="客户">
-            <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" />
+            <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" domain="customer" />
           </el-form-item>
           <el-form-item label="状态">
             <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">

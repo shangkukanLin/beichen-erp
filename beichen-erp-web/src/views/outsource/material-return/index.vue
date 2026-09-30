@@ -36,6 +36,7 @@ import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, MaterialReturnType, MaterialReturnTypeLabel } from '@/api/enums'
 import EntityLinks from '@/components/EntityLinks.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 defineOptions({ name: 'OutsourceMaterialReturn' })
 
@@ -219,13 +220,10 @@ watch(leaf, () => {
   loadData(); loadCounts()
 })
 
-onActivated(() => {
-  // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY)
+// 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('outsourceMaterialReturn', () => {
     loadData(); loadCounts()
-  }
-})
+}, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY)
 onMounted(() => {
   // 页签默认 = 该叶子的第一个（与 watch(leaf) 同口径；不设会出现"高亮与查询参数不匹配"的错位）
   activeTab.value = tabs.value[0].key
@@ -255,7 +253,7 @@ onMounted(() => {
         <span v-if="leaf === 'REPAIR'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">工厂维修单（MRW-）：送供应商维修 → 回厂登记 → 全部返回后结案</span>
         <span v-else style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">退货退款单（MRW-）：物料退回供应商 + 生成对供应商的应收</span>
         <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" @keyup.enter="handleSearch" />
-        <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="供应商" style="width:170px" />
+        <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="供应商" style="width:170px" domain="supplier" />
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
         <!-- 新增入口（2026-09-29）：类型 = **当前叶子**（工厂维修 / 退货退款）；`linked` 固定 WITHOUT_ORDER

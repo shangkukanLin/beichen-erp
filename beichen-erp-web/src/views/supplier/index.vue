@@ -5,6 +5,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { productLabel } from '@/api/product'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 // 2026-09-24：新增/编辑弹框在 2026-09-23 已改为独立页（/supplier/form/add | /edit/:id）⇒ 清掉随之
 // 失效的弹框状态与提交逻辑（dialogVisible / dialogTitle / submitLoading / formRef / defaultForm /
 // form / isEdit / rules / handleSubmit）以及只被它们用到的导入（addSupplier / updateSupplier /
@@ -131,13 +132,10 @@ async function saveProducts() {
   productDialogVisible.value = false
 }
 
-onActivated(() => {
-  // 详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(SUPPLIER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(SUPPLIER_DIRTY_KEY)
+// 详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('supplier', () => {
     loadData()
-  }
-})
+}, SUPPLIER_DIRTY_KEY)
 onMounted(() => { loadData() })
 
 </script>

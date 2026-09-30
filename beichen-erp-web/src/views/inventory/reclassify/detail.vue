@@ -10,6 +10,7 @@ import { getReclassify, getReclassifyItems, updateReclassify, auditReclassify, u
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 // 用 computed 取路由参数：keep-alive 会复用组件，从单据 A 跳到单据 B 时 route.params.id 会变，
@@ -161,7 +162,7 @@ async function handleSave() {
       }))
     })
     ElMessage.success('已保存')
-    sessionStorage.setItem(INVENTORY_RECLASSIFY_DIRTY_KEY, '1')
+    invalidate('reclassify')
     await loadDetail()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
@@ -173,7 +174,7 @@ async function handleSave() {
  * 作废走 /cancel（仅草稿）—— 两者语义拆开，不再由 cancel 兼任反审核。
  */
 async function afterStatusChange() {
-  sessionStorage.setItem(INVENTORY_RECLASSIFY_DIRTY_KEY, '1')
+  invalidate('reclassify')
   await loadDetail()
 }
 async function handleAudit() {
@@ -225,7 +226,7 @@ onActivated(() => { loadDetail() })
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="仓库" required>
-              <RemoteSelect v-model="editForm.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" />
+              <RemoteSelect v-model="editForm.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="editForm.reclassifyDate" type="date" /></el-form-item></el-col>
@@ -263,7 +264,7 @@ onActivated(() => { loadDetail() })
         </el-table-column>
         <el-table-column label="产品" min-width="200">
           <template #default="{ row }">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
+            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" domain="product" />
           </template>
         </el-table-column>
         <el-table-column label="原品质" width="110">

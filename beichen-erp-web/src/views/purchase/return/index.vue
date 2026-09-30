@@ -7,7 +7,7 @@
           <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="供货商">
-          <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:180px" />
+          <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:180px" domain="supplier" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">
@@ -84,6 +84,7 @@ import {
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import EntityLinks from '@/components/EntityLinks.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const list = ref<PurchaseReturn[]>([])
@@ -166,13 +167,10 @@ async function handleCancel(row: PurchaseReturn) {
   } catch { /* */ }
 }
 
-onActivated(() => {
-  // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(PURCHASE_RETURN_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(PURCHASE_RETURN_DIRTY_KEY)
+// 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('purchaseReturn', () => {
     loadData()
-  }
-})
+}, PURCHASE_RETURN_DIRTY_KEY)
 onMounted(() => {
   loadSupplierOptions()
   loadWarehouseOptions()

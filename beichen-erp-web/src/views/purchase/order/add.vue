@@ -11,7 +11,7 @@
           <el-col :span="12">
             <el-form-item label="供货商" prop="supplierId">
               <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :initial-options="suppliers" placeholder="请选择" style="width:100%"
-                @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }">
+                @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }" domain="supplier" >
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -19,7 +19,7 @@
           <el-col :span="12">
             <el-form-item label="入库仓库" prop="warehouseId">
               <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%"
-                @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
+                @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }" domain="warehouse" >
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </el-form-item>
@@ -126,6 +126,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { WarehouseCategory, WarehouseType, PURCHASE_ORDER_DIRTY_KEY } from '@/api/enums'
+import { invalidate } from '@/utils/dataFreshness'
 defineOptions({ name: 'PurchaseAdd' })
 import { ref, reactive, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -298,7 +299,7 @@ async function handleSubmit() {
         items: flatItems,
       }
       await createPurchaseOrder(body)
-      ElMessage.success('已新增'); sessionStorage.setItem(PURCHASE_ORDER_DIRTY_KEY, '1')
+      ElMessage.success('已新增'); invalidate('purchaseOrder')
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
       markClean()
       tabStore.closeTabAndBack(route.path)

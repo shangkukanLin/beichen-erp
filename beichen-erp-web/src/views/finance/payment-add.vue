@@ -141,7 +141,7 @@ onMounted(async () => {
       <el-form :model="form" label-width="90px" style="max-width:1000px">
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item label="供应商" required>
-            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onSupplierChange()" />
+            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onSupplierChange()" domain="supplier" />
           </el-form-item></el-col>
           <!-- 欠款汇总（2026-09-29 用户口径）：选完供应商后显示 **总欠款 + 到期欠款**；
                口径 = 后端 PayableQuery.partySummary（到期 = due_date < 今天，当天不算、无到期日不计入

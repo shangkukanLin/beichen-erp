@@ -146,12 +146,12 @@ onActivated(() => {
           <el-col :span="8"><el-form-item label="来源销售单">{{ head.orderId ? ('#' + head.orderId) : '—' }}</el-form-item></el-col>
           <el-col :span="8">
             <el-form-item required label="客户">
-              <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" />
+              <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" domain="customer" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item required label="出库仓库">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">

@@ -9,6 +9,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useTabStore } from '@/stores/tabs'
 import { applyPageTitle } from '@/utils/pageTitle'
+import { invalidate } from '@/utils/dataFreshness'
 
 /**
  * 委外加工退货详情（2026-09-24 用户口径：草稿态就地可编辑，列表不再给「编辑」）
@@ -137,7 +138,7 @@ async function doSave() {
       }))
     })
     ElMessage.success('已保存')
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
     await loadData()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
@@ -243,7 +244,7 @@ async function submitRepairReturn() {
     ElMessage.success('维修返回草稿已保存，请在下方「维修返回记录」里审核（审核后才入库并挂维修费）')
     repairVisible.value = false
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
   } catch (e: any) { ElMessage.error(e?.message || '登记失败') } finally { repairSaving.value = false }
 }
 
@@ -263,7 +264,7 @@ async function auditRepairReturn(row: any) {
     await request.put(`/outsource/return-order/repair-return/${row.id}/audit`)
     ElMessage.success('已审核')
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 
@@ -277,7 +278,7 @@ async function unAuditRepairReturn(row: any) {
     await request.put(`/outsource/return-order/repair-return/${row.id}/un-audit`)
     ElMessage.success('已反审核')
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
@@ -288,7 +289,7 @@ async function cancelRepairReturn(row: any) {
     await request.delete(`/outsource/return-order/repair-return/${row.id}`)
     ElMessage.success('已删除草稿')
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
@@ -297,7 +298,7 @@ async function handleAudit() {
     ? '确认审核该维修退货单？审核后成品送修出库（不冲减应付）并生成加工厂向我方收取的维修费应付'
     : '确认审核该退货单？审核后物料入工厂仓、成品出库并冲减应付'
   try { await ElMessageBox.confirm(tip, '确认审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/return-order/${id}/audit`); ElMessage.success('已审核'); loadData(); sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+  try { await request.put(`/outsource/return-order/${id}/audit`); ElMessage.success('已审核'); loadData(); invalidate('outsourceReturnOrder') } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 
 async function handleUnAudit() {
@@ -305,22 +306,22 @@ async function handleUnAudit() {
     ? '确认反审核？将送修成品回我方仓并冲销维修费应付（若有已审核的维修返回记录需先「反审核」；已结案需先撤销结案）'
     : '确认反审核？将逆向库存并冲销应付'
   try { await ElMessageBox.confirm(tip, '确认反审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/return-order/${id}/un-audit`); ElMessage.success('已反审核'); loadData(); sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+  try { await request.put(`/outsource/return-order/${id}/un-audit`); ElMessage.success('已反审核'); loadData(); invalidate('outsourceReturnOrder') } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
 /** 结案（仅维修退货）：工厂把送修成品全部送回（未返回=0）后收尾 */
 async function handleClose() {
   try { await ElMessageBox.confirm('确认结案？结案后不能再登记/审核/反审核维修返回，也不能反审核本单（需先撤销结案）。', '确认结案', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/return-order/${id}/close`); ElMessage.success('已结案'); loadData(); sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '结案失败') }
+  try { await request.put(`/outsource/return-order/${id}/close`); ElMessage.success('已结案'); loadData(); invalidate('outsourceReturnOrder') } catch (e: any) { ElMessage.error(e?.message || '结案失败') }
 }
 async function handleReOpen() {
   try { await ElMessageBox.confirm('确认撤销结案？将回到「送修中」跟踪状态，可继续登记维修返回。', '撤销结案', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/return-order/${id}/re-open`); ElMessage.success('已撤销结案'); loadData(); sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '撤销失败') }
+  try { await request.put(`/outsource/return-order/${id}/re-open`); ElMessage.success('已撤销结案'); loadData(); invalidate('outsourceReturnOrder') } catch (e: any) { ElMessage.error(e?.message || '撤销失败') }
 }
 
 async function handleCancel() {
   try { await ElMessageBox.confirm('确认作废该退货单？', '确认作废', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/return-order/${id}/cancel`); ElMessage.success('已作废'); loadData(); sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '失败') }
+  try { await request.put(`/outsource/return-order/${id}/cancel`); ElMessage.success('已作废'); loadData(); invalidate('outsourceReturnOrder') } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 // 业务数据放在 onActivated 加载：layout 用 keep-alive 缓存页面，再次进入详情页会复用组件、
@@ -363,7 +364,7 @@ onActivated(loadData)
           <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[detail.status] || 'info'" size="small">{{ DocStatusLabel[detail.status] || detail.status }}</el-tag></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item required label="加工厂">
-              <RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" label-key="name" placeholder="实时查库（加工厂）" style="width:100%" />
+              <RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" label-key="name" placeholder="实时查库（加工厂）" style="width:100%" domain="supplier" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -371,7 +372,7 @@ onActivated(loadData)
               <!-- 2026-09-27 修复：原先漏了绑定冒号（label-key="(row:any)=>…" 是**静态字符串**），
                    RemoteSelect 的 getLabel 会去取 row["(row:any)=>row.warehouseName"] ⇒ undefined ⇒
                    下拉与回显全部退化成显示 **value（仓库 ID）**。必须写成 `:label-key="函数"`。 -->
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="我方成品仓" style="width:100%" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="我方成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -579,7 +580,7 @@ onActivated(loadData)
       </el-alert>
       <el-form label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="12"><el-form-item required label="入库仓库"><RemoteSelect v-model="repairWarehouseId" :fetch="fetchWarehousesForRepair" :label-key="(row:any)=>row.warehouseName" placeholder="选择返回入库的我方成品仓" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item required label="入库仓库"><RemoteSelect v-model="repairWarehouseId" :fetch="fetchWarehousesForRepair" :label-key="(row:any)=>row.warehouseName" placeholder="选择返回入库的我方成品仓" style="width:100%" domain="warehouse" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="返回日期"><el-input v-model="repairDate" type="date" /></el-form-item></el-col>
         </el-row>
       </el-form>

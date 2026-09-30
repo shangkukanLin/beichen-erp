@@ -153,8 +153,8 @@ onMounted(async () => {
             </el-radio-group>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item :label="form.subjectType === SubjectType.SUPPLIER ? '供应商' : '客户'" required>
-            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" />
-            <RemoteSelect v-else v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } onPartnerChange() }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="supplier" />
+            <RemoteSelect v-else v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } onPartnerChange() }" domain="customer" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
           </el-form-item></el-col>
           <!-- 欠款汇总（2026-09-29 用户口径）：选完客户/供应商后显示 **总欠款 + 到期欠款**；
                口径 = 后端 ReceivableQuery.partySummary（严格镜像应付侧：到期 = due_date < 今天，当天不算、

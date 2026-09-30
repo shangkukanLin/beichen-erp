@@ -9,6 +9,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { localDate } from '@/utils/date'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, MaterialReturnType, MaterialReturnTypeLabel, MaterialReturnTypeTag, MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag } from '@/api/enums'
+import { invalidate } from '@/utils/dataFreshness'
 
 /**
  * 委外物料退货详情（2026-09-24 用户口径：草稿态就地可编辑，列表不再给「编辑」）
@@ -186,7 +187,7 @@ async function submitRepairReturn() {
     ElMessage.success('维修返回草稿已保存，请在下方「维修返回记录」里审核（审核后才入库）')
     repairVisible.value = false
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    invalidate('outsourceMaterialReturn')
   } catch (e: any) { ElMessage.error(e?.message || '登记失败') } finally { repairSaving.value = false }
 }
 
@@ -206,7 +207,7 @@ async function auditRepairReturn(row: any) {
     await request.put(`/outsource/material-return/repair-return/${row.id}/audit`)
     ElMessage.success('已审核')
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    invalidate('outsourceMaterialReturn')
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 
@@ -220,7 +221,7 @@ async function unAuditRepairReturn(row: any) {
     await request.put(`/outsource/material-return/repair-return/${row.id}/un-audit`)
     ElMessage.success('已反审核')
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    invalidate('outsourceMaterialReturn')
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
@@ -231,7 +232,7 @@ async function cancelRepairReturn(row: any) {
     await request.delete(`/outsource/material-return/repair-return/${row.id}`)
     ElMessage.success('已删除草稿')
     await loadData()
-    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    invalidate('outsourceMaterialReturn')
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
@@ -303,7 +304,7 @@ async function doSave() {
       materialOrderId: form.materialOrderId || null
     })
     ElMessage.success('已保存')
-    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    invalidate('outsourceMaterialReturn')
     await loadData()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
@@ -316,7 +317,7 @@ async function handleAudit() {
       ? '确认审核该维修返回单？审核后物料出源仓送供应商维修；「填了维修费」则按明细金额生成对供应商的应付。修好回厂时「登记维修返回」'
       : '确认审核该退货退款单？审核后物料出源仓，并生成「对供应商的应收」（供应商把货款退来后走收款核销）')
   try { await ElMessageBox.confirm(tip, '确认审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/audit`); ElMessage.success('已审核'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
+  try { await request.put(`/outsource/material-return/${id}/audit`); ElMessage.success('已审核'); loadData(); invalidate('outsourceMaterialReturn') } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
 
 async function handleUnAudit() {
@@ -326,22 +327,22 @@ async function handleUnAudit() {
       ? '确认反审核？将送修物料回源仓（若有维修返回记录需先撤销；已生成的维修费应付会一并冲回）'
       : '确认反审核？将物料回源仓并冲回对供应商的应收（已有收款需先退款）')
   try { await ElMessageBox.confirm(tip, '确认反审核', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已反审核'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
+  try { await request.put(`/outsource/material-return/${id}/un-audit`); ElMessage.success('已反审核'); loadData(); invalidate('outsourceMaterialReturn') } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
 
 /** 结案（**仅维修返回**）：未返回=0 后收尾；订单退料/退货退款没有"返回"概念 ⇒ 不出现该动作 */
 async function handleClose() {
   try { await ElMessageBox.confirm('确认结案？结案后不能再登记/撤销维修返回，也不能反审核（需先撤销结案）。', '确认结案', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/close`); ElMessage.success('已结案'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '结案失败') }
+  try { await request.put(`/outsource/material-return/${id}/close`); ElMessage.success('已结案'); loadData(); invalidate('outsourceMaterialReturn') } catch (e: any) { ElMessage.error(e?.message || '结案失败') }
 }
 async function handleReOpen() {
   try { await ElMessageBox.confirm('确认撤销结案？将回到「送修中」跟踪状态，可继续登记维修返回。', '撤销结案', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/re-open`); ElMessage.success('已撤销结案'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '撤销失败') }
+  try { await request.put(`/outsource/material-return/${id}/re-open`); ElMessage.success('已撤销结案'); loadData(); invalidate('outsourceMaterialReturn') } catch (e: any) { ElMessage.error(e?.message || '撤销失败') }
 }
 
 async function handleCancel() {
   try { await ElMessageBox.confirm('确认作废该退货单？', '确认作废', { type: 'warning' }) } catch { return }
-  try { await request.put(`/outsource/material-return/${id}/cancel`); ElMessage.success('已作废'); loadData(); sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1') } catch (e: any) { ElMessage.error(e?.message || '失败') }
+  try { await request.put(`/outsource/material-return/${id}/cancel`); ElMessage.success('已作废'); loadData(); invalidate('outsourceMaterialReturn') } catch (e: any) { ElMessage.error(e?.message || '失败') }
 }
 
 // 业务数据放在 onActivated 加载：layout 用 keep-alive 缓存页面，再次进入详情页会复用组件、
@@ -393,7 +394,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           <el-col :span="8">
             <el-form-item required :label="isRepair ? '维修供应商' : '退回对象'">
               <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" label-key="name"
-                placeholder="实时查库（只允许辅料商 / 供应商）" style="width:100%" />
+                placeholder="实时查库（只允许辅料商 / 供应商）" style="width:100%" domain="supplier" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -415,7 +416,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           <el-col :span="8" v-if="form.materialOrderId != null">
             <el-form-item label="关联物料订单">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel"
-                :disabled="!form.supplierId" placeholder="可不选（不关联则靠本单跟踪）" style="width:100%" />
+                :disabled="!form.supplierId" placeholder="可不选（不关联则靠本单跟踪）" style="width:100%" domain="material" />
             </el-form-item>
           </el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>

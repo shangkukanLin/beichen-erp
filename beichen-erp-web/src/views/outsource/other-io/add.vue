@@ -10,6 +10,7 @@ import { IoType, IoTypeLabel, WarehouseCategory, OUTSOURCE_OTHER_IO_DIRTY_KEY } 
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute(); const router = useRouter()
 const editId = Number(route.query.id) || 0
@@ -78,9 +79,9 @@ async function handleSubmit() {
   try {
     const body: any = { ...form, items: validItems }
     if (editId) {
-      await request.put(`/outsource/other-io/${editId}`, body); ElMessage.success('已更新'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
+      await request.put(`/outsource/other-io/${editId}`, body); ElMessage.success('已更新'); invalidate('outsourceOtherIo')
     } else {
-      await request.post('/outsource/other-io', body); ElMessage.success('已新增'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
+      await request.post('/outsource/other-io', body); ElMessage.success('已新增'); invalidate('outsourceOtherIo')
       Object.assign(form, { warehouseId: undefined, ioType: IoType.IN, ioDate: localDate(), remark: '' })
       items.value = [{ materialId: undefined, materialName: '', materialTypeId: undefined, unit: '', unit_price: '', quantity: undefined, remark: '' }]
     }

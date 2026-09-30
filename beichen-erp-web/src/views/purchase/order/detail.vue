@@ -18,6 +18,7 @@ import { DocStatusLabel } from '@/api/enums'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute(); const router = useRouter()
 const tabStore = useTabStore()
@@ -176,7 +177,7 @@ async function submit() {
       await updatePurchaseOrder(orderId, { order: { ...form }, items: items.value })
       ElMessage.success('已保存')
       // 置脏标志：返回列表时 onActivated 按需刷新（列表页已消费 PURCHASE_ORDER_DIRTY_KEY）
-      sessionStorage.setItem(PURCHASE_ORDER_DIRTY_KEY, '1')
+      invalidate('purchaseOrder')
       await loadData()
     } catch { /* 拦截器已提示 */ } finally { submitLoading.value = false }
   })
@@ -247,7 +248,7 @@ onActivated(async () => { await loadData() })
                 <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers"
                   :preset="{ id: form.supplierId, name: supplierName }"
                   placeholder="请选择" style="width:100%"
-                  @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }">
+                  @change="(v: any) => { if (v === ADD_MARKER) { form.supplierId = undefined; router.push('/outsource/supplier/manage'); return } }" domain="supplier" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </el-form-item>
@@ -257,7 +258,7 @@ onActivated(async () => { await loadData() })
                 <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName"
                   :preset="{ id: form.warehouseId, warehouseName: warehouseName }"
                   placeholder="请选择" style="width:100%"
-                  @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
+                  @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }" domain="warehouse" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </el-form-item>
@@ -302,7 +303,7 @@ onActivated(async () => { await loadData() })
                   :preset="{ id: row.productId, name: row.productName, sku: row.sku }"
                   placeholder="选择产品（可输SKU）" style="width:100%"
                   @pick="(opts: any[]) => onProductPick(opts && opts[0], row)"
-                  @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } }">
+                  @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } }" domain="product" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>

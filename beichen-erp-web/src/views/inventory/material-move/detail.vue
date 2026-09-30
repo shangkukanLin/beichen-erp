@@ -132,6 +132,7 @@ import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { WarehouseCategory, WarehouseType, INVENTORY_MATERIAL_MOVE_DIRTY_KEY } from '@/api/enums'
+import { invalidate } from '@/utils/dataFreshness'
 
 defineOptions({ name: 'InventoryMaterialMoveDetail' })
 
@@ -267,7 +268,7 @@ async function handleSave() {
     }
     await request.put(`/inventory/material-move/${id.value}`, payload)
     ElMessage.success('已保存')
-    sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
+    invalidate('materialMove')
     markClean()
     await loadAll()
   } catch (e: any) {
@@ -290,7 +291,7 @@ async function handleAudit() {
     await request.put(`/inventory/material-move/${id.value}`, payload)
     await request.put(`/inventory/material-move/${id.value}/audit`)
     ElMessage.success('已审核')
-    sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
+    invalidate('materialMove')
     markClean()
     await loadAll()
   } catch { /* 已由 request 拦截器提示 */ }
@@ -303,7 +304,7 @@ async function handleUnAudit() {
   try {
     await request.put(`/inventory/material-move/${id.value}/un-audit`)
     ElMessage.success('已反审核')
-    sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
+    invalidate('materialMove')
     await loadAll()
   } catch { /* 已由 request 拦截器提示 */ }
 }
@@ -315,7 +316,7 @@ async function handleCancel() {
   try {
     await request.put(`/inventory/material-move/${id.value}/cancel`)
     ElMessage.success('已作废')
-    sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
+    invalidate('materialMove')
     markClean()
     await loadAll()
   } catch { /* 已由 request 拦截器提示 */ }

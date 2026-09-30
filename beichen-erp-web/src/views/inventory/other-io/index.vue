@@ -6,6 +6,7 @@ import request from '@/utils/request'
 import { IoType, IoTypeLabel, WarehouseCategory, INVENTORY_OTHER_IO_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const loading = ref(false)
@@ -55,13 +56,10 @@ async function handleCancel(row: any) {
 function handleQuery() { pagination.pageNum=1; loadData() }
 
 function getWhName(id: number) { return warehouseOptions.value.find((w:any)=>w.id===id)?.warehouseName || '-' }
-onActivated(() => {
-  // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(INVENTORY_OTHER_IO_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(INVENTORY_OTHER_IO_DIRTY_KEY)
+// 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('inventoryOtherIo', () => {
     loadData()
-  }
-})
+}, INVENTORY_OTHER_IO_DIRTY_KEY)
 onMounted(async ()=>{ await loadWarehouses(); loadData() })
 
 </script>
@@ -71,7 +69,7 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
-        <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" clearable style="width:180px" placeholder="全部" /></el-form-item>
+        <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" clearable style="width:180px" placeholder="全部" domain="warehouse" /></el-form-item>
         <el-form-item label="类型"><el-select v-model="query.ioType" clearable style="width:120px"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item>
         </el-form>
         <div class="toolbar">

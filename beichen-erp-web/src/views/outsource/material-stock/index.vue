@@ -14,11 +14,11 @@
             <el-input v-model="query.materialName" placeholder="物料名称" clearable style="width:135px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="物料类型">
-            <RemoteSelect v-model="query.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" placeholder="全部" style="width:120px" />
+            <RemoteSelect v-model="query.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" placeholder="全部" style="width:120px" domain="materialType" />
           </el-form-item>
           <el-form-item label="所在仓库">
             <RemoteSelect v-model="query.warehouseIds" multiple collapse-tags collapse-tags-tooltip
-              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:135px" />
+              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:135px" domain="warehouse" />
           </el-form-item>
         </el-form>
         <div class="toolbar">

@@ -13,11 +13,11 @@
             <el-input v-model="query.productName" placeholder="产品名称或 SKU" clearable style="width:145px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="品牌">
-            <RemoteSelect v-model="query.brandId" :fetch="fetchBrands" label-key="brandName" placeholder="全部" style="width:125px" />
+            <RemoteSelect v-model="query.brandId" :fetch="fetchBrands" label-key="brandName" placeholder="全部" style="width:125px" domain="brand" />
           </el-form-item>
           <el-form-item label="所在仓库">
             <RemoteSelect v-model="query.warehouseIds" multiple collapse-tags collapse-tags-tooltip
-              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:145px" />
+              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:145px" domain="warehouse" />
           </el-form-item>
           <el-form-item label="">
             <el-checkbox v-model="query.onlyLowStock" label="仅看低于安全库存" />

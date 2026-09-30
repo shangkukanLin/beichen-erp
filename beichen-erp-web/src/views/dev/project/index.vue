@@ -10,6 +10,7 @@ import {
   type ProjectVO
 } from '@/api/system'
 import request from '@/utils/request'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const today = localDate()
 const router = useRouter()
@@ -104,13 +105,10 @@ async function handleReactivate(row: any) {
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
 
-onActivated(() => {
-  // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(DEV_PROJECT_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(DEV_PROJECT_DIRTY_KEY)
+// 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('devProject', () => {
     loadData()
-  }
-})
+}, DEV_PROJECT_DIRTY_KEY)
 onMounted(() => { loadData(); loadBrandOptions() })
 
 </script>

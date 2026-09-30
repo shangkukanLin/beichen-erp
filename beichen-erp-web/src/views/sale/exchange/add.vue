@@ -15,7 +15,7 @@
               <!-- RemoteSelect 的 update:model-value 只回传值，选中项需通过 pick 事件取（否则拿不到单号/客户/仓库） -->
               <RemoteSelect :model-value="form.customerId" :fetch="fetchCustomers"
                 label-key="name" placeholder="选择客户" :disabled="isEdit" style="width:100%"
-                @update:model-value="(v:any)=>{ form.customerId = v; form.saleOrderId = null; form.saleOrderCode = ''; items = [] }" />
+                @update:model-value="(v:any)=>{ form.customerId = v; form.saleOrderId = null; form.saleOrderCode = ''; items = [] }" domain="customer" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -23,7 +23,7 @@
               <RemoteSelect :model-value="form.saleOrderId" :fetch="fetchSaleOrders"
                 label-key="code" placeholder="先选客户" :disabled="isEdit" style="width:100%"
                 @update:model-value="(v:any)=>{ form.saleOrderId = v }"
-                @pick="(opts:any[])=>{ onSaleOrderChange(form.saleOrderId, opts?.[0]) }" />
+                @pick="(opts:any[])=>{ onSaleOrderChange(form.saleOrderId, opts?.[0]) }" domain="saleOrder" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -34,13 +34,13 @@
           <el-col :span="8">
             <el-form-item label="换入仓" required>
               <RemoteSelect v-model="form.warehouseInId" :fetch="fetchAfterSaleWarehouses"
-                label-key="warehouseName" placeholder="成品仓" style="width:100%" />
+                label-key="warehouseName" placeholder="成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="换出仓" required>
               <RemoteSelect v-model="form.warehouseOutId" :fetch="fetchFinishedWarehouses"
-                label-key="warehouseName" placeholder="成品仓" style="width:100%" />
+                label-key="warehouseName" placeholder="成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -168,6 +168,7 @@ import {
   getSaleExchange, createSaleExchange, updateSaleExchange,
   getSaleExchangeSaleOrders, getSaleExchangeSaleOrderItems, getSaleExchangeSourceOrder,
 } from '@/api/sale'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -373,7 +374,7 @@ async function submit() {
     if (isEdit.value) {
       await updateSaleExchange(form.id!, body)
       ElMessage.success('已保存')
-      sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1')
+      invalidate('saleExchange')
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
       markClean()
       tabStore.closeTabAndBack(route.path)
@@ -381,7 +382,7 @@ async function submit() {
     } else {
       const res: any = await createSaleExchange(body)
       ElMessage.success('已新增')
-      sessionStorage.setItem(SALE_EXCHANGE_DIRTY_KEY, '1')
+      invalidate('saleExchange')
       markClean()
       tabStore.closeTabAndBack(route.path)
       router.push('/sale/exchange')

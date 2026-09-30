@@ -9,6 +9,7 @@ import { getQualityTypes, productLabel, type QualityOption } from '@/api/product
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import EntityLinks from '@/components/EntityLinks.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const qualityOptions = ref<QualityOption[]>([])
@@ -227,13 +228,10 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
-onActivated(() => {
-  // 新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(PURCHASE_ORDER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(PURCHASE_ORDER_DIRTY_KEY)
+// 新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('purchaseOrder', () => {
     loadData()
-  }
-})
+}, PURCHASE_ORDER_DIRTY_KEY)
 onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials(); loadQualityTypes(); loadData() })
 
 </script>
@@ -247,7 +245,7 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
           <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" style="width:160px" />
         </el-form-item>
         <el-form-item label="供货商">
-          <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:160px" />
+          <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:160px" domain="supplier" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">

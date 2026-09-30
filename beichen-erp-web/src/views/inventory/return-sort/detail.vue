@@ -10,6 +10,7 @@ import {
   getReturnSort, getReturnSortItems, auditReturnSort, cancelReturnSort, updateReturnSort,
   type ReturnSortItem
 } from '@/api/inventory'
+import { invalidate } from '@/utils/dataFreshness'
 
 /**
  * 退货整理详情（2026-09-24 用户口径：草稿态就地可编辑）
@@ -136,7 +137,7 @@ async function doSave() {
       }))
     })
     ElMessage.success('已保存')
-    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
+    invalidate('returnSort')
     await loadDetail()
   } catch (e: any) {
     ElMessage.error(e?.message || '保存失败')
@@ -160,7 +161,7 @@ async function doAudit() {
   try {
     await auditReturnSort(id)
     ElMessage.success('已审核')
-    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
+    invalidate('returnSort')
     loadDetail()
   } finally { acting.value = false }
 }
@@ -173,7 +174,7 @@ async function doUnAudit() {
   try {
     await cancelReturnSort(id)
     ElMessage.success('已反审核')
-    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
+    invalidate('returnSort')
     loadDetail()
   } finally { acting.value = false }
 }

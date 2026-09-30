@@ -11,6 +11,7 @@ import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { OrderType, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
+import { invalidate } from '@/utils/dataFreshness'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
@@ -94,7 +95,7 @@ async function handleSubmit() {
       items.value = []
       onOrderTypeChange()
     }
-    sessionStorage.setItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, '1')
+    invalidate('materialOrder')
     // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回原处
     markClean()
     tabStore.closeTabAndBack(route.fullPath)
@@ -193,7 +194,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
             </el-radio-group>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item required :label="form.orderType===OrderType.OUTSOURCE?'加工厂':'供应商'">
-            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" clearable style="width:100%" placeholder="选择供应商">
+            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" clearable style="width:100%" placeholder="选择供应商" domain="supplier" >
               <el-option label="+ 新增" :value="ADD_MARKER" @click="router.push('/supplier/manage')" />
             </RemoteSelect>
           </el-form-item></el-col>

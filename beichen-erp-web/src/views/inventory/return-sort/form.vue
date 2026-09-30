@@ -13,6 +13,7 @@ import {
   getReturnSort, getReturnSortItems, getReturnSortDefectStock,
   createReturnSort, updateReturnSort
 } from '@/api/inventory'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute(); const router = useRouter()
 const tabStore = useTabStore()
@@ -234,7 +235,7 @@ async function handleSave() {
     if (form.id) { await updateReturnSort(form.id, data); ElMessage.success('已更新') }
     else { await createReturnSort(data); ElMessage.success('已新增') }
     // 置脏标志：列表页 onActivated 会重拉「待整理总览 + 整理单列表」（keep-alive 复用下 onMounted 不触发）
-    sessionStorage.setItem(INVENTORY_RETURN_SORT_DIRTY_KEY, '1')
+    invalidate('returnSort')
     // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
     markClean()
     tabStore.closeTabAndBack(route.path)
@@ -261,7 +262,7 @@ watch(() => route.fullPath, async () => { await init(); takeBaseline() })
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="源仓库" required>
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">

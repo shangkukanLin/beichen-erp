@@ -9,6 +9,7 @@ import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const id = Number(route.params.id) || 0
@@ -175,7 +176,7 @@ async function handleSave() {
       }))
     })
     ElMessage.success('已保存')
-    sessionStorage.setItem(INVENTORY_OTHER_IO_DIRTY_KEY, '1')
+    invalidate('inventoryOtherIo')
     await loadDetail()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
@@ -185,7 +186,7 @@ async function handleSave() {
  * 这样返回列表时列表会重新拉取，不会出现「详情已审核、列表还显示未审核」。
  */
 async function afterStatusChange() {
-  sessionStorage.setItem(INVENTORY_OTHER_IO_DIRTY_KEY, '1')
+  invalidate('inventoryOtherIo')
   await loadDetail()
 }
 async function handleAudit() {
@@ -233,7 +234,7 @@ onActivated(() => { loadDetail() })
 
       <el-form v-if="isDraft" :model="editForm" label-width="80px" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="仓库" required><RemoteSelect v-model="editForm.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="仓库" required><RemoteSelect v-model="editForm.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="editForm.ioType" style="width:100%" @change="onIoTypeChange"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="editForm.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
@@ -264,7 +265,7 @@ onActivated(() => { loadDetail() })
       <el-table v-if="isDraft" :data="editItems" border size="small">
         <el-table-column label="成品名称" min-width="180">
           <template #default="{row,$index}">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" />
+            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" domain="product" />
           </template>
         </el-table-column>
         <el-table-column label="单位" width="80">

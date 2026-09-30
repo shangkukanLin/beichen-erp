@@ -3,6 +3,7 @@ import { ref, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { invalidate } from '@/utils/dataFreshness'
 // 2026-09-20（F7-157）：详情页的保存原为页内直接 request.put('/inventory/purchase-return/{id}') ⇒ 统一走 API 封装
 import { getPurchaseReturn, getPurchaseReturnItems, getPurchaseReturnPurchaseOrderItems, auditPurchaseReturn, cancelPurchaseReturn, unAuditPurchaseReturn, updatePurchaseReturn, ReturnStatus, ReturnStatusLabel, type PurchaseReturn, type PurchaseReturnItem } from '@/api/purchase'
 import { PURCHASE_RETURN_DIRTY_KEY, PurchaseChargeType, PurchaseChargeTypeLabel } from '@/api/enums'
@@ -75,7 +76,7 @@ async function handleAudit() {
     await ElMessageBox.confirm(`确认审核退货单「${detail.value.code}」？审核后出库减库存并冲减应付账款。`, '确认审核', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await auditPurchaseReturn(id)
     ElMessage.success('已审核')
-    sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
+    invalidate('purchaseReturn')
     loadData()
   } catch { /* */ }
 }
@@ -85,7 +86,7 @@ async function handleUnAudit() {
     await ElMessageBox.confirm(`确认反审核退货单「${detail.value.code}」？反审核后恢复库存、清除应付台账，回到草稿状态。`, '确认反审核', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await unAuditPurchaseReturn(id)
     ElMessage.success('已反审核')
-    sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
+    invalidate('purchaseReturn')
     loadData()
   } catch { /* */ }
 }
@@ -95,7 +96,7 @@ async function handleCancel() {
     await ElMessageBox.confirm(`确认作废退货单「${detail.value.code}」？`, '确认作废', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await cancelPurchaseReturn(id)
     ElMessage.success('已作废')
-    sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
+    invalidate('purchaseReturn')
     loadData()
   } catch { /* */ }
 }
@@ -185,7 +186,7 @@ async function handleSave() {
     }
     await updatePurchaseReturn(Number(id), payload)
     ElMessage.success('已保存')
-    sessionStorage.setItem(PURCHASE_RETURN_DIRTY_KEY, '1')
+    invalidate('purchaseReturn')
     loadData()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) }
   finally { saving.value = false }

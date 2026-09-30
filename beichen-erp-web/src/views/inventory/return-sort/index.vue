@@ -15,6 +15,7 @@ import {
   getReturnSortPage, auditReturnSort, cancelReturnSort, deleteReturnSort,
   getReturnSortPendingOverview, batchCreateReturnSortDrafts, type ReturnSortPendingRow,
 } from '@/api/inventory'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 const route = useRoute()
 const router = useRouter()
 
@@ -302,13 +303,10 @@ onMounted(async () => {
 })
 // 2026-09-20（F7-174）：本路由在 keep-alive 内 ⇒ 从新增/编辑页返回时组件被复用、onMounted 不再触发，
 // 列表会停留在旧数据。改为按需刷新：写操作页（form.vue 的独立模式）保存成功后置脏标志，回列表才拉一次。
-onActivated(() => {
-  if (sessionStorage.getItem(INVENTORY_RETURN_SORT_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(INVENTORY_RETURN_SORT_DIRTY_KEY)
+useDomainRefresh('returnSort', () => {
     loadData()
     loadOverview()
-  }
-})
+}, INVENTORY_RETURN_SORT_DIRTY_KEY)
 </script>
 
 <template>
@@ -516,7 +514,7 @@ onActivated(() => {
             <el-form :inline="true" :model="query" class="query-form">
               <el-form-item label="单号"><el-input v-model="query.code" placeholder="单号" clearable @keyup.enter="handleQuery" /></el-form-item>
               <el-form-item label="源仓库">
-                <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" />
+                <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" domain="warehouse" />
               </el-form-item>
               <el-form-item label="状态">
                 <el-select v-model="query.status" placeholder="全部" clearable style="width:120px">

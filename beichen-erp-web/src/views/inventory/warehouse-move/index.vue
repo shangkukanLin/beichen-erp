@@ -9,10 +9,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="移出仓">
-          <RemoteSelect v-model="query.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" />
+          <RemoteSelect v-model="query.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" domain="warehouse" />
         </el-form-item>
         <el-form-item label="移入仓">
-          <RemoteSelect v-model="query.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" />
+          <RemoteSelect v-model="query.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" domain="warehouse" />
         </el-form-item>
         </el-form>
         <div class="toolbar">
@@ -82,6 +82,7 @@ import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import EntityLinks from '@/components/EntityLinks.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const route = useRoute()
@@ -174,13 +175,10 @@ async function handleCancel(row: any) {
   } catch { /* 已由 request 拦截器提示 */ }
 }
 
-onActivated(() => {
-  // 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY)
+// 新增/编辑页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('warehouseMove', () => {
     loadData()
-  }
-})
+}, INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY)
 onMounted(async () => {
   await loadWarehouses()
   loadData().then(() => {

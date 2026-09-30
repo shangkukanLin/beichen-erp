@@ -9,6 +9,7 @@ import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 // 用 computed 取路由参数：keep-alive 会复用组件，从单据 A 跳到 B 时 route.params.id 会变
@@ -171,7 +172,7 @@ async function handleSave() {
       }))
     })
     ElMessage.success('已保存')
-    sessionStorage.setItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY, '1')
+    invalidate('warehouseMove')
     await loadDetail()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
@@ -181,7 +182,7 @@ async function handleSave() {
  * 返回列表时列表会重新拉取，不会出现「详情已审核、列表还显示未审核」。
  */
 async function afterStatusChange() {
-  sessionStorage.setItem(INVENTORY_WAREHOUSE_MOVE_DIRTY_KEY, '1')
+  invalidate('warehouseMove')
   await loadDetail()
 }
 async function handleAudit() {
@@ -229,12 +230,12 @@ onActivated(() => { loadDetail() })
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="移出仓库" required>
-              <RemoteSelect v-model="editForm.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" @update:modelValue="onFromWarehouseChange" />
+              <RemoteSelect v-model="editForm.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" @update:modelValue="onFromWarehouseChange" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="移入仓库" required>
-              <RemoteSelect v-model="editForm.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" />
+              <RemoteSelect v-model="editForm.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="12"><el-form-item label="移仓日期"><el-input v-model="editForm.moveDate" type="date" /></el-form-item></el-col>
@@ -275,7 +276,7 @@ onActivated(() => { loadDetail() })
         </el-table-column>
         <el-table-column label="产品" min-width="200">
           <template #default="{ row }">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
+            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" domain="product" />
           </template>
         </el-table-column>
         <el-table-column label="单位" width="70">

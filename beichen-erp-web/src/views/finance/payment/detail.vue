@@ -181,7 +181,7 @@ function back() { router.push('/finance/payment') }
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[detail.status ?? 0] || detail.status }}</el-tag></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="供应商" required>
-            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => loadUnpaid()" />
+            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => loadUnpaid()" domain="supplier" />
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="主体类型">
             <el-tag v-if="detail.supplierType" :type="TYPE_TAG[detail.supplierType] || 'info'" size="small">{{ typeLabel(detail.supplierType) }}</el-tag>

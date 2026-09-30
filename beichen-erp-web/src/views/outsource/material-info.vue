@@ -231,9 +231,9 @@ onMounted(async () => {
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
-        <el-form-item required label="物料类型"><RemoteSelect v-model="form.materialTypeId" :fetch="fetchMaterialTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" /></el-form-item>
+        <el-form-item required label="物料类型"><RemoteSelect v-model="form.materialTypeId" :fetch="fetchMaterialTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" domain="materialType" /></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
-        <el-form-item label="供应商"><RemoteSelect v-model="form.supplierIdArr" multiple :fetch="fetchSuppliers" placeholder="可多选" style="width:100%" @change="onSupplierChange"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
+        <el-form-item label="供应商"><RemoteSelect v-model="form.supplierIdArr" multiple :fetch="fetchSuppliers" placeholder="可多选" style="width:100%" @change="onSupplierChange" domain="supplier" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
         <el-form-item label="单价"><el-input-number v-model="form.price" :precision="2" :min="0" controls-position="right" style="width:100%" placeholder="可选" /></el-form-item>
 

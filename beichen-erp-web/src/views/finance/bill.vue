@@ -3,6 +3,7 @@ import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBillPage, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill } from '@/api/finance'
+import { invalidate, useDomainRefresh } from '@/utils/dataFreshness'
 // F7-246④（2026-09-29 批 D）：移除未使用的 sourceBillTypeLabel（死导入；列表无「来源类型」列）
 import { BillType, BillTypeLabel, FINANCE_BILL_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
@@ -79,16 +80,13 @@ async function loadData() {
  * 脏标志供从其它页面切回本页时按需刷新——只在有变动时才刷，避免每次切换菜单都重新请求。
  */
 function afterChange() {
-  sessionStorage.setItem(FINANCE_BILL_DIRTY_KEY, '1')
+  invalidate('bill')
   loadData()
 }
 onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); loadData() })
-onActivated(() => {
-  if (sessionStorage.getItem(FINANCE_BILL_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(FINANCE_BILL_DIRTY_KEY)
+useDomainRefresh('bill', () => {
     loadData()
-  }
-})
+}, FINANCE_BILL_DIRTY_KEY)
 
 function query_() { page.pageNum = 1; loadData() }
 /**

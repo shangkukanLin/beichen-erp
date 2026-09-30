@@ -20,6 +20,7 @@ import PageShell from '@/components/PageShell.vue'
 import { useTabStore } from '@/stores/tabs'
 import { applyPageTitle } from '@/utils/pageTitle'
 import { OUTSOURCE_RETURN_ORDER_DIRTY_KEY } from '@/api/enums'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -104,7 +105,7 @@ async function submit() {
       bomSnapshotId: form.bomSnapshotId || undefined
     })
     ElMessage.success('加工退货草稿已保存，请在「工厂售后」列表审核')
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
     router.replace('/outsource/return-order/unlinked')
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
 }
@@ -141,19 +142,19 @@ onMounted(() => {
           <el-col :span="8">
             <el-form-item required label="加工厂">
               <RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" :label-key="(row:any)=>row.name"
-                style="width:100%" placeholder="加工厂（还料/应付对象）" @update:model-value="loadSnapshots" />
+                style="width:100%" placeholder="加工厂（还料/应付对象）" @update:model-value="loadSnapshots" domain="vendor" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item required label="扣减成品仓">
               <RemoteSelect v-model="form.warehouseId" :fetch="fetchFinishedWarehouses"
-                :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" />
+                :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item required label="产品">
               <RemoteSelect v-model="form.productMasterId" :fetch="fetchProducts" :label-key="(row:any)=>row.name"
-                style="width:100%" placeholder="选择产品" @update:model-value="loadSnapshots" />
+                style="width:100%" placeholder="选择产品" @update:model-value="loadSnapshots" domain="product" />
             </el-form-item>
           </el-col>
         </el-row>

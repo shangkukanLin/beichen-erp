@@ -84,6 +84,7 @@ import request from '@/utils/request'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
+import { invalidate } from '@/utils/dataFreshness'
 
 defineOptions({ name: 'InventoryMaterialMoveAdd' })
 
@@ -199,7 +200,7 @@ async function handleSubmit() {
     if (isEdit.value) await request.put(`/inventory/material-move/${editId.value}`, payload)
     else await request.post('/inventory/material-move', payload)
     ElMessage.success('已保存')
-    sessionStorage.setItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY, '1')
+    invalidate('materialMove')
     markClean()
     tabStore.closeTabAndBack(route.path)
     router.push('/inventory/material-move')

@@ -4,10 +4,10 @@
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="仓库">
-          <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:160px" />
+          <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:160px" domain="warehouse" />
         </el-form-item>
         <el-form-item label="产品">
-          <RemoteSelect v-model="query.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="全部（可输SKU）" style="width:200px" @pick="(rows:any[])=>onProductPick(rows[0])" />
+          <RemoteSelect v-model="query.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="全部（可输SKU）" style="width:200px" @pick="(rows:any[])=>onProductPick(rows[0])" domain="product" />
         </el-form-item>
         <el-form-item label="变动类型">
           <el-select v-model="query.changeType" placeholder="全部" clearable filterable style="width:160px">

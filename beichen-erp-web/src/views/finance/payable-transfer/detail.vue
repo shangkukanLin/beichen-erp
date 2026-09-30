@@ -6,6 +6,7 @@ import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag, PAYABLE_TRANSFER_DIRTY_KEY } from '@/api/enums'
 import { TYPE_MAP, TYPE_TAG } from '@/constants/supplier'
 import PageShell from '@/components/PageShell.vue'
+import { invalidate } from '@/utils/dataFreshness'
 
 /**
  * 转应收单详情（2026-09-24 用户口径：草稿态就地可编辑）
@@ -60,7 +61,7 @@ async function onSave() {
       transferDate: form.value.transferDate,
       remark: form.value.remark
     })
-    sessionStorage.setItem(PAYABLE_TRANSFER_DIRTY_KEY, '1')
+    invalidate('payableTransfer')
     ElMessage.success('已保存')
     await load()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
@@ -71,7 +72,7 @@ async function onAudit() {
   try {
     await request.put(`/finance/payable-transfer/${id}/audit`)
     ElMessage.success('已审核，已生成应收')
-    sessionStorage.setItem(PAYABLE_TRANSFER_DIRTY_KEY, '1')
+    invalidate('payableTransfer')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
@@ -80,7 +81,7 @@ async function onUnAudit() {
   try {
     await request.put(`/finance/payable-transfer/${id}/un-audit`)
     ElMessage.success('已反审核')
-    sessionStorage.setItem(PAYABLE_TRANSFER_DIRTY_KEY, '1')
+    invalidate('payableTransfer')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
@@ -89,7 +90,7 @@ async function onCancel() {
   try {
     await request.put(`/finance/payable-transfer/${id}/cancel`)
     ElMessage.success('已作废')
-    sessionStorage.setItem(PAYABLE_TRANSFER_DIRTY_KEY, '1')
+    invalidate('payableTransfer')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }

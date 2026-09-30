@@ -48,6 +48,7 @@ import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import EntityLinks from '@/components/EntityLinks.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_RETURN_ORDER_DIRTY_KEY, OutsourceChargeTypeLabel, OutsourceReturnType, OutsourceReturnTypeLabel } from '@/api/enums'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -324,13 +325,10 @@ watch(leaf, (lv) => {
   loadCounts()
 })
 
-onActivated(() => {
-  // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY)
+// 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('outsourceReturnOrder', () => {
     reloadCurrent()
-  }
-})
+}, OUTSOURCE_RETURN_ORDER_DIRTY_KEY)
 onMounted(() => {
   activeTab.value = TABS[leaf.value][0].key
   loadCurrent()
@@ -360,7 +358,7 @@ onMounted(() => {
         <el-input v-model="filters.code" :placeholder="codePlaceholder" clearable
           style="width:220px" @keyup.enter="handleSearch" />
         <RemoteSelect v-model="filters.factoryId" :fetch="fetchFactories" value-key="id" label-key="name"
-          placeholder="加工厂" style="width:240px" disable-cache />
+          placeholder="加工厂" style="width:240px" disable-cache domain="vendor" />
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
         <!-- 新增按钮随叶子切换（一页一个新增入口，2026-09-28：关联退货叶子也补齐入口） -->

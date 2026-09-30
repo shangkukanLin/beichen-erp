@@ -200,7 +200,7 @@ onMounted(async () => { await loadAll(); refreshChecks() })
       </el-alert>
       <el-form label-width="90px">
         <el-form-item label="退回目标仓" required>
-          <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择我方仓库" style="width:100%" />
+          <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择我方仓库" style="width:100%" domain="warehouse" />
         </el-form-item>
       </el-form>
       <template #footer><el-button @click="returnVisible=false">取消</el-button><el-button type="warning" :loading="returnSaving" @click="handleReturn">确认退料</el-button></template>

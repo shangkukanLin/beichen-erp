@@ -6,6 +6,7 @@ import { DocStatus, DocStatusLabel, DocStatusTag, PURCHASE_EXCHANGE_DIRTY_KEY } 
 import {
   getPurchaseExchangePage, auditPurchaseExchange, unAuditPurchaseExchange, cancelPurchaseExchange,
 } from '@/api/purchase'
+import { invalidate, useDomainRefresh } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -35,12 +36,9 @@ onMounted(async () => {
     router.replace(`/inventory/purchase-exchange/add?fromOrder=${poId}`)
   }
 })
-onActivated(() => {
-  if (sessionStorage.getItem(PURCHASE_EXCHANGE_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(PURCHASE_EXCHANGE_DIRTY_KEY)
+useDomainRefresh('purchaseExchange', () => {
     loadData()
-  }
-})
+}, PURCHASE_EXCHANGE_DIRTY_KEY)
 
 // ============ 跳转 ============
 function goAdd() { router.push('/inventory/purchase-exchange/add') }
@@ -65,7 +63,7 @@ async function handleAudit(row: any) {
       '审核确认', { type: 'warning' })
   } catch { return }
   await auditPurchaseExchange(row.id)
-  ElMessage.success('已审核'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
+  ElMessage.success('已审核'); invalidate('purchaseExchange'); loadData()
 }
 async function handleUnAudit(row: any) {
   const feeText = Number(row.chargeFlag) === 1 ? '（含付费台账）' : ''
@@ -73,14 +71,14 @@ async function handleUnAudit(row: any) {
     await ElMessageBox.confirm(`确认反审核「${row.code}」？将回滚退回与换入的库存，并作废应付台账${feeText}。`, '提示', { type: 'warning' })
   } catch { return }
   await unAuditPurchaseExchange(row.id)
-  ElMessage.success('已反审核'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
+  ElMessage.success('已反审核'); invalidate('purchaseExchange'); loadData()
 }
 async function handleCancel(row: any) {
   try {
     await ElMessageBox.confirm(`确认作废换货单「${row.code}」？作废后单据留痕，不可恢复。`, '提示', { type: 'warning' })
   } catch { return }
   await cancelPurchaseExchange(row.id)
-  ElMessage.success('已作废'); sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1'); loadData()
+  ElMessage.success('已作废'); invalidate('purchaseExchange'); loadData()
 }
 </script>
 

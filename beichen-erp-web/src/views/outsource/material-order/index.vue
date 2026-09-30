@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import EntityLinks from '@/components/EntityLinks.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 // F7-136（2026-09-20）：原函数名为 typeName 却 `String(id ?? '')` ⇒ 物料 tooltip 显示的是**类型数字 ID**。
@@ -63,13 +64,10 @@ function handleDownloadContract(row: any) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a)
 }
 onMounted(() => { loadData() })
-onActivated(() => {
-  // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY)
+// 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('materialOrder', () => {
     loadData()
-  }
-})
+}, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY)
 
 </script>
 

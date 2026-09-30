@@ -14,7 +14,7 @@
               <!-- RemoteSelect 的 update:model-value 只回传值，选中项需通过 pick 事件取（否则拿不到单号/仓库） -->
               <RemoteSelect :model-value="form.supplierId" :fetch="fetchSuppliers"
                 label-key="name" placeholder="选择供货商" :disabled="isEdit" style="width:100%"
-                @update:model-value="(v:any)=>{ form.supplierId = v; form.purchaseOrderId = null; form.purchaseOrderCode = ''; items = [] }" />
+                @update:model-value="(v:any)=>{ form.supplierId = v; form.purchaseOrderId = null; form.purchaseOrderCode = ''; items = [] }" domain="supplier" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -24,7 +24,7 @@
               <RemoteSelect :model-value="form.purchaseOrderId" :fetch="fetchPurchaseOrders"
                 label-key="code" placeholder="可不选（不选则手工录入明细）" :disabled="isEdit" style="width:100%"
                 @update:model-value="(v:any)=>{ form.purchaseOrderId = v ?? null }"
-                @pick="(opts:any[])=>{ onPurchaseOrderChange(form.purchaseOrderId, opts?.[0]) }" />
+                @pick="(opts:any[])=>{ onPurchaseOrderChange(form.purchaseOrderId, opts?.[0]) }" domain="purchaseOrder" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -35,13 +35,13 @@
           <el-col :span="8">
             <el-form-item label="退回出库仓" required>
               <RemoteSelect v-model="form.warehouseOutId" :fetch="fetchFinishedWarehouses"
-                label-key="warehouseName" placeholder="退给供货商，从我方仓扣减" style="width:100%" />
+                label-key="warehouseName" placeholder="退给供货商，从我方仓扣减" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="换入入库仓" required>
               <RemoteSelect v-model="form.warehouseInId" :fetch="fetchFinishedWarehouses"
-                label-key="warehouseName" placeholder="换回良品入我方仓（可与退回仓相同）" style="width:100%" />
+                label-key="warehouseName" placeholder="换回良品入我方仓（可与退回仓相同）" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -202,6 +202,7 @@ import {
   WarehouseType, WarehouseCategory, PurchaseChargeType, PurchaseChargeTypeLabel,
   PURCHASE_EXCHANGE_DIRTY_KEY,
 } from '@/api/enums'
+import { invalidate } from '@/utils/dataFreshness'
 // 产品下拉（无单换货手工加行时用）：与采购退货同款 productLabel（"SKU | 名称"）
 import { productLabel } from '@/api/product'
 import {
@@ -479,7 +480,7 @@ async function submit() {
     if (isEdit.value) {
       await updatePurchaseExchange(form.id!, body)
       ElMessage.success('已保存')
-      sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+      invalidate('purchaseExchange')
       // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签
       markClean()
       tabStore.closeTabAndBack(route.path)
@@ -487,7 +488,7 @@ async function submit() {
     } else {
       await createPurchaseExchange(body)
       ElMessage.success('已新增')
-      sessionStorage.setItem(PURCHASE_EXCHANGE_DIRTY_KEY, '1')
+      invalidate('purchaseExchange')
       markClean()
       tabStore.closeTabAndBack(route.path)
       router.push('/inventory/purchase-exchange')

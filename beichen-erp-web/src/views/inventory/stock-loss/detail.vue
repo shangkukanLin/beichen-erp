@@ -29,7 +29,7 @@
           <el-form-item label="仓库" required>
             <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses"
               :label-key="(row:any)=>row.warehouseName" placeholder="选择报损仓库" style="width:240px"
-              @change="onWarehouseChange" />
+              @change="onWarehouseChange" domain="warehouse" />
           </el-form-item>
           <el-form-item label="报损日期">
             <el-date-picker v-model="form.lossDate" type="date" value-format="YYYY-MM-DD" style="width:180px" />
@@ -52,7 +52,7 @@
           </el-form-item>
           <el-form-item v-if="form.liableParty === LiableParty.SUPPLIER" label="承担方" required>
             <RemoteSelect v-model="form.liableSupplierId" :fetch="fetchSuppliers"
-              :label-key="(row:any)=>row.name" placeholder="选择供应商/加工厂" style="width:220px" />
+              :label-key="(row:any)=>row.name" placeholder="选择供应商/加工厂" style="width:220px" domain="supplier" />
           </el-form-item>
           <el-form-item label="备注">
             <el-input v-model="form.remark" placeholder="选填" style="width:320px" />
@@ -76,7 +76,7 @@
             <template #default="{ row }">
               <RemoteSelect v-model="row.productId" :fetch="fetchProducts"
                 :label-key="(r:any)=>r.name || r.productName" placeholder="选择产品" style="width:100%"
-                @pick="(rows:any[])=>onProductPick(rows[0], row)" />
+                @pick="(rows:any[])=>onProductPick(rows[0], row)" domain="product" />
             </template>
           </el-table-column>
           <el-table-column label="SKU" width="130">
@@ -212,6 +212,7 @@ import {
   DocStatus, DocStatusLabel, DocStatusTag, LossReasonLabel, LiableParty, LiablePartyLabel, ProductQualityTypeLabel,
   WarehouseCategory, WarehouseType, ProductQualityType, codeLabelOptions, INVENTORY_STOCK_LOSS_DIRTY_KEY
 } from '@/api/enums'
+import { invalidate } from '@/utils/dataFreshness'
 
 /**
  * 成品报损单详情（2026-09-24 用户口径：草稿态就地可编辑）
@@ -382,7 +383,7 @@ async function onSave() {
         remark: i.remark
       }))
     })
-    sessionStorage.setItem(INVENTORY_STOCK_LOSS_DIRTY_KEY, '1')
+    invalidate('stockLoss')
     ElMessage.success('已保存')
     await load()
   } catch (e: any) {
@@ -397,7 +398,7 @@ async function onAudit() {
   try {
     await request.put(`/inventory/stock-loss/${id}/audit`)
     ElMessage.success('已审核，库存已扣减')
-    sessionStorage.setItem(INVENTORY_STOCK_LOSS_DIRTY_KEY, '1')
+    invalidate('stockLoss')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
@@ -409,7 +410,7 @@ async function onUnAudit() {
   try {
     await request.put(`/inventory/stock-loss/${id}/un-audit`)
     ElMessage.success('已反审核，库存已加回')
-    sessionStorage.setItem(INVENTORY_STOCK_LOSS_DIRTY_KEY, '1')
+    invalidate('stockLoss')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
@@ -421,7 +422,7 @@ async function onCancel() {
   try {
     await request.put(`/inventory/stock-loss/${id}/cancel`)
     ElMessage.success('已作废')
-    sessionStorage.setItem(INVENTORY_STOCK_LOSS_DIRTY_KEY, '1')
+    invalidate('stockLoss')
     load()
   } catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }

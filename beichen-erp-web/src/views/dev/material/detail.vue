@@ -7,6 +7,7 @@ import { WarehouseCategory, WarehouseCategoryLabel, MaterialPlaceType, MaterialP
 import request from '@/utils/request'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const materialId = Number(route.params.id)
@@ -47,7 +48,7 @@ async function handleSaveMaterial() {
       status: material.status, remark: material.remark
     }
     await request.put(`/dev/purchase-item/${material.id}`, payload)
-    ElMessage.success('已保存'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
+    ElMessage.success('已保存'); invalidate('devMaterial')
     takeBaseline()   // 保存成功 ⇒ 重建基线（本页保存不重跑 loadMaterialDetail），避免离开时误报"未保存"
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '')) } finally { saving.value = false }
 }
@@ -139,10 +140,10 @@ async function handleFlowSubmit() {
   try {
     if (isFlowEdit.value && flowForm.id) {
       await request.put(`/dev/material-flow/${flowForm.id}`, payload)
-      ElMessage.success('已更新'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
+      ElMessage.success('已更新'); invalidate('devMaterial')
     } else {
       await request.post('/dev/material-flow', payload)
-      ElMessage.success('已添加'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
+      ElMessage.success('已添加'); invalidate('devMaterial')
     }
     flowDialogVisible.value = false
     loadFlowList()
@@ -153,7 +154,7 @@ async function handleDeleteFlow(row: FlowRecord) {
   try {
     await ElMessageBox.confirm('确定删除该流转记录吗？', '提示', { type: 'warning' })
     await request.delete(`/dev/material-flow/${row.id}`)
-    ElMessage.success('已删除'); sessionStorage.setItem(DEV_MATERIAL_DIRTY_KEY, '1')
+    ElMessage.success('已删除'); invalidate('devMaterial')
     loadFlowList()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }

@@ -13,6 +13,7 @@ import { getProjectBom } from '@/api/system'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const route = useRoute()
@@ -183,7 +184,7 @@ async function handleSubmit() {
     })
     await request.post('/outsource/order', { ...cleanForm, products: submitProducts })
     ElMessage.success('加工单已新增')
-    sessionStorage.setItem(OUTSOURCE_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceOrder')
     // 重置表单，避免 keep-alive 缓存残留数据
     Object.assign(form, { factoryId: undefined, supplyMode: 'OURS', planStartDate: '', planEndDate: '', taxIncluded: 0, taxRate: '', remark: '', attachUrl: '', logisticsCompany: '', logisticsNo: '' })
     products.value = []
@@ -294,7 +295,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">基础信息</span></template>
       <el-form :model="form" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="16">
-          <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择" @update:modelValue="onFactoryChangeProxy"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" placeholder="请选择" @update:modelValue="onFactoryChangeProxy" domain="supplier" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="供料模式"><el-select v-model="form.supplyMode" style="width:100%" @change="onSupplyModeChange"><el-option v-for="m in SUPPLY_MODE_OPTIONS" :key="m.value" :label="m.label" :value="m.value" /></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
@@ -315,7 +316,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       </template>
       <el-form :model="p" label-width="var(--app-label-width)" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.productName || row.name" placeholder="选择产品" @update:modelValue="(v:any)=>onProjectSelectProxy(pi, v)"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.productName || row.name" placeholder="选择产品" @update:modelValue="(v:any)=>onProjectSelectProxy(pi, v)" domain="devProject" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item></el-col>
           <el-col :span="5"><el-form-item label="数量"><el-input-number v-model="p.quantity" :controls="false" :precision="0" :step="1" style="width:100%" @change="onQuantityChange(pi)" /></el-form-item></el-col>
           <el-col :span="5"><el-form-item :label="form.supplyMode==='FACTORY' ? '包工包料单价' : '加工单价'"><el-input v-model="p.unitPrice" type="number" @change="calcAmount(pi)" /></el-form-item></el-col>
           <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>

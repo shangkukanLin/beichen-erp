@@ -24,6 +24,7 @@ import {
 import { SUPER_ADMIN_ROLE_CODE } from '@/constants/system'
 import { SYSTEM_USER_DIRTY_KEY } from '@/api/enums'
 import { useUserStore } from '@/stores/user'
+import { invalidate, useDomainRefresh } from '@/utils/dataFreshness'
 
 const userStore = useUserStore()
 
@@ -228,7 +229,7 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
-      sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
+      invalidate('user')
       loadData()
     } catch {
       // 错误已在拦截器中提示
@@ -254,7 +255,7 @@ async function handleDelete(row: UserVO) {
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--
     }
-    sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
+    invalidate('user')
     loadData()
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
@@ -273,7 +274,7 @@ async function handleToggleStatus(row: UserVO) {
   try {
     await toggleUserStatus(row.id as number | string, next)
     ElMessage.success(`${action}成功`)
-    sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
+    invalidate('user')
     loadData()
   } catch (e: any) { ElMessage.error(e?.message || `${action}失败`) }
 }
@@ -388,7 +389,7 @@ async function handleSavePerm() {
       ElMessage.success('自定义页面权限已保存')
     }
     // 2026-09-20（F7-184）：权限变化置脏，切回本页时刷新一次
-    sessionStorage.setItem(SYSTEM_USER_DIRTY_KEY, '1')
+    invalidate('user')
     permDialogVisible.value = false
     loadData()
   } catch {
@@ -422,12 +423,9 @@ onMounted(() => {
   loadData()
 })
 // 2026-09-20（F7-184）：本路由在 keep-alive 内 ⇒ 切回 Tab 时 onMounted 不再触发；按需刷新（脏标志由本页写操作置位）
-onActivated(() => {
-  if (sessionStorage.getItem(SYSTEM_USER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(SYSTEM_USER_DIRTY_KEY)
+useDomainRefresh('user', () => {
     loadData()
-  }
-})
+}, SYSTEM_USER_DIRTY_KEY)
 
 </script>
 

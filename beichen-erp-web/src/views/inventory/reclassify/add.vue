@@ -11,6 +11,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute(); const router = useRouter()
 const tabStore = useTabStore()
@@ -95,7 +96,7 @@ async function handleSubmit() {
       })) as ReclassifyItem[]
     })
     ElMessage.success('已保存（待审核）')
-    sessionStorage.setItem(INVENTORY_RECLASSIFY_DIRTY_KEY, '1')
+    invalidate('reclassify')
     // 保存成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本页签回列表
     markClean()
     tabStore.closeTabAndBack(route.path)
@@ -138,7 +139,7 @@ onActivated(() => { resetPage(); takeBaseline() })
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="仓库" required>
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择仓库" style="width:100%" @update:modelValue="onWarehouseChange" />
+              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择仓库" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.reclassifyDate" type="date" /></el-form-item></el-col>
@@ -163,7 +164,7 @@ onActivated(() => { resetPage(); takeBaseline() })
         </el-table-column>
         <el-table-column label="产品" min-width="200">
           <template #default="{ row }">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" />
+            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" domain="product" />
           </template>
         </el-table-column>
         <el-table-column label="原品质" width="110">

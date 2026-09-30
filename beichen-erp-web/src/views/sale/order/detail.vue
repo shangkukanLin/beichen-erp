@@ -18,6 +18,7 @@ import {
   SaleReturnStatus, SaleReturnStatusLabel,
   type SaleOrder, type SaleOrderItem
 } from '@/api/sale'
+import { invalidate } from '@/utils/dataFreshness'
 const route = useRoute()
 const router = useRouter()
 const tabStore = useTabStore()
@@ -288,7 +289,7 @@ async function doSubmit() {
     const payload = { order: { ...form }, items: items.value }
     await updateSaleOrder(orderId, payload)
     ElMessage.success('已保存')
-    sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1')
+    invalidate('saleOrder')
     await loadData()
   } catch { } finally { submitLoading.value = false }
 }
@@ -307,19 +308,19 @@ async function handleAudit() {
       }
     }
     await ElMessageBox.confirm(`确认审核销售单「${head.value.code}」？审核后将直接出库并生成应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await auditSaleOrder(orderId); ElMessage.success('已审核'); sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1'); loadData()
+    await auditSaleOrder(orderId); ElMessage.success('已审核'); invalidate('saleOrder'); loadData()
   } catch { }
 }
 async function handleCancel() {
   try {
     await ElMessageBox.confirm(`确认作废销售单「${head.value.code}」？`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await cancelSaleOrder(orderId); ElMessage.success('已作废'); sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1'); loadData()
+    await cancelSaleOrder(orderId); ElMessage.success('已作废'); invalidate('saleOrder'); loadData()
   } catch { }
 }
 async function handleUnAudit() {
   try {
     await ElMessageBox.confirm(`确认反审核销售单「${head.value.code}」？将冲回出库与应收。`, '提示', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
-    await unAuditSaleOrder(orderId); ElMessage.success('已反审核'); sessionStorage.setItem(SALE_ORDER_DIRTY_KEY, '1'); loadData()
+    await unAuditSaleOrder(orderId); ElMessage.success('已反审核'); invalidate('saleOrder'); loadData()
   } catch { }
 }
 
@@ -366,14 +367,14 @@ onActivated(async () => { await loadData(); takeBaseline() })
           <el-row :gutter="16">
             <el-col :span="12">
               <el-form-item label="客户" prop="customerId">
-                <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer/add'); return } }">
+                <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer/add'); return } }" domain="customer" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item label="出库仓库" prop="warehouseId">
-                <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }">
+                <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.warehouseId = undefined; router.push('/inventory/warehouse'); return } }" domain="warehouse" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </el-form-item>
@@ -446,7 +447,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
               <template #default="{ row }">
                 <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）"
                   :preset="{ id: row.productId, name: row.productName, sku: row.sku }"
-                  style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onProductChange(v, row) }">
+                  style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onProductChange(v, row) }" domain="product" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>

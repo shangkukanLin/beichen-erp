@@ -10,7 +10,7 @@
         <el-form-item label="仓库" required>
           <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses"
             :label-key="(row:any)=>row.warehouseName" placeholder="选择报损仓库" style="width:240px"
-            @change="onWarehouseChange" />
+            @change="onWarehouseChange" domain="warehouse" />
         </el-form-item>
         <el-form-item label="报损日期">
           <el-date-picker v-model="form.lossDate" type="date" value-format="YYYY-MM-DD" style="width:180px" />
@@ -33,7 +33,7 @@
         </el-form-item>
         <el-form-item v-if="form.liableParty === LiableParty.SUPPLIER" label="承担方" required>
           <RemoteSelect v-model="form.liableSupplierId" :fetch="fetchSuppliers"
-            :label-key="(row:any)=>row.name" placeholder="选择加工厂/供应商" style="width:220px" />
+            :label-key="(row:any)=>row.name" placeholder="选择加工厂/供应商" style="width:220px" domain="supplier" />
         </el-form-item>
         <el-form-item label="备注">
           <el-input v-model="form.remark" placeholder="选填" style="width:320px" />
@@ -54,7 +54,7 @@
           <template #default="{ row }">
             <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials"
               :label-key="(r:any)=>r.materialName" placeholder="选择物料" style="width:100%"
-              @pick="(rows:any[])=>onMaterialPick(rows[0], row)" />
+              @pick="(rows:any[])=>onMaterialPick(rows[0], row)" domain="material" />
           </template>
         </el-table-column>
         <el-table-column label="物料类型" width="120">

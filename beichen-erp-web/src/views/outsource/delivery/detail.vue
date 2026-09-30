@@ -8,6 +8,7 @@ import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute(); const router = useRouter()
 const loading = ref(true); const saving = ref(false)
@@ -96,7 +97,7 @@ async function handleSave() {
     if (uploadFile.value) { const fd = new FormData(); fd.append('file', uploadFile.value); const res = await request.post<any,string>('/dev/file/upload', fd); form.attachUrl = res as unknown as string }
     const body = { ...form, items: items.value }
     await request.put(`/outsource/delivery/${form.id}`, body)
-    ElMessage.success('已保存，库存已同步'); await loadData(); takeBaseline(); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
+    ElMessage.success('已保存，库存已同步'); await loadData(); takeBaseline(); invalidate('outsourceDelivery')
   } finally { saving.value = false }
 }
 
@@ -110,7 +111,7 @@ async function handleDeleteAttach() {
   try {
     await ElMessageBox.confirm('确定删除附件吗？删除后将无法恢复。', '删除附件', { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' })
     await request.delete(`/outsource/delivery/${form.id}/attach`)
-    ElMessage.success('附件已删除'); sessionStorage.setItem(OUTSOURCE_DELIVERY_DIRTY_KEY, '1')
+    ElMessage.success('附件已删除'); invalidate('outsourceDelivery')
     await loadData()
   } catch (e: any) {
     // F7-134（2026-09-20）：原为 `/* 取消 */` 空吞 ⇒ "用户取消"与"请求失败"不分。用户取消无需提示；
@@ -141,7 +142,7 @@ onActivated(async ()=>{ await loadData(); takeBaseline() })
             <el-tag>{{ DeliveryTypeLabel[form.deliveryType] || form.deliveryType }}</el-tag>
             <span v-if="!isManualType" style="margin-left:6px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">系统自动生成 / 已下线（仅查看）</span>
           </el-form-item></el-col>
-          <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="收货工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" :preset="{ id: form.factoryId, name: form.factoryName }" :disabled="readonly" style="width:100%" placeholder="选择收货工厂" @pick="()=>onFactoryChange(form.factoryId)" /></el-form-item></el-col>
+          <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item required label="收货工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" :preset="{ id: form.factoryId, name: form.factoryName }" :disabled="readonly" style="width:100%" placeholder="选择收货工厂" @pick="()=>onFactoryChange(form.factoryId)" domain="vendor" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
           <!-- 发料：发出仓 = 我方物料仓；目标仓 = 该厂委外仓 -->
           <el-col :span="8" v-if="form.deliveryType===DeliveryType.DELIVERY"><el-form-item label="发出仓库"><el-select v-model="form.fromWarehouseId" filterable style="width:100%"><el-option v-for="w in materialOwnWarehouses" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>

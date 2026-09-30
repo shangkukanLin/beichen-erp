@@ -42,6 +42,7 @@ import request from '@/utils/request'
 import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, DefectHandleTypeLabel, OrderType, OrderTypeLabel, QualityType, QualityTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import { invalidate } from '@/utils/dataFreshness'
 
 defineOptions({ name: 'OutsourceMaterialOrderDeliveryDetail' })
 
@@ -98,7 +99,7 @@ async function loadAll() {
   } finally { loading.value = false }
 }
 
-function markOrderDirty() { sessionStorage.setItem(OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, '1') }
+function markOrderDirty() { invalidate('materialOrder') }
 
 // ===== 收货弹窗 =====
 const recVisible = ref(false); const recSaving = ref(false)
@@ -430,7 +431,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:16px">
         <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-base)">收货仓库：</span>
-        <RemoteSelect v-model="recWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName || row.name" size="small" style="width:180px" placeholder="选择仓库" />
+        <RemoteSelect v-model="recWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName || row.name" size="small" style="width:180px" placeholder="选择仓库" domain="warehouse" />
       </div>
       <el-table :data="recItems" border size="small" row-key="itemId">
         <el-table-column type="expand" v-if="recItems.some((it: any) => it.components && it.components.length > 0)">

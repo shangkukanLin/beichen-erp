@@ -7,6 +7,7 @@ import { BillType, BillTypeLabel, sourceBillTypeLabel, FINANCE_BILL_DIRTY_KEY } 
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import request from '@/utils/request'
 import PageShell from '@/components/PageShell.vue'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute(); const router = useRouter()
 // 用 computed 取路由参数：keep-alive 会复用组件，从账单 A 跳到 B 时 route.params.id 会变
@@ -95,7 +96,7 @@ async function loadDetail() {
  * 返回列表时列表会重新拉取，不会出现「详情已审核、列表还显示草稿」。
  */
 async function afterStatusChange() {
-  sessionStorage.setItem(FINANCE_BILL_DIRTY_KEY, '1')
+  invalidate('bill')
   await loadDetail()
 }
 async function handleAudit() {

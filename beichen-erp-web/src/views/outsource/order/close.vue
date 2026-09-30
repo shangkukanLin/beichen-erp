@@ -216,7 +216,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
           <span style="font-weight:600">物料明细</span>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">退回仓库：</span>
-            <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择退回仓库" size="small" style="width:200px" :disabled="report.reportStatus===CloseReportStatus.FINISHED" />
+            <RemoteSelect v-model="returnWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择退回仓库" size="small" style="width:200px" :disabled="report.reportStatus===CloseReportStatus.FINISHED" domain="warehouse" />
           </div>
         </div>
       </template>

@@ -15,6 +15,7 @@ import {
   type RoleQueryParams,
   type MenuVO
 } from '@/api/system'
+import { invalidate, useDomainRefresh } from '@/utils/dataFreshness'
 
 
 // 查询参数
@@ -142,7 +143,7 @@ async function handleSubmit() {
       }
       dialogVisible.value = false
       // 2026-09-20（F7-184）：置脏标志，配合列表页 onActivated 按需刷新
-      sessionStorage.setItem(SYSTEM_ROLE_DIRTY_KEY, '1')
+      invalidate('role')
       loadData()
     } catch {
       // 错误已在拦截器中提示
@@ -168,7 +169,7 @@ async function handleDelete(row: Role) {
     if (tableData.value.length === 1 && pagination.pageNum > 1) {
       pagination.pageNum--
     }
-    sessionStorage.setItem(SYSTEM_ROLE_DIRTY_KEY, '1')
+    invalidate('role')
     loadData()
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
@@ -239,7 +240,7 @@ async function handleSavePerm() {
     await saveRoleMenus(permRoleId.value, allKeys)
     ElMessage.success('已分配权限')
     // 2026-09-20（F7-184）：权限变化会反映到列表（如后续展示菜单数），置脏让切回本页时刷新一次
-    sessionStorage.setItem(SYSTEM_ROLE_DIRTY_KEY, '1')
+    invalidate('role')
     permDialogVisible.value = false
   } catch {
     // 错误已在拦截器中提示
@@ -252,12 +253,9 @@ onMounted(() => {
   loadData()
 })
 // 2026-09-20（F7-184）：本路由在 keep-alive 内 ⇒ 切回 Tab 时 onMounted 不再触发；按需刷新（脏标志由本页写操作置位）
-onActivated(() => {
-  if (sessionStorage.getItem(SYSTEM_ROLE_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(SYSTEM_ROLE_DIRTY_KEY)
+useDomainRefresh('role', () => {
     loadData()
-  }
-})
+}, SYSTEM_ROLE_DIRTY_KEY)
 
 </script>
 

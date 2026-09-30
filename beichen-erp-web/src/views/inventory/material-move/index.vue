@@ -93,6 +93,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import EntityLinks from '@/components/EntityLinks.vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const route = useRoute()
@@ -202,12 +203,9 @@ async function handleCancel(row: any) {
   } catch { /* 已由 request 拦截器提示 */ }
 }
 
-onActivated(() => {
-  if (sessionStorage.getItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(INVENTORY_MATERIAL_MOVE_DIRTY_KEY)
+useDomainRefresh('materialMove', () => {
     loadData()
-  }
-})
+}, INVENTORY_MATERIAL_MOVE_DIRTY_KEY)
 onMounted(async () => {
   await loadWarehouses()
   loadData().then(() => {

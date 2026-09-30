@@ -122,7 +122,7 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-      <el-form-item label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.customerId = ''; router.push('/inventory/customer'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
+      <el-form-item label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" @change="(v: any) => { if (v === ADD_MARKER) { query.customerId = ''; router.push('/inventory/customer'); return } }" domain="customer" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
       <el-form-item label="主体类型">
         <el-select v-model="query.subjectType" placeholder="全部" clearable style="width:120px">
           <el-option v-for="(label, code) in SubjectTypeLabel" :key="code" :label="label" :value="code" />

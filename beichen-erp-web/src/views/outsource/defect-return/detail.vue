@@ -11,6 +11,7 @@ import PageShell from '@/components/PageShell.vue'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { useTabStore } from '@/stores/tabs'
 import { applyPageTitle } from '@/utils/pageTitle'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -234,7 +235,7 @@ async function auditReturn(row: any) {
   try {
     await request.put(`/outsource/order-delivery/return-back/${row.id}/audit`)
     ElMessage.success('已审核')
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
     await Promise.all([load(), loadReturns()])
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
@@ -248,7 +249,7 @@ async function unAuditReturn(row: any) {
   try {
     await request.put(`/outsource/order-delivery/return-back/${row.id}/un-audit`)
     ElMessage.success('已反审核')
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
     await Promise.all([load(), loadReturns()])
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
@@ -282,7 +283,7 @@ async function handleAudit() {
   try {
     await request.put(`/outsource/order-delivery/${route.params.id}/audit`)
     ElMessage.success('已审核')
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
     await load()
   } catch (e: any) { ElMessage.error(e?.message || '审核失败') }
 }
@@ -304,7 +305,7 @@ async function handleUnAudit() {
   try {
     await request.put(`/outsource/order-delivery/${route.params.id}/un-audit`)
     ElMessage.success('已反审核')
-    sessionStorage.setItem(OUTSOURCE_RETURN_ORDER_DIRTY_KEY, '1')
+    invalidate('outsourceReturnOrder')
     await Promise.all([load(), loadReturns()])
   } catch (e: any) { ElMessage.error(e?.message || '反审核失败') }
 }
@@ -516,7 +517,7 @@ onMounted(async () => { await load(); await loadReturns() })
         </el-form-item>
         <el-form-item required label="回仓仓库">
           <RemoteSelect v-model="returnForm.inWarehouseId" :fetch="fetchFinishedWarehouses"
-            :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" placeholder="修好成品回仓仓库" style="width:100%" />
+            :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" placeholder="修好成品回仓仓库" style="width:100%" domain="warehouse" />
         </el-form-item>
         <el-form-item label="回仓品质">
           <el-select v-model="returnForm.returnQualityType" style="width:100%">

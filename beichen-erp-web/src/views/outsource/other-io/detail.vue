@@ -7,6 +7,7 @@ import { IoType, IoTypeLabel, WarehouseCategory, OUTSOURCE_OTHER_IO_DIRTY_KEY } 
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id) || 0
@@ -114,7 +115,7 @@ async function handleSave() {
   try {
     const body: any = { ...form.value, items: validItems }
     await request.put(`/outsource/other-io/${id}`, body)
-    ElMessage.success('已更新'); sessionStorage.setItem(OUTSOURCE_OTHER_IO_DIRTY_KEY, '1')
+    ElMessage.success('已更新'); invalidate('outsourceOtherIo')
     editing.value = false
     await loadDetail()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }

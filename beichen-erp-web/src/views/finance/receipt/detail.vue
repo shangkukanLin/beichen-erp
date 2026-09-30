@@ -193,8 +193,8 @@ function back() { router.push('/finance/receipt') }
             <span style="margin-left:8px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">主体类型不可改（换主体请作废重开）</span>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item :label="form.subjectType === SubjectType.SUPPLIER ? '供应商' : '客户'" required>
-            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" />
-            <RemoteSelect v-else v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" />
+            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="supplier" />
+            <RemoteSelect v-else v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="customer" />
           </el-form-item></el-col>
           <!-- 欠款汇总（2026-09-29 用户口径「新增页 + 详情页草稿态」）：总欠款 + 到期欠款，口径同新增页 -->
           <el-col :span="24" v-if="summary">

@@ -8,7 +8,7 @@
         </el-form-item>
         <el-form-item label="仓库">
           <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses"
-            :label-key="(row:any)=>row.warehouseName" placeholder="全部" />
+            :label-key="(row:any)=>row.warehouseName" placeholder="全部" domain="warehouse" />
         </el-form-item>
         <el-form-item label="报损原因">
           <el-select v-model="query.lossReason" placeholder="全部" clearable>
@@ -93,6 +93,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag, LossReasonLabel, WarehouseCategory, WarehouseType, codeLabelOptions, INVENTORY_STOCK_LOSS_DIRTY_KEY } from '@/api/enums'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 
@@ -196,12 +197,9 @@ async function onCancel(row: any) {
 onMounted(() => { loadReasons(); load() })
 // 2026-09-20（F7-174）：本路由在 keep-alive 内 ⇒ 从新增/编辑页返回时 onMounted 不再触发，列表会停在旧数据。
 // 新增/编辑页保存成功后置脏标志，回到列表才拉一次（保留查询条件与分页现场）。
-onActivated(() => {
-  if (sessionStorage.getItem(INVENTORY_STOCK_LOSS_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(INVENTORY_STOCK_LOSS_DIRTY_KEY)
+useDomainRefresh('stockLoss', () => {
     load()
-  }
-})
+}, INVENTORY_STOCK_LOSS_DIRTY_KEY)
 </script>
 
 <style scoped>

@@ -7,7 +7,7 @@
           <el-input v-model="query.code" placeholder="请输入单号" clearable style="width: 180px" />
         </el-form-item>
         <el-form-item label="客户">
-          <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择客户" clearable style="width: 200px" />
+          <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择客户" clearable style="width: 200px" domain="customer" />
         </el-form-item>
         <el-form-item label="状态">
           <!-- 状态值为字符串编码（DRAFT/AUDITED/CANCELLED），不能再 Number() 转换（会变成 NaN 导致筛选失效） -->
@@ -103,6 +103,7 @@ import {
   SaleReturnStatus,
   SaleReturnStatusLabel,
 } from '@/api/sale'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const loading = ref(false)
@@ -216,13 +217,10 @@ function doCancel(row: any) {
 }
 
 
-onActivated(() => {
-  // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-  if (sessionStorage.getItem(SALE_RETURN_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(SALE_RETURN_DIRTY_KEY)
+// 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
+useDomainRefresh('saleReturn', () => {
     load()
-  }
-})
+}, SALE_RETURN_DIRTY_KEY)
 onMounted(() => {
   load()
 })

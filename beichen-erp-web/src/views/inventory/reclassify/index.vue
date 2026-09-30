@@ -7,6 +7,7 @@ import request from '@/utils/request'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { getReclassifyPage, auditReclassify, unAuditReclassify, cancelReclassify } from '@/api/inventory'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 
@@ -91,12 +92,9 @@ function onSizeChange(v: number) { pagination.pageSize = v; pagination.pageNum =
 
 onMounted(async () => { await loadData(); loadWarehouses(); openFromStockLog() })
 // 新增/详情页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
-onActivated(() => {
-  if (sessionStorage.getItem(INVENTORY_RECLASSIFY_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(INVENTORY_RECLASSIFY_DIRTY_KEY)
+useDomainRefresh('reclassify', () => {
     loadData()
-  }
-})
+}, INVENTORY_RECLASSIFY_DIRTY_KEY)
 
 </script>
 
@@ -107,7 +105,7 @@ onActivated(() => {
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="单号"><el-input v-model="query.code" placeholder="单号" clearable /></el-form-item>
         <el-form-item label="仓库">
-          <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" />
+          <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" domain="warehouse" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="全部" clearable style="width:120px">

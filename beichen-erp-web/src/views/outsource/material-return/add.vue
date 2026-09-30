@@ -12,6 +12,7 @@ import { applyPageTitle } from '@/utils/pageTitle'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const route = useRoute()
@@ -262,7 +263,7 @@ async function handleSubmit() {
       await request.post('/outsource/material-return', payload)
       ElMessage.success('退货单草稿已保存，请在列表中审核生效')
     }
-    sessionStorage.setItem(OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY, '1')
+    invalidate('outsourceMaterialReturn')
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()
     tabStore.closeTabAndBack(window.location.hash.replace('#', ''))
@@ -392,7 +393,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8"><el-form-item required :label="isRepair ? '维修供应商' : '退回对象'"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :placeholder="isRepair ? '选择维修供应商' : '选择物料商'" style="width:100%" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required :label="isRepair ? '维修供应商' : '退回对象'"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :placeholder="isRepair ? '选择维修供应商' : '选择物料商'" style="width:100%" domain="supplier" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <!-- 关联物料订单（2026-09-17 维修退货闭环；2026-09-28 起「关联退料」叶子也走这里；
                2026-09-29 用户口径「工厂维修不需要关联订单」⇒ **工厂维修不再渲染本字段**，仅剩：
@@ -402,7 +403,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
             <el-form-item label="关联物料订单" :required="fromLinked">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel" :disabled="!form.supplierId"
                 :placeholder="!form.supplierId ? '请先选退回对象' : (fromLinked ? '必选（关联退料）' : '可不选（不关联）')" style="width:100%" disable-cache filterable
-                :preset="pickedOrder ? { id: pickedOrder.id, code: pickedOrder.code } : null" @pick="(opts: any[]) => pickedOrder = (opts && opts[0]) || null" />
+                :preset="pickedOrder ? { id: pickedOrder.id, code: pickedOrder.code } : null" @pick="(opts: any[]) => pickedOrder = (opts && opts[0]) || null" domain="material" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item :label="isRepair ? '送修日期' : '退货日期'"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>

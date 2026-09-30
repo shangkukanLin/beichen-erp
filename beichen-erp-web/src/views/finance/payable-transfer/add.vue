@@ -11,6 +11,7 @@ import PageShell from '@/components/PageShell.vue'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -77,7 +78,7 @@ async function onSubmit() {
     }
     if (editId.value) { payload.id = editId.value; await request.put('/finance/payable-transfer', payload) }
     else await request.post('/finance/payable-transfer', payload)
-    sessionStorage.setItem(PAYABLE_TRANSFER_DIRTY_KEY, '1')
+    invalidate('payableTransfer')
     ElMessage.success('已保存')
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()
@@ -125,7 +126,7 @@ onMounted(async () => {
         <!-- F7-222：先选供应商 —— 后端候选已按主体收口，不再返回全公司可转应付 -->
         <el-form-item label="供应商" required>
           <RemoteSelect v-model="supplierId" :fetch="fetchSuppliers" :disabled="!!editId"
-            placeholder="先选择供应商" style="width:320px" @change="onSupplierChange" />
+            placeholder="先选择供应商" style="width:320px" @change="onSupplierChange" domain="supplier" />
         </el-form-item>
         <el-form-item label="来源应付记录" required>
           <!-- 只列可转的记录：负数（退货/扣款冲减项）、未转出、未结清 -->

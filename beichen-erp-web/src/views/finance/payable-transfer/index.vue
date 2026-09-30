@@ -7,6 +7,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 import { DocStatus, DocStatusLabel, DocStatusTag, SettlementStatusLabel, sourceBillTypeLabel } from '@/api/enums'
 import { TYPE_MAP, TYPE_OPTIONS, TYPE_TAG } from '@/constants/supplier'
 import { PAYABLE_TRANSFER_DIRTY_KEY } from '@/api/enums'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const query = reactive({
@@ -85,12 +86,9 @@ async function onCancel(row: any) {
 
 onMounted(load)
 // 从新增/详情页返回时按需刷新（保留查询与分页现场）
-onActivated(() => {
-  if (sessionStorage.getItem(PAYABLE_TRANSFER_DIRTY_KEY) === '1') {
-    sessionStorage.removeItem(PAYABLE_TRANSFER_DIRTY_KEY)
+useDomainRefresh('payableTransfer', () => {
     load()
-  }
-})
+}, PAYABLE_TRANSFER_DIRTY_KEY)
 </script>
 
 <template>
@@ -102,7 +100,7 @@ onActivated(() => {
             <el-input v-model="query.code" placeholder="转应收单号" clearable style="width:160px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="往来单位">
-            <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" />
+            <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" />
           </el-form-item>
           <el-form-item label="主体类型">
             <el-select v-model="query.supplierType" placeholder="全部" clearable style="width:120px">
