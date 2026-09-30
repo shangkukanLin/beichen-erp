@@ -113,7 +113,9 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
     <el-card shadow="never">
       <el-form :model="form" label-width="var(--app-label-width)">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item required label="仓库"><el-select v-model="form.warehouseId" filterable style="width:100%"><el-option v-for="w in warehouses" :key="w.id+'@'+w._type" :label="`${w.warehouseName}（${w._type}）`" :value="w.id"/></el-select></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="仓库"><el-select v-model="form.warehouseId" filterable style="width:100%"><el-option v-for="w in warehouses" :key="w.id+'@'+w._type" :label="`${w.warehouseName}（${w._type}）`" :value="w.id"/>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/warehouse')">+ 鏂板</div></template>
+              </el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
@@ -124,7 +126,9 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">物料明细</span></template>
       <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加物料</el-button>
       <el-table :data="items" border size="small">
-        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.materialTypeId" filterable style="width:100%" clearable @change="onTypeChange($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t"/></el-select></template></el-table-column>
+        <el-table-column label="物料类型" width="110"><template #default="{row,$index}"><el-select v-model="row.materialTypeId" filterable style="width:100%" clearable @change="onTypeChange($index)"><el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t"/>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/material-type')">+ 鏂板</div></template>
+              </el-select></template></el-table-column>
         <el-table-column label="物料名称" min-width="140"><template #default="{row,$index}"><el-select v-model="row.materialId" filterable style="width:100%" :disabled="!row.materialTypeId" @change="(v:any)=>onMatSelect($index,v)"><el-option v-for="m in materialsByType(row.materialTypeId)" :key="m.id" :label="m.materialName" :value="m.id"/></el-select></template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}">{{ row.unit }}</template></el-table-column>
         <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unit_price" size="small" placeholder="单价"/></template></el-table-column>

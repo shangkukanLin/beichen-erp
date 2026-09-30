@@ -103,8 +103,8 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       </el-tabs>
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-      <el-form-item v-if="activeSubject === 'CUSTOMER'" label="客户"><RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="全部" style="width:160px" domain="customer" /></el-form-item>
-      <el-form-item v-else label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" /></el-form-item>
+      <el-form-item v-if="activeSubject === 'CUSTOMER'" label="客户"><RemoteSelect v-model="query.customerId" add-route="/inventory/customer/add" :fetch="fetchCustomers" placeholder="全部" style="width:160px" domain="customer" /></el-form-item>
+      <el-form-item v-else label="供应商"><RemoteSelect v-model="query.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" /></el-form-item>
       <el-form-item label="状态"><el-select v-model="query.status" placeholder="全部" clearable style="width:120px"><el-option v-for="s in [{l:SettlementStatusLabel[SettlementStatus.UNSETTLED],v:SettlementStatus.UNSETTLED},{l:SettlementStatusLabel[SettlementStatus.PARTIAL],v:SettlementStatus.PARTIAL},{l:SettlementStatusLabel[SettlementStatus.SETTLED],v:SettlementStatus.SETTLED}]" :key="s.v" :label="s.l" :value="s.v"/></el-select></el-form-item>
       <el-form-item label="单号"><el-input v-model="query.billNo" placeholder="单据号" clearable @keyup.enter="query_"/></el-form-item>
       </el-form>

@@ -65,7 +65,7 @@ onMounted(() => { loadFactories(); loadData() })
       <div class="query-bar">
       <el-form :inline="true" :model="query">
         <el-form-item label="仓库名称"><el-input v-model="query.warehouseName" placeholder="仓库名称" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="供应商"><RemoteSelect v-model="query.factoryId" :fetch="fetchFactories" placeholder="全部" clearable style="width:200px" domain="vendor" /></el-form-item>
+        <el-form-item label="供应商"><RemoteSelect v-model="query.factoryId" add-route="/outsource/supplier/manage/add" :fetch="fetchFactories" placeholder="全部" clearable style="width:200px" domain="vendor" /></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>
@@ -124,7 +124,7 @@ onMounted(() => { loadFactories(); loadData() })
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-sm)" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
-        <el-form-item label="供应商" required><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" domain="vendor" /></el-form-item>
+        <el-form-item label="供应商" required><RemoteSelect v-model="form.factoryId" add-route="/outsource/supplier/manage/add" :fetch="fetchFactories" style="width:100%" domain="vendor" /></el-form-item>
         <el-form-item required label="仓库名称"><el-input v-model="form.warehouseName" /></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
         <el-form-item label="联系人"><el-input v-model="form.contact" /></el-form-item>

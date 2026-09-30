@@ -357,7 +357,7 @@ onMounted(() => {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
         <el-input v-model="filters.code" :placeholder="codePlaceholder" clearable
           style="width:220px" @keyup.enter="handleSearch" />
-        <RemoteSelect v-model="filters.factoryId" :fetch="fetchFactories" value-key="id" label-key="name"
+        <RemoteSelect v-model="filters.factoryId" add-route="/outsource/supplier/manage/add" :fetch="fetchFactories" value-key="id" label-key="name"
           placeholder="加工厂" style="width:240px" disable-cache domain="vendor" />
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>

@@ -7,7 +7,7 @@
           <el-input v-model="query.keyword" placeholder="报损单号或备注" clearable @keyup.enter="doQuery" />
         </el-form-item>
         <el-form-item label="仓库">
-          <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses"
+          <RemoteSelect v-model="query.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses"
             :label-key="(row:any)=>row.warehouseName" placeholder="全部" domain="warehouse" />
         </el-form-item>
         <el-form-item label="报损原因">

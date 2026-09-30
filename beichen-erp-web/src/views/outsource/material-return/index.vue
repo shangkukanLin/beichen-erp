@@ -253,7 +253,7 @@ onMounted(() => {
         <span v-if="leaf === 'REPAIR'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">工厂维修单（MRW-）：送供应商维修 → 回厂登记 → 全部返回后结案</span>
         <span v-else style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">退货退款单（MRW-）：物料退回供应商 + 生成对供应商的应收</span>
         <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" @keyup.enter="handleSearch" />
-        <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="供应商" style="width:170px" domain="supplier" />
+        <RemoteSelect v-model="query.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="供应商" style="width:170px" domain="supplier" />
         <el-button type="primary" @click="handleSearch">查询</el-button>
         <el-button @click="handleReset">重置</el-button>
         <!-- 新增入口（2026-09-29）：类型 = **当前叶子**（工厂维修 / 退货退款）；`linked` 固定 WITHOUT_ORDER

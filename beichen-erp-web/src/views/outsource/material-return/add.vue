@@ -393,7 +393,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
               </el-select>
             </el-form-item>
           </el-col>
-          <el-col :span="8"><el-form-item required :label="isRepair ? '维修供应商' : '退回对象'"><RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" :placeholder="isRepair ? '选择维修供应商' : '选择物料商'" style="width:100%" domain="supplier" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required :label="isRepair ? '维修供应商' : '退回对象'"><RemoteSelect v-model="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" :placeholder="isRepair ? '选择维修供应商' : '选择物料商'" style="width:100%" domain="supplier" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="出库源仓"><el-select v-model="form.fromWarehouseId" filterable clearable style="width:100%" placeholder="选择物料所在仓库" @change="onWarehouseChange"><el-option v-for="w in warehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></el-form-item></el-col>
           <!-- 关联物料订单（2026-09-17 维修退货闭环；2026-09-28 起「关联退料」叶子也走这里；
                2026-09-29 用户口径「工厂维修不需要关联订单」⇒ **工厂维修不再渲染本字段**，仅剩：

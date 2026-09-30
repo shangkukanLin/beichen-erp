@@ -7,7 +7,7 @@
           <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" />
         </el-form-item>
         <el-form-item label="供货商">
-          <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:180px" domain="supplier" />
+          <RemoteSelect v-model="query.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="请选择" clearable style="width:180px" domain="supplier" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">

@@ -8,6 +8,7 @@
 //   ③ **草稿可编辑**：草稿态**就地可编辑**（家规：草稿在详情页改+存、列表不给「编辑」）——
 //      表单字段/校验/payload 与新增页 `payment-add.vue` 完全一致；已审核/已作废仍为只读。
 import { ref, reactive, computed, onMounted } from 'vue'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DocStatus, DocStatusLabel } from '@/api/enums'
@@ -181,7 +182,7 @@ function back() { router.push('/finance/payment') }
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item label="状态"><el-tag :type="stType(detail.status)">{{ DocStatusLabel[detail.status ?? 0] || detail.status }}</el-tag></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="供应商" required>
-            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => loadUnpaid()" domain="supplier" />
+            <RemoteSelect v-model="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => loadUnpaid()" domain="supplier" />
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="主体类型">
             <el-tag v-if="detail.supplierType" :type="TYPE_TAG[detail.supplierType] || 'info'" size="small">{{ typeLabel(detail.supplierType) }}</el-tag>
@@ -207,8 +208,10 @@ function back() { router.push('/finance/payment') }
         <el-table :data="editRows" border>
           <el-table-column label="付款账户" min-width="200">
             <template #default="{row}">
-              <el-select v-model="row.accountId" placeholder="选择付款账户" filterable clearable style="width:100%">
+              <el-select v-model="row.accountId" placeholder="选择付款账户" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/finance/account') } }">
                 <el-option v-for="a in accountOptions" :key="a.id" :label="a.accountName" :value="a.id"/>
+              
+                <el-option label="+ 鏂板" :value="ADD_MARKER" />
               </el-select>
             </template>
           </el-table-column>

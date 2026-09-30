@@ -141,19 +141,19 @@ onMounted(() => {
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item required label="加工厂">
-              <RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" :label-key="(row:any)=>row.name"
+              <RemoteSelect v-model="form.factoryId" add-route="/outsource/supplier/manage/add" :fetch="fetchFactories" :label-key="(row:any)=>row.name"
                 style="width:100%" placeholder="加工厂（还料/应付对象）" @update:model-value="loadSnapshots" domain="vendor" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item required label="扣减成品仓">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchFinishedWarehouses"
+              <RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchFinishedWarehouses"
                 :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item required label="产品">
-              <RemoteSelect v-model="form.productMasterId" :fetch="fetchProducts" :label-key="(row:any)=>row.name"
+              <RemoteSelect v-model="form.productMasterId" add-route="/product/add" :fetch="fetchProducts" :label-key="(row:any)=>row.name"
                 style="width:100%" placeholder="选择产品" @update:model-value="loadSnapshots" domain="product" />
             </el-form-item>
           </el-col>

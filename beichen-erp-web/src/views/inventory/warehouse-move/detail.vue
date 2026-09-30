@@ -230,12 +230,12 @@ onActivated(() => { loadDetail() })
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="移出仓库" required>
-              <RemoteSelect v-model="editForm.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" @update:modelValue="onFromWarehouseChange" domain="warehouse" />
+              <RemoteSelect v-model="editForm.fromWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" @update:modelValue="onFromWarehouseChange" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="移入仓库" required>
-              <RemoteSelect v-model="editForm.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
+              <RemoteSelect v-model="editForm.toWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="12"><el-form-item label="移仓日期"><el-input v-model="editForm.moveDate" type="date" /></el-form-item></el-col>
@@ -276,7 +276,7 @@ onActivated(() => { loadDetail() })
         </el-table-column>
         <el-table-column label="产品" min-width="200">
           <template #default="{ row }">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" domain="product" />
+            <RemoteSelect v-model="row.productId" add-route="/product/add" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" domain="product" />
           </template>
         </el-table-column>
         <el-table-column label="单位" width="70">

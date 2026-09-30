@@ -189,7 +189,7 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             <el-col :span="8"><el-form-item label="订单类型"><el-input :model-value="OrderTypeLabel[order.orderType] || order.orderType" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="状态"><el-tag :type="MaterialOrderStatusTag[order.status]||'info'" size="small">{{ MaterialOrderStatusLabel[order.status] || order.status }}</el-tag></el-form-item></el-col>
             <el-col :span="8"><el-form-item :label="order.orderType===OrderType.OUTSOURCE?'加工厂':'供应商'">
-              <RemoteSelect v-model="order.supplierId" :fetch="fetchSuppliers" style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="选择供应商" domain="supplier" />
+              <RemoteSelect v-model="order.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="选择供应商" domain="supplier" />
             </el-form-item></el-col>
             <el-col :span="8"><el-form-item label="交期"><el-input v-model="order.deliveryDate" type="date" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
             <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
@@ -238,11 +238,11 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             </template>
           </el-table-column>
           <el-table-column label="类型" width="130"><template #default="{row}">
-            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" size="small" clearable style="width:100%" @change="() => { row.materialId = undefined; row.materialName = ''; row.unit = '' }" domain="materialType" />
+            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialTypeId" add-route="/dev/material-type" :fetch="fetchMaterialTypes" label-key="typeName" size="small" clearable style="width:100%" @change="() => { row.materialId = undefined; row.materialName = ''; row.unit = '' }" domain="materialType" />
             <span v-else>{{ typeName(row.materialTypeId) }}</span>
           </template></el-table-column>
           <el-table-column label="物料名称" min-width="150"><template #default="{row}">
-            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialId" :fetch="(kw:string)=>fetchMaterialsByType(kw,row)" label-key="materialName" size="small" filterable clearable disable-cache style="width:100%" :preset="row.materialId?{id:row.materialId,materialName:row.materialName}:null" @change="(v:any)=>onMatChange(v,row)" />
+            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialId" add-route="/outsource/material-info" :fetch="(kw:string)=>fetchMaterialsByType(kw,row)" label-key="materialName" size="small" filterable clearable disable-cache style="width:100%" :preset="row.materialId?{id:row.materialId,materialName:row.materialName}:null" @change="(v:any)=>onMatChange(v,row)" />
             <span v-else>{{ row.materialName }}</span>
           </template></el-table-column>
           <el-table-column prop="unit" label="单位" width="60" />

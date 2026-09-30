@@ -8,6 +8,7 @@
 //   ③ **草稿可编辑**：草稿态**就地可编辑**（家规：草稿在详情页改+存、列表不给「编辑」）——
 //      表单字段/校验/payload 与新增页 `receipt-add.vue` 完全一致；已审核/已作废仍为只读。
 import { ref, reactive, computed, onMounted } from 'vue'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { DocStatus, DocStatusLabel, SubjectType, SubjectTypeLabel } from '@/api/enums'
@@ -193,8 +194,8 @@ function back() { router.push('/finance/receipt') }
             <span style="margin-left:8px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">主体类型不可改（换主体请作废重开）</span>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item :label="form.subjectType === SubjectType.SUPPLIER ? '供应商' : '客户'" required>
-            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="supplier" />
-            <RemoteSelect v-else v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="customer" />
+            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="supplier" />
+            <RemoteSelect v-else v-model="form.customerId" add-route="/inventory/customer/add" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="customer" />
           </el-form-item></el-col>
           <!-- 欠款汇总（2026-09-29 用户口径「新增页 + 详情页草稿态」）：总欠款 + 到期欠款，口径同新增页 -->
           <el-col :span="24" v-if="summary">
@@ -230,8 +231,10 @@ function back() { router.push('/finance/receipt') }
         <el-table :data="editRows" border>
           <el-table-column label="收款账户" min-width="200">
             <template #default="{row}">
-              <el-select v-model="row.accountId" placeholder="选择收款账户" filterable clearable style="width:100%">
+              <el-select v-model="row.accountId" placeholder="选择收款账户" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/finance/account') } }">
                 <el-option v-for="a in accountOptions" :key="a.id" :label="a.accountName" :value="a.id"/>
+              
+                <el-option label="+ 鏂板" :value="ADD_MARKER" />
               </el-select>
             </template>
           </el-table-column>

@@ -449,7 +449,9 @@ useDomainRefresh('user', () => {
         <el-form-item label="角色">
           <el-select v-model="query.roleId" placeholder="请选择角色" clearable style="width: 160px">
             <el-option v-for="r in roleOptions" :key="r.id" :label="r.roleName" :value="r.id as number | string" />
-          </el-select>
+          
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/system/role')">+ 鏂板</div></template>
+              </el-select>
         </el-form-item>
         </el-form>
         <div class="toolbar">
@@ -592,6 +594,8 @@ useDomainRefresh('user', () => {
                 style="width: 100%"
               >
                 <el-option v-for="r in roleOptions" :key="r.id" :label="r.roleName" :value="r.id as number | string" />
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/system/role')">+ 鏂板</div></template>
               </el-select>
             </el-form-item>
           </el-col>

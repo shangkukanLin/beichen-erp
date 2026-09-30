@@ -13,12 +13,12 @@
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="供货商" prop="supplierId">
-              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" domain="supplier" />
+              <RemoteSelect v-model="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" domain="supplier" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
+              <RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -49,6 +49,8 @@
               <el-select v-model="row.productId" placeholder="选择产品（可输SKU）" filterable remote :remote-method="loadProducts"
                 size="small" style="width:100%" @change="(v: number) => onProductChange(v, row)">
                 <el-option v-for="m in productOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 鏂板</div></template>
               </el-select>
             </template>
           </el-table-column>

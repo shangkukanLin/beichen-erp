@@ -13,11 +13,11 @@
             <el-input v-model="query.productName" placeholder="产品名称或 SKU" clearable style="width:145px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="品牌">
-            <RemoteSelect v-model="query.brandId" :fetch="fetchBrands" label-key="brandName" placeholder="全部" style="width:125px" domain="brand" />
+            <RemoteSelect v-model="query.brandId" add-route="/inventory/brand" :fetch="fetchBrands" label-key="brandName" placeholder="全部" style="width:125px" domain="brand" />
           </el-form-item>
           <el-form-item label="所在仓库">
             <RemoteSelect v-model="query.warehouseIds" multiple collapse-tags collapse-tags-tooltip
-              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:145px" domain="warehouse" />
+              add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:145px" domain="warehouse" />
           </el-form-item>
           <el-form-item label="">
             <el-checkbox v-model="query.onlyLowStock" label="仅看低于安全库存" />
@@ -110,6 +110,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { WarningFilled } from '@element-plus/icons-vue'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
@@ -228,7 +229,7 @@ function goDetail(row: any) { router.push(`/inventory/product-stock/detail/${row
 /** 产品名称 → 产品主数据详情（2026-09-26 B5a：本页「产品名称」列由纯文本改为可点） */
 function goProduct(row: any) { if (row.productId) router.push(`/product/detail/${row.productId}`) }
 
-onMounted(load)
+useDomainRefresh('productStock', load)
 </script>
 
 <style scoped>

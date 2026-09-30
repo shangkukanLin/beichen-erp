@@ -274,13 +274,13 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
           <el-col :span="8"><el-form-item required label="玻璃尺寸"><el-input v-model="form.glassSize" placeholder="如 6.1寸" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="玻璃分辨率"><el-input v-model="form.glassResolution" placeholder="如 1080×2400" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="驱动IC">
-            <RemoteSelect v-model="form.configDriveIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.drive)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.drive" style="width:100%" placeholder="选择驱动IC物料" />
+            <RemoteSelect v-model="form.configDriveIcId" domain="material" add-route="/outsource/material-info" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.drive)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.drive" style="width:100%" placeholder="选择驱动IC物料" />
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="触摸IC">
-            <RemoteSelect v-model="form.configTouchIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.touch)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.touch" style="width:100%" placeholder="选择触摸IC物料" />
+            <RemoteSelect v-model="form.configTouchIcId" domain="material" add-route="/outsource/material-info" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.touch)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.touch" style="width:100%" placeholder="选择触摸IC物料" />
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item required label="码片IC">
-            <RemoteSelect v-model="form.configCodeIcId" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.code)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.code" style="width:100%" placeholder="选择码片IC物料" />
+            <RemoteSelect v-model="form.configCodeIcId" domain="material" add-route="/outsource/material-info" :fetch="(kw: string) => fetchMaterialsByType(kw, materialTypeIdMap.code)" label-key="materialName" clearable filterable :disabled="!materialTypeIdMap.code" style="width:100%" placeholder="选择码片IC物料" />
           </el-form-item></el-col>
         </el-row>
       </el-form>

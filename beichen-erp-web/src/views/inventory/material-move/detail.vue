@@ -21,6 +21,8 @@
             <el-form-item label="移出仓库" required>
               <el-select v-model="form.fromWarehouseId" filterable style="width:100%">
                 <el-option v-for="w in moveWarehouses" :key="w.id" :label="whLabel(w)" :value="w.id" />
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/inventory/warehouse')">+ 鏂板</div></template>
               </el-select>
             </el-form-item>
           </el-col>
@@ -28,6 +30,8 @@
             <el-form-item label="移入仓库" required>
               <el-select v-model="form.toWarehouseId" filterable style="width:100%">
                 <el-option v-for="w in targetWarehouses" :key="w.id" :label="whLabel(w)" :value="w.id" />
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/inventory/warehouse')">+ 鏂板</div></template>
               </el-select>
             </el-form-item>
           </el-col>
@@ -66,6 +70,8 @@
             <template #default="{ row, $index }">
               <el-select v-model="row.materialId" filterable placeholder="选择物料" style="width:100%" @change="() => onMaterialChange($index)">
                 <el-option v-for="m in materialOptions" :key="m.id" :label="m.materialName" :value="m.id" />
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/material-info')">+ 鏂板</div></template>
               </el-select>
             </template>
           </el-table-column>

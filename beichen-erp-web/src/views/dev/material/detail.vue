@@ -221,7 +221,9 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
           <el-col :span="8"><el-form-item label="关联项目">
             <el-select v-model="material.projectId" style="width:100%" placeholder="未关联项目" clearable filterable>
               <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
-            </el-select>
+            
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/project/add')">+ 鏂板</div></template>
+              </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="当前所在">
             <el-tag v-if="currentPlace" type="primary">{{ placeTypeLabelMap[currentPlace.placeType] || currentPlace.placeType }}：{{ currentPlace.placeName || currentPlace.placeDetail || '-' }}</el-tag>
@@ -290,7 +292,9 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
             <el-option-group v-if="flowForm.placeType === MaterialPlaceType.CUSTOMER" label="客户">
               <el-option v-for="c in customerOptions" :key="c.id" :label="c.name" :value="c.id" />
             </el-option-group>
-          </el-select>
+          
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/supplier/manage/add')">+ 鏂板</div></template>
+              </el-select>
         </el-form-item>
         <el-form-item v-else label="位置"><el-input v-model="flowForm.placeDetail" placeholder="输入自定义位置" /></el-form-item>
         <el-form-item label="经办人"><el-input v-model="flowForm.handler" placeholder="可选" /></el-form-item>

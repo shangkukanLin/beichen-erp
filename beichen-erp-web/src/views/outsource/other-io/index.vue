@@ -72,7 +72,7 @@ onMounted(()=>{ loadWarehouses(); loadData() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
-        <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName}（${row.factoryName||''}）`" clearable style="width:200px" placeholder="全部" domain="warehouse" /></el-form-item>
+        <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName}（${row.factoryName||''}）`" clearable style="width:200px" placeholder="全部" domain="warehouse" /></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>

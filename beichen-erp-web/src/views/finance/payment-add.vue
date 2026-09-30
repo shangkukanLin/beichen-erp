@@ -10,6 +10,7 @@
 //      付款全额作为**预付台账**（ADVANCE，负数应付：我方多付）挂账；打开才选应付单据核销，
 //      且核销合计 ≤ 付款金额（差额同样落预付台账）。
 import { localDate } from '@/utils/date'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { reactive, ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
@@ -141,7 +142,7 @@ onMounted(async () => {
       <el-form :model="form" label-width="90px" style="max-width:1000px">
         <el-row :gutter="16">
           <el-col :span="12"><el-form-item label="供应商" required>
-            <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onSupplierChange()" domain="supplier" />
+            <RemoteSelect v-model="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onSupplierChange()" domain="supplier" />
           </el-form-item></el-col>
           <!-- 欠款汇总（2026-09-29 用户口径）：选完供应商后显示 **总欠款 + 到期欠款**；
                口径 = 后端 PayableQuery.partySummary（到期 = due_date < 今天，当天不算、无到期日不计入
@@ -186,8 +187,10 @@ onMounted(async () => {
         <el-table :data="rows" border>
           <el-table-column label="付款账户" min-width="200">
             <template #default="{row}">
-              <el-select v-model="row.accountId" placeholder="选择付款账户" filterable clearable style="width:100%">
+              <el-select v-model="row.accountId" placeholder="选择付款账户" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/finance/account') } }">
                 <el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/>
+              
+                <el-option label="+ 鏂板" :value="ADD_MARKER" />
               </el-select>
             </template>
           </el-table-column>

@@ -39,13 +39,13 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="换入仓(售后)" required>
-              <RemoteSelect v-model="form.warehouseInId" :fetch="fetchAfterSaleWarehouses"
+              <RemoteSelect v-model="form.warehouseInId" add-route="/inventory/warehouse" :fetch="fetchAfterSaleWarehouses"
                 label-key="warehouseName" placeholder="客户退回的货品入此仓（待整理）" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="换出仓(成品)" required>
-              <RemoteSelect v-model="form.warehouseOutId" :fetch="fetchFinishedWarehouses"
+              <RemoteSelect v-model="form.warehouseOutId" add-route="/inventory/warehouse" :fetch="fetchFinishedWarehouses"
                 label-key="warehouseName" placeholder="发给客户的换出货品从此仓扣减" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>

@@ -514,7 +514,7 @@ useDomainRefresh('returnSort', () => {
             <el-form :inline="true" :model="query" class="query-form">
               <el-form-item label="单号"><el-input v-model="query.code" placeholder="单号" clearable @keyup.enter="handleQuery" /></el-form-item>
               <el-form-item label="源仓库">
-                <RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" domain="warehouse" />
+                <RemoteSelect v-model="query.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" clearable style="width:160px" domain="warehouse" />
               </el-form-item>
               <el-form-item label="状态">
                 <el-select v-model="query.status" placeholder="全部" clearable style="width:120px">

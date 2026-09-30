@@ -166,6 +166,8 @@ onActivated(() => { loadDetail() })
             <el-form-item required label="仓库">
               <el-select v-model="form.warehouseId" filterable style="width:100%">
                 <el-option v-for="w in warehouses" :key="w.id + '@' + w._type" :label="`${w.warehouseName}（${w._type}）`" :value="w.id"/>
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/warehouse')">+ 鏂板</div></template>
               </el-select>
             </el-form-item>
           </el-col>
@@ -221,7 +223,9 @@ onActivated(() => { loadDetail() })
           <template #default="{row,$index}">
             <el-select v-model="row.materialTypeId" filterable style="width:100%" clearable @change="onTypeChange($index)">
               <el-option v-for="t in uniqueTypes" :key="t" :label="typeName(t)" :value="t"/>
-            </el-select>
+            
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/material-type')">+ 鏂板</div></template>
+              </el-select>
           </template>
         </el-table-column>
         <el-table-column label="物料名称" min-width="180">

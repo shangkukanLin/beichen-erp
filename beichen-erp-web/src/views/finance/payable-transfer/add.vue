@@ -125,7 +125,7 @@ onMounted(async () => {
       <el-form :model="form" label-width="var(--app-label-width-lg)" class="form">
         <!-- F7-222：先选供应商 —— 后端候选已按主体收口，不再返回全公司可转应付 -->
         <el-form-item label="供应商" required>
-          <RemoteSelect v-model="supplierId" :fetch="fetchSuppliers" :disabled="!!editId"
+          <RemoteSelect v-model="supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" :disabled="!!editId"
             placeholder="先选择供应商" style="width:320px" @change="onSupplierChange" domain="supplier" />
         </el-form-item>
         <el-form-item label="来源应付记录" required>

@@ -13,7 +13,7 @@
           <el-col :span="8">
             <el-form-item label="客户" required>
               <!-- RemoteSelect 的 update:model-value 只回传值，选中项需通过 pick 事件取（否则拿不到单号/客户/仓库） -->
-              <RemoteSelect :model-value="form.customerId" :fetch="fetchCustomers"
+              <RemoteSelect :model-value="form.customerId" add-route="/inventory/customer/add" :fetch="fetchCustomers"
                 label-key="name" placeholder="选择客户" :disabled="isEdit" style="width:100%"
                 @update:model-value="(v:any)=>{ form.customerId = v; form.saleOrderId = null; form.saleOrderCode = ''; items = [] }" domain="customer" />
             </el-form-item>
@@ -33,13 +33,13 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="换入仓" required>
-              <RemoteSelect v-model="form.warehouseInId" :fetch="fetchAfterSaleWarehouses"
+              <RemoteSelect v-model="form.warehouseInId" add-route="/inventory/warehouse" :fetch="fetchAfterSaleWarehouses"
                 label-key="warehouseName" placeholder="成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="换出仓" required>
-              <RemoteSelect v-model="form.warehouseOutId" :fetch="fetchFinishedWarehouses"
+              <RemoteSelect v-model="form.warehouseOutId" add-route="/inventory/warehouse" :fetch="fetchFinishedWarehouses"
                 label-key="warehouseName" placeholder="成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>

@@ -7,7 +7,7 @@
           <el-input v-model="query.code" placeholder="请输入单号" clearable style="width: 180px" />
         </el-form-item>
         <el-form-item label="客户">
-          <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择客户" clearable style="width: 200px" domain="customer" />
+          <RemoteSelect v-model="query.customerId" add-route="/inventory/customer/add" :fetch="fetchCustomers" placeholder="请选择客户" clearable style="width: 200px" domain="customer" />
         </el-form-item>
         <el-form-item label="状态">
           <!-- 状态值为字符串编码（DRAFT/AUDITED/CANCELLED），不能再 Number() 转换（会变成 NaN 导致筛选失效） -->

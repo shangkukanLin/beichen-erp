@@ -385,7 +385,9 @@ onActivated(async () => { await loadData(); takeBaseline() })
                 <span v-if="row.productName">{{ row.productName }}</span>
                 <el-select v-else v-model="row.productId" placeholder="搜索产品（可输SKU）" filterable remote :remote-method="searchProducts" size="small" style="width:100%">
                   <el-option v-for="p in prodOptions" :key="p.id" :label="productLabel(p)" :value="p.id" />
-                </el-select>
+                
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 鏂板</div></template>
+              </el-select>
               </template>
             </el-table-column>
             <el-table-column label="单价" width="100"><template #default="{row}"><el-input v-model="row.unitPrice" size="small" /></template></el-table-column>
@@ -417,7 +419,9 @@ onActivated(async () => { await loadData(); takeBaseline() })
                 <span v-if="row.materialName">{{ row.materialName }}</span>
                 <el-select v-else v-model="row.materialId" placeholder="搜索物料" filterable remote :remote-method="searchMaterials" size="small" style="width:100%">
                   <el-option v-for="m in matOptions" :key="m.id" :label="m.materialName || ('物料#' + m.id)" :value="m.id" />
-                </el-select>
+                
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/material-info')">+ 鏂板</div></template>
+              </el-select>
               </template>
             </el-table-column>
             <el-table-column label="规格" width="120"><template #default="{row}">{{ row.spec || '-' }}</template></el-table-column>

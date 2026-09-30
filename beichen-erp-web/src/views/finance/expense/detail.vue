@@ -157,6 +157,8 @@ onActivated(() => { loadData(); loadAccounts() })
             <el-form-item required label="支出账户">
               <el-select v-model="form.accountId" placeholder="请选择" style="width:100%">
                 <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName}（余额 ${fmt(a.balance)}）`" :value="a.id ?? ''" />
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
               </el-select>
             </el-form-item>
           </el-col>

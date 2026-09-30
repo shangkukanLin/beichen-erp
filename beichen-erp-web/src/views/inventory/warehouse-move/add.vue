@@ -10,12 +10,12 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="移出仓库" prop="fromWarehouseId">
-              <RemoteSelect v-model="form.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
+              <RemoteSelect v-model="form.fromWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
             <el-form-item label="移入仓库" prop="toWarehouseId">
-              <RemoteSelect v-model="form.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
+              <RemoteSelect v-model="form.toWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="请选择" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -43,7 +43,7 @@
           </el-table-column>
           <el-table-column label="产品" min-width="220">
             <template #default="{ row }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）" style="width:100%"
+              <RemoteSelect v-model="row.productId" add-route="/product/add" :fetch="fetchProducts" :label-key="productLabel" placeholder="选择产品（可输SKU）" style="width:100%"
                 @pick="(rows:any[]) => onProductPick(rows[0], row)" domain="product" />
             </template>
           </el-table-column>

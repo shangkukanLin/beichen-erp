@@ -14,11 +14,11 @@
             <el-input v-model="query.materialName" placeholder="物料名称" clearable style="width:135px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="物料类型">
-            <RemoteSelect v-model="query.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" placeholder="全部" style="width:120px" domain="materialType" />
+            <RemoteSelect v-model="query.materialTypeId" add-route="/dev/material-type" :fetch="fetchMaterialTypes" label-key="typeName" placeholder="全部" style="width:120px" domain="materialType" />
           </el-form-item>
           <el-form-item label="所在仓库">
             <RemoteSelect v-model="query.warehouseIds" multiple collapse-tags collapse-tags-tooltip
-              :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:135px" domain="warehouse" />
+              add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:135px" domain="warehouse" />
           </el-form-item>
         </el-form>
         <div class="toolbar">
@@ -89,6 +89,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import request from '@/utils/request'
@@ -205,7 +206,7 @@ function resetQuery() {
 }
 function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }
 
-onMounted(load)
+useDomainRefresh('materialStock', load)
 </script>
 
 <style scoped>

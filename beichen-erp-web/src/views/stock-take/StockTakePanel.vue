@@ -172,7 +172,9 @@ onActivated(() => { loadData() })
           <el-form-item label="仓库">
             <el-select v-model="query.warehouseId" placeholder="全部" clearable style="width:200px">
               <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-            </el-select>
+            
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/inventory/warehouse')">+ 鏂板</div></template>
+              </el-select>
           </el-form-item>
           <el-form-item label="月份">
             <el-input v-model="query.period" placeholder="如 2026-09" clearable style="width:120px" />
@@ -248,7 +250,9 @@ onActivated(() => { loadData() })
         <el-form-item label="盘点仓库" required>
           <el-select v-model="createForm.warehouseId" placeholder="请选择" style="width:100%">
             <el-option v-for="w in warehouses" :key="w.id" :label="w.warehouseName" :value="w.id" />
-          </el-select>
+          
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/inventory/warehouse')">+ 鏂板</div></template>
+              </el-select>
         </el-form-item>
         <el-form-item label="盘点月份"><el-input v-model="createForm.period" placeholder="yyyy-MM" /></el-form-item>
         <el-form-item label="盘点日期"><el-date-picker v-model="createForm.takeDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>

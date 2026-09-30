@@ -1,5 +1,6 @@
 <template>
   <el-select
+    ref="selRef"
     :model-value="model"
     :multiple="multiple"
     filterable
@@ -15,11 +16,18 @@
   >
     <el-option v-for="o in options" :key="getVal(o)" :label="getLabel(o)" :value="getVal(o)" :disabled="optionDisabled ? optionDisabled(o) : false" />
     <slot />
+    <!-- 2026-09-30：统一的「+ 新增」入口。用 el-select 的 footer 插槽（element-plus 2.4+）实现，
+         而不是往选项里塞 ADD_MARKER —— 后者会占用 change 事件，让父组件既有的 @change 回调
+         收到 '__ADD_NEW__' 这个假值（容易被当成业务值处理）。footer 不参与选项/选中，零副作用。 -->
+    <template v-if="addRoute" #footer>
+      <div class="rs-add-new" @click="goAdd">{{ addLabel }}</div>
+    </template>
   </el-select>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
 import request from '@/utils/request'
 import { domainVersion, type Domain } from '@/utils/dataFreshness'
 
@@ -43,6 +51,10 @@ const props = withDefaults(defineProps<{
   domain?: Domain                             // 该下拉数据所属“数据域”（见 utils/dataFreshness.ts）：
                                               // 域被写过就自动丢弃会话缓存重查，无需用户点“刷新数据”。
                                               // 不传 = 行为与旧版完全一致（缓存只由 refresh:dropdown-data 清）。
+  addRoute?: string                           // 非空时在下拉底部显示「+ 新增」，点击跳该路由去建档。
+                                              // 用于主数据下拉（客户/供应商/产品/物料/仓库/账户…），
+                                              // 这样用户不用离开当前单据就能补齐主数据。
+  addLabel?: string                           // 「+ 新增」文案，默认 "+ 新增"
 }>(), {
   valueKey: 'id',
   labelKey: 'name',
@@ -54,12 +66,22 @@ const props = withDefaults(defineProps<{
   lazy: true,
   disableCache: false,
   disabled: false,
+  addLabel: '+ 新增',
 })
 
 const emit = defineEmits<{
   (e: 'update:modelValue', v: any): void
   (e: 'pick', opts: any[]): void
 }>()
+
+const router = useRouter()
+const selRef = ref<any>(null)
+/** 点「+ 新增」：先收起下拉再跳转（footer 点击不会自动关闭 popper） */
+function goAdd() {
+  if (!props.addRoute) return
+  try { selRef.value?.blur?.() } catch { /* 忽略 */ }
+  router.push(props.addRoute)
+}
 
 const model = ref<any>(props.modelValue)
 /** 当前 options 是否已包含所选值（用于编辑回显判断） */
@@ -214,3 +236,17 @@ onUnmounted(() => {
   window.removeEventListener('refresh:dropdown-data', onRefreshDropdownData)
 })
 </script>
+
+<style scoped>
+.rs-add-new {
+  padding: 6px 12px;
+  cursor: pointer;
+  text-align: center;
+  font-size: var(--app-font-xs, 12px);
+  color: var(--app-color-primary, #409eff);
+  border-top: 1px solid var(--app-color-border, #ebeef5);
+}
+.rs-add-new:hover {
+  background: var(--app-color-fill, #f5f7fa);
+}
+</style>

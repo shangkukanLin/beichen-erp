@@ -181,7 +181,9 @@ onMounted(() => { if (props.visible) open() })
         <el-col :span="24"><el-form-item label="关联项目">
           <el-select v-model="form.projectId" style="width:100%" :disabled="lockedProject" clearable placeholder="不关联研发立项">
             <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
-          </el-select>
+          
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/project/add')">+ 鏂板</div></template>
+              </el-select>
         </el-form-item></el-col>
         <el-col :span="12"><el-form-item label="数量"><el-input-number v-model="form.quantity" :min="0" :precision="0" style="width:100%" /></el-form-item></el-col>
         <el-col :span="12"><el-form-item label="金额"><el-input-number v-model="form.amount" :min="0" :precision="2" style="width:100%" /></el-form-item></el-col>
@@ -210,7 +212,9 @@ onMounted(() => { if (props.visible) open() })
           <el-col :span="12"><el-form-item required label="支出账户">
             <el-select v-model="rdForm.accountId" placeholder="请选择" style="width:100%">
               <el-option v-for="a in rdAccounts" :key="a.id" :label="`${a.accountName}（余额 ${Number((a as any).balance ?? 0).toFixed(2)}）`" :value="a.id ?? ''" />
-            </el-select>
+            
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
+              </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="费用日期"><el-date-picker v-model="rdForm.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="费用备注"><el-input v-model="rdForm.remark" placeholder="留空自动填「研发支出：物料名」" /></el-form-item></el-col>

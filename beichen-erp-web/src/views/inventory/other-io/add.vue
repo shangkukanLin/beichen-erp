@@ -156,7 +156,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
     <el-card shadow="never">
       <el-form :model="form" label-width="80px">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item required label="仓库"><RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item required label="仓库"><RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="form.ioType" style="width:100%" @change="onIoTypeChange"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="form.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
@@ -167,7 +167,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
       <template #header><span style="font-weight:600">成品明细</span></template>
       <el-button type="primary" size="small" @click="addItem" style="margin-bottom:8px">+ 添加成品</el-button>
       <el-table :data="items" border size="small">
-        <el-table-column label="成品名称" min-width="180"><template #default="{row,$index}"><RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" domain="product" /></template></el-table-column>
+        <el-table-column label="成品名称" min-width="180"><template #default="{row,$index}"><RemoteSelect v-model="row.productId" add-route="/product/add" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" domain="product" /></template></el-table-column>
         <el-table-column label="单位" width="80"><template #default="{row}">{{ row.unit || '-' }}</template></el-table-column>
         <el-table-column label="品质" width="90"><template #default="{row}"><el-select v-model="row.qualityType" size="small" style="width:100%" @change="loadStock(row)"><el-option v-for="q in qualityOptions" :key="q.value" :label="q.label" :value="q.value"/></el-select></template></el-table-column>
         <el-table-column v-if="isOut" label="可用库存" width="100" align="right">

@@ -69,7 +69,7 @@ onMounted(async ()=>{ await loadWarehouses(); loadData() })
     <el-card shadow="never" class="query-card">
       <div class="query-bar">
       <el-form :inline="true" :model="query">
-        <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" clearable style="width:180px" placeholder="全部" domain="warehouse" /></el-form-item>
+        <el-form-item label="仓库"><RemoteSelect v-model="query.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" clearable style="width:180px" placeholder="全部" domain="warehouse" /></el-form-item>
         <el-form-item label="类型"><el-select v-model="query.ioType" clearable style="width:120px"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item>
         </el-form>
         <div class="toolbar">

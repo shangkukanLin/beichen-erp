@@ -234,7 +234,7 @@ onActivated(() => { loadDetail() })
 
       <el-form v-if="isDraft" :model="editForm" label-width="80px" size="small">
         <el-row :gutter="12">
-          <el-col :span="8"><el-form-item label="仓库" required><RemoteSelect v-model="editForm.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="仓库" required><RemoteSelect v-model="editForm.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="类型"><el-select v-model="editForm.ioType" style="width:100%" @change="onIoTypeChange"><el-option :label="IoTypeLabel[IoType.IN]" :value="IoType.IN"/><el-option :label="IoTypeLabel[IoType.OUT]" :value="IoType.OUT"/></el-select></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="editForm.ioDate" type="date"/></el-form-item></el-col>
         </el-row>
@@ -265,7 +265,7 @@ onActivated(() => { loadDetail() })
       <el-table v-if="isDraft" :data="editItems" border size="small">
         <el-table-column label="成品名称" min-width="180">
           <template #default="{row,$index}">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" domain="product" />
+            <RemoteSelect v-model="row.productId" add-route="/product/add" :fetch="fetchProducts" :label-key="productLabel" placeholder="可输SKU搜索" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],$index)" domain="product" />
           </template>
         </el-table-column>
         <el-table-column label="单位" width="80">

@@ -132,7 +132,9 @@ onMounted(() => { loadData(); loadAccounts() })
         <el-form-item :required="!isNonCash" label="支出账户">
           <el-select v-model="form.accountId" :disabled="isNonCash" :placeholder="isNonCash ? '非资金费用，无需账户' : '请选择'" style="width:100%">
             <el-option v-for="a in accounts" :key="a.id" :label="`${a.accountName}（余额 ${fmt(a.balance)}）`" :value="a.id ?? ''"/>
-          </el-select>
+          
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
+              </el-select>
           <span v-if="isNonCash" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">报损损失不产生现金流出 ⇒ 不写资金流水、不扣账户</span>
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea"/></el-form-item>

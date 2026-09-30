@@ -54,7 +54,9 @@ onMounted(() => { loadFlow(); loadAccounts() })
       <el-form :inline="true" :model="fquery" class="qf">
         <!-- F7-236②：本下拉是**筛选**用 ⇒ 故意不过滤 status（停用账户的历史流水仍要能筛出来）；
              与 expense.vue 的"支出账户"下拉不同（那是**建单选择**，故只列启用账户）—— 两处差异是有意的。 -->
-        <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id ?? ''"/></el-select></el-form-item>
+        <el-form-item label="账户"><el-select v-model="fquery.accountId" placeholder="全部" clearable style="width:150px"><el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id ?? ''"/>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
+              </el-select></el-form-item>
         <el-form-item label="类型"><el-select v-model="fquery.flowType" placeholder="全部" clearable style="width:130px"><el-option v-for="t in flowTypes" :key="t.code" :label="t.label" :value="t.code"/></el-select></el-form-item>
       </el-form>
       <div class="toolbar">

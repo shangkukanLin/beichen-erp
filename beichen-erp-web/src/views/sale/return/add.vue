@@ -11,13 +11,13 @@
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="客户" prop="customerId">
-              <RemoteSelect v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择客户" style="width: 100%"
+              <RemoteSelect v-model="form.customerId" add-route="/inventory/customer/add" :fetch="fetchCustomers" placeholder="请选择客户" style="width: 100%"
                 @change="onCustomerChange" domain="customer" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="退货仓库" prop="warehouseId">
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择仓库" style="width: 100%" domain="warehouse" />
+              <RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" label-key="warehouseName" placeholder="请选择仓库" style="width: 100%" domain="warehouse" />
               <div style="font-size: var(--app-font-xs); color: #909399; margin-top: 4px; line-height: 1.4;">提示：销售退货只能退到自有成品仓（退回品按「待整理」品质入库，后续用退货整理单分流）</div>
             </el-form-item>
           </el-col>
@@ -70,7 +70,7 @@
         <el-table :data="form.items" border size="small" max-height="420">
           <el-table-column label="产品" width="176" show-overflow-tooltip>
             <template #default="{ row }">
-              <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="请选择（可输SKU）" style="width: 100%"
+              <RemoteSelect v-model="row.productId" add-route="/product/add" :fetch="fetchProducts" :label-key="productLabel" placeholder="请选择（可输SKU）" style="width: 100%"
                 @change="(id: number) => onProductChange(row, id)" domain="product" />
             </template>
           </el-table-column>

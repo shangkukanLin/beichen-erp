@@ -178,7 +178,7 @@ async function handleCancel(row: FinanceBill) {
       <!-- 2026-09-29 用户口径：类型下拉加「全部」（空串 ⇒ 不传 billType ⇒ 后端返回应收+应付混排） -->
       <el-form-item label="类型"><el-select v-model="query.billType" style="width:120px" @change="onQueryTypeChange"><el-option label="全部" value="" /><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
       <!-- 「全部」下禁用往来单位：客户/供应商 id 空间独立，混筛会串号（见 fetchPartner 注释） -->
-      <el-form-item label="往来单位"><RemoteSelect v-model="query.partnerId" :fetch="fetchPartner" :disabled="isAllTypes" :placeholder="isAllTypes ? '先选类型' : '全部'" style="width:160px" /></el-form-item>
+      <el-form-item label="往来单位"><RemoteSelect v-model="query.partnerId" :fetch="fetchPartner" :domain="query.billType === BillType.RECEIVABLE ? 'customer' : 'supplier'" :add-route="query.billType === BillType.RECEIVABLE ? '/inventory/customer/add' : '/supplier/manage/add'" :disabled="isAllTypes" :placeholder="isAllTypes ? '先选类型' : '全部'" style="width:160px" /></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="query_">查询</el-button>
@@ -228,7 +228,7 @@ async function handleCancel(row: FinanceBill) {
     <el-dialog v-model="genDialog" title="生成账单" width="var(--app-dialog-sm)">
       <el-form :model="genForm" label-width="90px">
         <el-form-item label="类型"><el-select v-model="genForm.billType" style="width:100%" @change="onBillTypeChange"><el-option :label="BillTypeLabel[BillType.RECEIVABLE]" :value="BillType.RECEIVABLE"/><el-option :label="BillTypeLabel[BillType.PAYABLE]" :value="BillType.PAYABLE"/></el-select></el-form-item>
-        <el-form-item label="往来单位"><RemoteSelect v-model="genForm.partnerId" :fetch="fetchGenPartner" placeholder="请选择" style="width:100%" @pick="onPartnerPick" /></el-form-item>
+        <el-form-item label="往来单位"><RemoteSelect v-model="genForm.partnerId" :fetch="fetchGenPartner" :domain="genForm.billType === BillType.RECEIVABLE ? 'customer' : 'supplier'" :add-route="genForm.billType === BillType.RECEIVABLE ? '/inventory/customer/add' : '/supplier/manage/add'" placeholder="请选择" style="width:100%" @pick="onPartnerPick" /></el-form-item>
         <el-form-item label="账期起"><el-date-picker v-model="genForm.periodStart" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
         <el-form-item label="账期止"><el-date-picker v-model="genForm.periodEnd" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
       </el-form>

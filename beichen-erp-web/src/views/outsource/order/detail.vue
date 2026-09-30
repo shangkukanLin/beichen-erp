@@ -295,7 +295,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
           <el-row :gutter="12">
             <el-col :span="8"><el-form-item label="单号"><el-input :model-value="form.code" readonly /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="状态"><el-tag :type="OutsourceOrderStatusTag[form.status]||'info'" size="small">{{ OutsourceOrderStatusLabel[form.status] || form.status }}</el-tag></el-form-item></el-col>
-            <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" :fetch="fetchFactories" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" domain="vendor" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="加工厂"><RemoteSelect v-model="form.factoryId" add-route="/outsource/supplier/manage/add" :fetch="fetchFactories" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" domain="vendor" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="供料模式"><el-select v-model="form.supplyMode" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="onSupplyModeChange"><el-option v-for="m in SUPPLY_MODE_OPTIONS" :key="m.value" :label="m.label" :value="m.value" /></el-select></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划开始"><el-input v-model="form.planStartDate" type="date" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="计划完成"><el-input v-model="form.planEndDate" type="date" /></el-form-item></el-col>
@@ -325,7 +325,7 @@ onActivated(async () => { await loadOptions(); await loadData() })
         <template #header><div style="display:flex;align-items:center;justify-content:space-between"><span style="font-weight:600">加工产品 #{{ pi + 1 }}</span><el-button type="danger" size="small" text @click="removeProduct(pi)" v-if="products.length>1 && form.status===OutsourceOrderStatus.PENDING">删除产品</el-button></div></template>
         <el-form :model="p" label-width="90px" size="small">
           <el-row :gutter="12">
-            <el-col :span="12"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" :fetch="fetchProjects" :label-key="(row:any)=>row.productName || row.name" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)" domain="devProject" /></el-form-item></el-col>
+            <el-col :span="12"><el-form-item label="加工产品"><RemoteSelect v-model="p.projectId" add-route="/dev/project/add" :fetch="fetchProjects" :label-key="(row:any)=>row.productName || row.name" filterable clearable style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="(v:any)=>onProjectSelect(pi,v)" domain="devProject" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="数量"><el-input-number v-model="p.quantity" :controls="false" :precision="0" :step="1" style="width:100%" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item :label="form.supplyMode==='FACTORY' ? '包工包料单价' : '单价'"><el-input v-model="p.unitPrice" type="number" :disabled="form.status!==OutsourceOrderStatus.PENDING" @change="calcAmount(pi)" /></el-form-item></el-col>
             <el-col :span="6"><el-form-item label="小计"><el-input :model-value="p.amount" readonly /></el-form-item></el-col>

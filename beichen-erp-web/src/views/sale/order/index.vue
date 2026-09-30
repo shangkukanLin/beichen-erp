@@ -118,7 +118,7 @@ useDomainRefresh('saleOrder', () => {
             <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
           </el-form-item>
           <el-form-item label="客户">
-            <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" domain="customer" />
+            <RemoteSelect v-model="query.customerId" add-route="/inventory/customer/add" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" domain="customer" />
           </el-form-item>
           <el-form-item label="状态">
             <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">

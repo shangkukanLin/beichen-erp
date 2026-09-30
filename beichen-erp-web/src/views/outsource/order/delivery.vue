@@ -476,7 +476,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
             <el-col :span="6"><el-input v-model="form.defectQty" type="number" @change="form.defectQty = Math.round(Number(form.defectQty) || 0)"><template #prepend>不良</template></el-input></el-col>
           </el-row>
         </el-form-item>
-        <el-form-item required label="收货仓库"><RemoteSelect v-model="warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择入库仓库" domain="warehouse" /></el-form-item>
+        <el-form-item required label="收货仓库"><RemoteSelect v-model="warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择入库仓库" domain="warehouse" /></el-form-item>
         <el-form-item label="收货日期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item>
         <el-form-item label="物流单号"><el-input v-model="form.trackingNo" placeholder="选填" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" placeholder="选填" /></el-form-item>

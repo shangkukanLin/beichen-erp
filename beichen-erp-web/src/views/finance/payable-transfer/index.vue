@@ -100,7 +100,7 @@ useDomainRefresh('payableTransfer', () => {
             <el-input v-model="query.code" placeholder="转应收单号" clearable style="width:160px" @keyup.enter="doQuery" />
           </el-form-item>
           <el-form-item label="往来单位">
-            <RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" />
+            <RemoteSelect v-model="query.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" />
           </el-form-item>
           <el-form-item label="主体类型">
             <el-select v-model="query.supplierType" placeholder="全部" clearable style="width:120px">

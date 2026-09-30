@@ -393,7 +393,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           </el-col>
           <el-col :span="8">
             <el-form-item required :label="isRepair ? '维修供应商' : '退回对象'">
-              <RemoteSelect v-model="form.supplierId" :fetch="fetchSuppliers" label-key="name"
+              <RemoteSelect v-model="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" label-key="name"
                 placeholder="实时查库（只允许辅料商 / 供应商）" style="width:100%" domain="supplier" />
             </el-form-item>
           </el-col>

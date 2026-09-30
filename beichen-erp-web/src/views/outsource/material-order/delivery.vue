@@ -431,7 +431,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       <div style="margin-bottom:8px;display:flex;align-items:center;gap:16px">
         <span style="font-size:var(--app-font-base);color:var(--app-text-regular)">供应商：<b>{{ order.supplierName || '-' }}</b></span>
         <span style="font-size:var(--app-font-base)">收货仓库：</span>
-        <RemoteSelect v-model="recWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName || row.name" size="small" style="width:180px" placeholder="选择仓库" domain="warehouse" />
+        <RemoteSelect v-model="recWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName || row.name" size="small" style="width:180px" placeholder="选择仓库" domain="warehouse" />
       </div>
       <el-table :data="recItems" border size="small" row-key="itemId">
         <el-table-column type="expand" v-if="recItems.some((it: any) => it.components && it.components.length > 0)">

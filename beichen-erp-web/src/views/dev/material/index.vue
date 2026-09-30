@@ -106,7 +106,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
       <el-form :inline="true" @submit.prevent>
         <el-form-item label="物料名称"><el-input v-model="query.name" placeholder="模糊搜索" clearable style="width:160px" @keyup.enter="handleSearch" /></el-form-item>
         <el-form-item label="关联项目">
-          <RemoteSelect v-model="query.projectId" :fetch="fetchProjects" placeholder="全部" clearable style="width:160px" domain="devProject" >
+          <RemoteSelect v-model="query.projectId" add-route="/dev/project/add" :fetch="fetchProjects" placeholder="全部" clearable style="width:160px" domain="devProject" >
             <el-option label="未关联项目" :value="''" />
           </RemoteSelect>
         </el-form-item>
@@ -177,7 +177,9 @@ onMounted(() => { loadProjectOptions(); loadList() })
         <el-form-item required label="支出账户">
           <el-select v-model="rdRowForm.accountId" placeholder="请选择" style="width:100%">
             <el-option v-for="a in rdAccounts" :key="a.id" :label="`${a.accountName}（余额 ${Number((a as any).balance ?? 0).toFixed(2)}）`" :value="a.id ?? ''" />
-          </el-select>
+          
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
+              </el-select>
         </el-form-item>
         <el-form-item label="费用日期"><el-date-picker v-model="rdRowForm.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
         <el-form-item label="费用备注"><el-input v-model="rdRowForm.remark" placeholder="留空自动填「研发支出：物料名」" /></el-form-item>

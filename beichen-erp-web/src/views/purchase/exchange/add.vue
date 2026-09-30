@@ -12,7 +12,7 @@
           <el-col :span="8">
             <el-form-item label="供货商" required>
               <!-- RemoteSelect 的 update:model-value 只回传值，选中项需通过 pick 事件取（否则拿不到单号/仓库） -->
-              <RemoteSelect :model-value="form.supplierId" :fetch="fetchSuppliers"
+              <RemoteSelect :model-value="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers"
                 label-key="name" placeholder="选择供货商" :disabled="isEdit" style="width:100%"
                 @update:model-value="(v:any)=>{ form.supplierId = v; form.purchaseOrderId = null; form.purchaseOrderCode = ''; items = [] }" domain="supplier" />
             </el-form-item>
@@ -34,13 +34,13 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="退回出库仓" required>
-              <RemoteSelect v-model="form.warehouseOutId" :fetch="fetchFinishedWarehouses"
+              <RemoteSelect v-model="form.warehouseOutId" add-route="/inventory/warehouse" :fetch="fetchFinishedWarehouses"
                 label-key="warehouseName" placeholder="退给供货商，从我方仓扣减" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
             <el-form-item label="换入入库仓" required>
-              <RemoteSelect v-model="form.warehouseInId" :fetch="fetchFinishedWarehouses"
+              <RemoteSelect v-model="form.warehouseInId" add-route="/inventory/warehouse" :fetch="fetchFinishedWarehouses"
                 label-key="warehouseName" placeholder="换回良品入我方仓（可与退回仓相同）" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
@@ -79,6 +79,8 @@
                 size="small" filterable remote :remote-method="loadProducts" style="width:100%"
                 @change="(v: number) => onProductChange(v, row)">
                 <el-option v-for="m in productOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
+              
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 鏂板</div></template>
               </el-select>
               <span v-else>{{ productText(row) }}</span>
             </template>

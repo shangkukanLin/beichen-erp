@@ -262,7 +262,7 @@ watch(() => route.fullPath, async () => { await init(); takeBaseline() })
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="源仓库" required>
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" domain="warehouse" />
+              <RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">

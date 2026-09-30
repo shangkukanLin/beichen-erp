@@ -516,7 +516,7 @@ onMounted(async () => { await load(); await loadReturns() })
             @change="returnForm.quantity = Math.round(Number(returnForm.quantity) || 0)" />
         </el-form-item>
         <el-form-item required label="回仓仓库">
-          <RemoteSelect v-model="returnForm.inWarehouseId" :fetch="fetchFinishedWarehouses"
+          <RemoteSelect v-model="returnForm.inWarehouseId" add-route="/inventory/warehouse" :fetch="fetchFinishedWarehouses"
             :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" placeholder="修好成品回仓仓库" style="width:100%" domain="warehouse" />
         </el-form-item>
         <el-form-item label="回仓品质">

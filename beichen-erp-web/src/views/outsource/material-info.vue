@@ -231,7 +231,7 @@ onMounted(async () => {
 
     <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-md)" :close-on-click-modal="false">
       <el-form :model="form" label-width="90px">
-        <el-form-item required label="物料类型"><RemoteSelect v-model="form.materialTypeId" :fetch="fetchMaterialTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" domain="materialType" /></el-form-item>
+        <el-form-item required label="物料类型"><RemoteSelect v-model="form.materialTypeId" add-route="/dev/material-type" :fetch="fetchMaterialTypes" :label-key="(t: any) => t.typeName" placeholder="请选择" style="width:100%" domain="materialType" /></el-form-item>
         <el-form-item label="物料名称" required><el-input v-model="form.materialName" /></el-form-item>
         <el-form-item label="供应商"><RemoteSelect v-model="form.supplierIdArr" multiple :fetch="fetchSuppliers" placeholder="可多选" style="width:100%" @change="onSupplierChange" domain="supplier" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect></el-form-item>
         <el-form-item label="单位"><el-input v-model="form.unit" /></el-form-item>
@@ -250,7 +250,9 @@ onMounted(async () => {
           <template #default="{ row }">
             <el-select v-model="row.childMaterialId" filterable placeholder="选择已有物料" style="width:100%" size="small">
               <el-option v-for="m in allMaterials" :key="m.id" :label="`${m.materialName} (${m.materialTypeName || ''})`" :value="m.id" :disabled="m.id === form.id" />
-            </el-select>
+            
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/material-info')">+ 鏂板</div></template>
+              </el-select>
           </template>
         </el-table-column>
         <el-table-column label="用量" width="90">

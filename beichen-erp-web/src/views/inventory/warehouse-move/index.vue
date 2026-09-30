@@ -9,10 +9,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="移出仓">
-          <RemoteSelect v-model="query.fromWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" domain="warehouse" />
+          <RemoteSelect v-model="query.fromWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" domain="warehouse" />
         </el-form-item>
         <el-form-item label="移入仓">
-          <RemoteSelect v-model="query.toWarehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" domain="warehouse" />
+          <RemoteSelect v-model="query.toWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:150px" domain="warehouse" />
         </el-form-item>
         </el-form>
         <div class="toolbar">

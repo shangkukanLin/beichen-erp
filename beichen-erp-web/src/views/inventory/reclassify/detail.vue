@@ -226,7 +226,7 @@ onActivated(() => { loadDetail() })
         <el-row :gutter="12">
           <el-col :span="8">
             <el-form-item label="仓库" required>
-              <RemoteSelect v-model="editForm.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" />
+              <RemoteSelect v-model="editForm.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" style="width:100%" @update:modelValue="onWarehouseChange" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item label="日期"><el-input v-model="editForm.reclassifyDate" type="date" /></el-form-item></el-col>
@@ -264,7 +264,7 @@ onActivated(() => { loadDetail() })
         </el-table-column>
         <el-table-column label="产品" min-width="200">
           <template #default="{ row }">
-            <RemoteSelect v-model="row.productId" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" domain="product" />
+            <RemoteSelect v-model="row.productId" add-route="/product/add" :fetch="fetchProducts" :label-key="productLabel" placeholder="搜索产品（可输SKU）" style="width:100%" @pick="(rows:any[])=>onProductPick(rows[0],row)" domain="product" />
           </template>
         </el-table-column>
         <el-table-column label="原品质" width="110">

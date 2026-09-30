@@ -130,7 +130,7 @@ onMounted(() => {
       <!-- label 宽度显式给 **lg 档**（2026-09-28 用户实测）：本页没有 el-form 包裹，
            page.css 的 `.page-shell .el-form-item__label { width: 90px }` 会兜住 ⇒ 「加工退货仓库」6 字被挤成两行 -->
       <el-form-item label="加工退货仓库" label-width="var(--app-label-width-lg)" style="margin-bottom:12px">
-        <RemoteSelect v-model="warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" @change="onWhChange" domain="warehouse" />
+        <RemoteSelect v-model="warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>`${row.warehouseName} (${row.code})`" style="width:100%" placeholder="选择扣减的成品仓库" @change="onWhChange" domain="warehouse" />
       </el-form-item>
 
       <el-table :data="items" border size="small">

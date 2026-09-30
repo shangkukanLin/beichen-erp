@@ -165,7 +165,9 @@ onMounted(() => {
         <el-form-item label="品牌">
           <el-select v-model="query.brandId" placeholder="全部品牌" clearable style="width:160px" @change="handleQuery">
             <el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" />
-          </el-select>
+          
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/inventory/brand')">+ 鏂板</div></template>
+              </el-select>
         </el-form-item>
         </el-form>
         <div class="toolbar">

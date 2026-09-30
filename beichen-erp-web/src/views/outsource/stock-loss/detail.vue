@@ -27,7 +27,7 @@
         </template>
         <el-form :model="form" label-width="var(--app-label-width)" class="head-form">
           <el-form-item label="仓库" required>
-            <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses"
+            <RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses"
               :label-key="(row:any)=>row.warehouseName" placeholder="选择报损仓库" style="width:240px"
               @change="onWarehouseChange" domain="warehouse" />
           </el-form-item>
@@ -51,7 +51,7 @@
             </span>
           </el-form-item>
           <el-form-item v-if="form.liableParty === LiableParty.SUPPLIER" label="承担方" required>
-            <RemoteSelect v-model="form.liableSupplierId" :fetch="fetchSuppliers"
+            <RemoteSelect v-model="form.liableSupplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers"
               :label-key="(row:any)=>row.name" placeholder="选择加工厂/供应商" style="width:220px" domain="supplier" />
           </el-form-item>
           <el-form-item label="备注">
@@ -73,7 +73,7 @@
         <el-table :data="items" border stripe>
           <el-table-column label="物料" min-width="200">
             <template #default="{ row }">
-              <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials"
+              <RemoteSelect v-model="row.materialId" add-route="/outsource/material-info" :fetch="fetchMaterials"
                 :label-key="(r:any)=>r.materialName" placeholder="选择物料" style="width:100%"
                 @pick="(rows:any[])=>onMaterialPick(rows[0], row)" domain="material" />
             </template>

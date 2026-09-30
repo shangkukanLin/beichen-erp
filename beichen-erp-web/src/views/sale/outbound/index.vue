@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { reactive, ref, computed, onMounted } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -119,7 +120,11 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 
 async function loadQualityTypes() { try { qualityOptions.value = await getQualityTypes() } catch { qualityOptions.value = [] } }
 
-onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes(); loadData() })
+// 2026-09-30 P4：本页在 keep-alive 内，原先只挂 onMounted ⇒ 从销售单/别处返回后列表还是旧的。
+// 基础下拉（客户/仓库/物料/品质）仍只在挂载时拉一次；**列表**改由域门控。
+// 写 /inventory/outbound（本页建单/审核）与销售单相关接口都会 bump saleOrder 域（见 utils/dataFreshness.ts）。
+onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes() })
+useDomainRefresh('saleOrder', loadData)
 
 </script>
 
@@ -132,7 +137,7 @@ onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualit
           <el-input v-model="query.code" placeholder="请输入单号" clearable @keyup.enter="handleQuery" />
         </el-form-item>
         <el-form-item label="客户">
-          <RemoteSelect v-model="query.customerId" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" domain="customer" />
+          <RemoteSelect v-model="query.customerId" add-route="/inventory/customer/add" :fetch="fetchCustomers" placeholder="请选择" clearable style="width:160px" domain="customer" />
         </el-form-item>
         <el-form-item label="状态">
           <el-select v-model="query.status" placeholder="请选择" clearable style="width:120px">

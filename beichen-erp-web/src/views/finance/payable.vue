@@ -116,7 +116,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       </el-tabs>
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
-      <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" /></el-form-item>
+      <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" /></el-form-item>
       <el-form-item label="业务场景">
         <el-select v-model="query.sourceBillType" placeholder="全部" clearable style="width:150px">
           <el-option v-for="o in sourceBillTypeOptions" :key="o.code" :label="o.label" :value="o.code" />

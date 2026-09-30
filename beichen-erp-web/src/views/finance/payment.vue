@@ -108,7 +108,7 @@ onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadData() })
     <el-card shadow="never" class="query-card">
         <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
-        <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" /></el-form-item>
+        <el-form-item label="供应商"><RemoteSelect v-model="query.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="全部" style="width:160px" domain="supplier" /></el-form-item>
         <el-form-item label="主体类型">
           <!-- 2026-09-20（F7-165）：改用 @/constants/supplier 的 TYPE_OPTIONS（4 个主体类型集中维护，
                含 方案商/加工厂/供货商/辅料商），不再在本页硬编码 label + code -->

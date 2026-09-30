@@ -364,7 +364,7 @@ onActivated(loadData)
           <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[detail.status] || 'info'" size="small">{{ DocStatusLabel[detail.status] || detail.status }}</el-tag></el-form-item></el-col>
           <el-col :span="8">
             <el-form-item required label="加工厂">
-              <RemoteSelect v-model="form.factoryId" :fetch="fetchSuppliers" label-key="name" placeholder="实时查库（加工厂）" style="width:100%" domain="supplier" />
+              <RemoteSelect v-model="form.factoryId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" label-key="name" placeholder="实时查库（加工厂）" style="width:100%" domain="supplier" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -372,7 +372,7 @@ onActivated(loadData)
               <!-- 2026-09-27 修复：原先漏了绑定冒号（label-key="(row:any)=>…" 是**静态字符串**），
                    RemoteSelect 的 getLabel 会去取 row["(row:any)=>row.warehouseName"] ⇒ undefined ⇒
                    下拉与回显全部退化成显示 **value（仓库 ID）**。必须写成 `:label-key="函数"`。 -->
-              <RemoteSelect v-model="form.warehouseId" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="我方成品仓" style="width:100%" domain="warehouse" />
+              <RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="我方成品仓" style="width:100%" domain="warehouse" />
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -580,7 +580,7 @@ onActivated(loadData)
       </el-alert>
       <el-form label-width="90px" size="small">
         <el-row :gutter="16">
-          <el-col :span="12"><el-form-item required label="入库仓库"><RemoteSelect v-model="repairWarehouseId" :fetch="fetchWarehousesForRepair" :label-key="(row:any)=>row.warehouseName" placeholder="选择返回入库的我方成品仓" style="width:100%" domain="warehouse" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item required label="入库仓库"><RemoteSelect v-model="repairWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehousesForRepair" :label-key="(row:any)=>row.warehouseName" placeholder="选择返回入库的我方成品仓" style="width:100%" domain="warehouse" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="返回日期"><el-input v-model="repairDate" type="date" /></el-form-item></el-col>
         </el-row>
       </el-form>

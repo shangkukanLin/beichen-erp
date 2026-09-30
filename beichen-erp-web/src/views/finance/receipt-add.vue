@@ -153,7 +153,7 @@ onMounted(async () => {
             </el-radio-group>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item :label="form.subjectType === SubjectType.SUPPLIER ? '供应商' : '客户'" required>
-            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="supplier" />
+            <RemoteSelect v-if="form.subjectType === SubjectType.SUPPLIER" v-model="form.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" placeholder="请选择" style="width:100%" @change="() => onPartnerChange()" domain="supplier" />
             <RemoteSelect v-else v-model="form.customerId" :fetch="fetchCustomers" placeholder="请选择" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { form.customerId = undefined; router.push('/inventory/customer'); return } onPartnerChange() }" domain="customer" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
           </el-form-item></el-col>
           <!-- 欠款汇总（2026-09-29 用户口径）：选完客户/供应商后显示 **总欠款 + 到期欠款**；
@@ -194,8 +194,10 @@ onMounted(async () => {
         <el-table :data="rows" border>
           <el-table-column label="收款账户" min-width="200">
             <template #default="{row}">
-              <el-select v-model="row.accountId" placeholder="选择收款账户" filterable clearable style="width:100%">
+              <el-select v-model="row.accountId" placeholder="选择收款账户" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/finance/account') } }">
                 <el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/>
+              
+                <el-option label="+ 鏂板" :value="ADD_MARKER" />
               </el-select>
             </template>
           </el-table-column>
