@@ -1,19 +1,24 @@
-# ASCII-only. P3-1: coverage audit for URL_DOMAIN.
-# Since P2-d the refresh signal depends ONLY on the bus (writers no longer set the legacy keys), so a
-# write endpoint whose URL is not mapped to a domain silently loses its "list should refresh" signal.
-# This script scans every request.post/put/delete path in the web app and reports the path prefixes
-# that dataFreshness.ts does NOT mention.
+# ASCII-only. Coverage audit for URL_DOMAIN, v2.
 #
-# The check is deliberately textual: it looks for the escaped prefix ("\/sale\/order") inside
-# dataFreshness.ts. Anything flagged must be reviewed by hand (the table may express a prefix with an
-# optional group, e.g. /^\/(inventory\/)?warehouse(\/|$)/, which a naive lookup misses).
+# Why v2: the first version scanned ONLY write requests (post/put/delete). That missed the case the
+# user just hit: customer endpoints live under /inventory/customer (see api/customer.ts:46/50/54) while
+# the table only registered /customer - so writes never bumped the `customer` domain (and, worse, the
+# customer LIST stopped refreshing because P2 switched it from "refresh on every activate" to
+# "refresh only when the domain changed").
+#
+# v2 scans get+post+put+delete and reports each uncovered prefix with its write/read counts:
+#   writes > 0  => REAL gap: the 'list should refresh' signal is lost
+#   writes = 0  => likely an alias prefix of a registered domain (review by hand)
 $web = 'C:\Users\75629\CodeBuddy\20260710123705\beichen-erp\beichen-erp-web'
 $dfPath = Join-Path $web 'src\utils\dataFreshness.ts'
 $df = [System.IO.File]::ReadAllText($dfPath)
 
-$rx = [regex]'request\.(post|put|delete)\s*\(\s*(?<q>[\x27\x22\x60])(?<p>[^\x27\x22\x60]+)\k<q>'
-$calls = @{}
-$samples = @{}
+# NOTE: the optional `<...>` matters a lot - api/*.ts calls look like
+#   request.post<void>('/inventory/customer', data)
+# and without it every typed call (i.e. most of the api layer) was silently skipped, which made the
+# earlier run report a false "all writes covered".
+$rx = [regex]'request\.(?<m>get|post|put|delete)\s*(?:<[^>()]*>)?\s*\(\s*(?<q>[\x27\x22\x60])(?<p>[^\x27\x22\x60]+)\k<q>'
+$stat = @{}
 foreach ($f in (Get-ChildItem (Join-Path $web 'src') -Recurse -Include '*.ts', '*.vue' -File)) {
   $t = [System.IO.File]::ReadAllText($f.FullName)
   foreach ($m in $rx.Matches($t)) {
@@ -21,42 +26,39 @@ foreach ($f in (Get-ChildItem (Join-Path $web 'src') -Recurse -Include '*.ts', '
     if ($p -notmatch '^/') { continue }
     $segs = @($p.TrimStart('/') -split '/' | Where-Object { $_ -ne '' })
     if ($segs.Count -eq 0) { continue }
-    # Take every leading segment up to the first pure-numeric one, so /brand/12 counts as /brand
-    # (the previous fixed "first two segments" rule reported /brand/1 as uncovered - a false alarm).
     $pfx = @()
     foreach ($s in $segs) { if ($s -match '^\d+$') { break }; $pfx += $s }
     if ($pfx.Count -eq 0) { continue }
-    $prefix = '/' + ($pfx -join '/')
-    if (-not $calls.ContainsKey($prefix)) { $calls[$prefix] = 0; $samples[$prefix] = $f.Name }
-    $calls[$prefix]++
+    $key = '/' + ($pfx -join '/')
+    if (-not $stat.ContainsKey($key)) { $stat[$key] = [pscustomobject]@{ W = 0; R = 0; Sample = $f.Name } }
+    if ($m.Groups['m'].Value -eq 'get') { $stat[$key].R++ } else { $stat[$key].W++ }
   }
 }
 
-$covered = @(); $uncovered = @()
-# Extract the prefixes the table actually registers (e.g. "^\/dev\/file" => "/dev/file") and match by
-# PREFIX. The previous version required the whole prefix to appear literally, so a deeper endpoint
-# like /dev/file/upload was reported uncovered even though /dev/file already covers it.
+# prefixes registered in URL_DOMAIN (parse the literal '\/seg' sequences) + textual fallback
 $registered = @()
 foreach ($m in [regex]::Matches($df, '\^\\\/((?:[A-Za-z0-9\-]+\\\/)*[A-Za-z0-9\-]+)')) {
   $registered += '/' + ($m.Groups[1].Value -replace '\\\/', '/')
 }
-Write-Host ('registered prefixes parsed from dataFreshness.ts = ' + $registered.Count)
-foreach ($k in ($calls.Keys | Sort-Object)) {
+# ALL_TRIGGERS in dataFreshness.ts: writing these invalidates every domain, so they are "covered" too.
+$registered += '/company/switch', '/system/import-data', '/system/clear-company-data'
+
+$covered = @(); $uncovered = @()
+foreach ($k in ($stat.Keys | Sort-Object)) {
   $hit = $false
   foreach ($r in $registered) { if ($k -eq $r -or $k.StartsWith($r + '/')) { $hit = $true; break } }
-  # fallback: some rows express the prefix with an optional group (e.g. /^\/(inventory\/)?warehouse(\/|$)/)
-  # which the simple extractor above cannot parse; a plain textual hit is enough there.
-  if (-not $hit) {
-    $esc = $k -replace '/', '\/'
-    if ($df.Contains($esc)) { $hit = $true }
-  }
+  if (-not $hit) { $esc = $k -replace '/', '\/'; if ($df.Contains($esc)) { $hit = $true } }
   if ($hit) { $covered += $k } else { $uncovered += $k }
 }
 
-Write-Host ('write-endpoint prefixes found = ' + $calls.Count + '  (covered=' + $covered.Count + ' uncovered=' + $uncovered.Count + ')')
+Write-Host ('prefixes in code = ' + $stat.Count + '  (covered=' + $covered.Count + ' uncovered=' + $uncovered.Count + ')')
 Write-Host ''
-Write-Host '=== NOT covered by URL_DOMAIN (review these) ==='
-foreach ($k in $uncovered) { Write-Host ('  ' + $k.PadRight(34) + 'x' + $calls[$k] + '   e.g. ' + $samples[$k]) }
+Write-Host '=== UNCOVERED with WRITES (real gaps - list refresh will be lost) ==='
+foreach ($k in ($uncovered | Sort-Object { -$stat[$_].W })) {
+  if ($stat[$k].W -gt 0) { Write-Host ('  ' + $k.PadRight(36) + ' writes=' + $stat[$k].W + ' reads=' + $stat[$k].R + '  e.g. ' + $stat[$k].Sample) }
+}
 Write-Host ''
-Write-Host '=== covered (sanity) ==='
-Write-Host ('  ' + (($covered | Sort-Object) -join '  '))
+Write-Host '=== UNCOVERED reads-only (likely alias prefixes - review) ==='
+foreach ($k in ($uncovered | Sort-Object)) {
+  if ($stat[$k].W -eq 0) { Write-Host ('  ' + $k.PadRight(36) + ' reads=' + $stat[$k].R + '  e.g. ' + $stat[$k].Sample) }
+}
