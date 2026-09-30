@@ -16,8 +16,17 @@ function ZH([string]$key) {
 }
 function B64([string]$s) { return [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($s)) }
 
+# --- bounded CLI execution (2026-09-30) ----------------------------------------------
+# Every agent-browser call used to be a bare external command. When the CLI stalled
+# (observed: one silent 14-minute block inside an eval while mainline-seed.ps1 ran), the
+# whole run hung with no output at all and the stall could not be attributed to a step.
+# The implementation lives in its own file so scripts that do NOT dot-source this library
+# can opt in with a single line; here we just pull it in. It defines AbCli()/AbExe() plus
+# an `agent-browser` FUNCTION that shadows the external command, so every call below (and
+# every call in the calling script) is bounded by $AB_TIMEOUT_SEC.
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 function EvalRaw([string]$js) {
-  $out = @(agent-browser eval $js) | ForEach-Object { "$_" }
+  $out = @(AbCli @('eval', $js)) | ForEach-Object { "$_" }
   $out = $out | Where-Object { $_.Trim() -ne '' -and $_.Trim() -ne 'OK Done' -and $_.Trim() -ne 'Done' -and $_.Trim() -notmatch '^\s*[xX]' }
   $s = ($out -join "`n").Trim()
   $q = [char]34
@@ -28,8 +37,8 @@ function EvalRaw([string]$js) {
 function EvalJs([string]$js) { return (EvalRaw $js) }
 
 function Open([string]$path, [int]$wait = 2200) {
-  agent-browser open "$($script:BASE)$path" | Out-Null
-  agent-browser wait $wait | Out-Null
+  AbCli @('open', "$($script:BASE)$path") | Out-Null
+  AbCli @('wait', "$wait") | Out-Null
   # 2026-09-19 backfill: the hook is installed from PowerShell, and every Open is a FULL page load that wipes
   # both window.__errs and the fetch hook => without this, only the first page of a script is ever observed
   # (ui-e2e-1-nav.ps1 used to look clean for that reason). Re-install whenever watching is on.
@@ -47,7 +56,7 @@ function EnsureLogin([string]$user = 'lin', [string]$pwd = '123') {
     EvalJs "localStorage.clear();sessionStorage.clear();'x'" | Out-Null
     Open '/login' 2500
     $r = FillLogin $user $pwd
-    agent-browser wait 3500 | Out-Null
+    AbCli @('wait', '3500') | Out-Null
     $t = EvalJs "String(!!localStorage.getItem('beichen_erp_token'))"
     Write-Host ("LOGIN " + $r + " token=" + $t)
   }
@@ -61,7 +70,7 @@ function EnsureLoginAs([string]$user, [string]$pwd = '123') {
   EvalJs "localStorage.clear();sessionStorage.clear();'x'" | Out-Null
   Open '/login' 2500
   $r = FillLogin $user $pwd
-  agent-browser wait 3500 | Out-Null
+  AbCli @('wait', '3500') | Out-Null
   $t = EvalJs "String(!!localStorage.getItem('beichen_erp_token'))"
   $who = EvalJs "(()=>{try{const u=JSON.parse(localStorage.getItem('beichen_erp_user')||'null');return u?(u.username||''):''}catch(e){return ''}})()"
   Write-Host ("LOGIN-AS " + $user + " " + $r + " token=" + $t + " who=" + $who)
