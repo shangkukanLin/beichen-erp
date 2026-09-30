@@ -12,12 +12,12 @@ import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.outsource.entity.ContractTemplate;
 import com.beichen.erp.outsource.mapper.ContractTemplateMapper;
-import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.mapper.MenuMapper;
 import com.beichen.erp.system.mapper.RoleMapper;
 import com.beichen.erp.system.mapper.UserRoleMapper;
+import com.beichen.erp.system.service.CompanyRoleProvisioner;
 import com.beichen.erp.system.service.RoleService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +61,8 @@ public class DataInitializer {
     private final PhaseTemplateMapper phaseTemplateMapper;
     private final ContractTemplateMapper contractTemplateMapper;
     private final JdbcTemplate jdbcTemplate;
+    /** S-9②：角色按公司补齐 —— 与「超管新建公司」共用同一处克隆口径 */
+    private final CompanyRoleProvisioner companyRoleProvisioner;
 
     /**
      * P1（2026-09-30 未上线清理）：需要"操作人四列"的业务单据表 ——
@@ -1244,81 +1246,18 @@ public class DataInitializer {
     }
 
     /**
-     * 角色按公司补齐（S-9② 修复 · 2026-09-30）：为**每个公司**克隆一份本公司角色。
+     * 启动期**兜底**：为每个公司补齐本公司角色。
      *
-     * <p><b>缺陷背景</b>：{@link #initRoles()} 只写 {@code company_id = 0} 的**平台模板角色**；
-     * 而 {@code RoleController.page} 与 {@code RoleServiceImpl.listEnabled} 自 S-9②（2026-09-30 批 C）
-     * 起按「{@code company_id = 当前公司}」严格过滤。两个口径不一致，且
-     * {@code CompanyServiceImpl.create} 的"克隆模板角色"逻辑**只在超管新建公司时触发** ⇒
-     * 默认公司（北辰科技，由 {@link #initCompany()} 建立）从未获得自有角色 ⇒
-     * **任何公司上下文下「设置 → 角色管理」列表恒为空**（实测 lin / admin 登录均 total=0，
-     * 角色既看不到也无法授权）。</p>
+     * <p>克隆逻辑已收口到 {@link CompanyRoleProvisioner}，与「超管新建公司」
+     * （{@code CompanyServiceImpl.create}）**共用同一处口径**，避免两边各写一份导致漂移。
+     * 本方法负责覆盖两类公司：① **默认公司**（由 {@link #initCompany()} 建立，从未走过新建流程
+     * ⇒ 不曾有自有角色）；② 历史存量公司。</p>
      *
-     * <p><b>做法</b>：以平台模板角色（{@code company_id = 0}）为源，为每个公司按 {@code role_code}
-     * 判缺后克隆角色行，并复制其菜单授权。<b>不克隆 super_admin</b> —— 按 P2-34 它是平台级角色，
-     * 仅平台账号 lin 持有、且用户管理侧禁止分配。</p>
-     *
-     * <p><b>幂等</b>：只增不改，重复启动无副作用（与 {@link #backfillCompanyDefaults()} 同范式，
-     * 含 MySQL「同表读写的派生表快照」安全写法）。</p>
+     * <p>⚠️ 调用点必须在 {@link #initRoleMenus()} **之前** —— 否则新克隆出来的角色拿不到标准菜单授权
+     * （实测顺序颠倒时 dev_engineer 只 1 个菜单、finance 0 个，角色等于不可用）。</p>
      */
     private void ensureCompanyRoles() {
-        List<Long> companyIds;
-        try {
-            companyIds = jdbcTemplate.queryForList("SELECT id FROM sys_company", Long.class);
-        } catch (Exception e) {
-            log.warn("[S-9②] 查询公司列表失败，跳过角色按公司补齐：{}", e.getMessage());
-            return;
-        }
-        // 授权模板：每个 role_code 取「菜单授权最完整」的那一行。
-        // ⚠️ 不能假设 company_id=0 的平台模板角色授权就是全的 —— 实测 dev_engineer 的 0 号行只有 1 个菜单、
-        //    finance 的 0 号行 0 个，而更早的历史行分别有 8 / 14 个（assignRoleMenus 只在"该角色尚无任何
-        //    菜单"时才写入，先存在的那一行赢）。这里按菜单数倒序取首行，保证克隆出来即可用。
-        java.util.Map<String, Long> templateByCode = new java.util.LinkedHashMap<>();
-        try {
-            jdbcTemplate.query(
-                    "SELECT r.role_code, r.id, (SELECT COUNT(*) FROM sys_role_menu m WHERE m.role_id = r.id) AS menu_cnt "
-                            + "FROM sys_role r WHERE r.role_code <> ? ORDER BY menu_cnt DESC, r.id ASC",
-                    rs -> {
-                        // 块体（无返回值）⇒ 只匹配 RowCallbackHandler，避免与 ResultSetExtractor 产生歧义
-                        templateByCode.putIfAbsent(rs.getString("role_code"), rs.getLong("id"));
-                    },
-                    SystemConstants.SUPER_ADMIN_ROLE_CODE);
-        } catch (Exception e) {
-            log.warn("[S-9②] 查询角色菜单模板失败（授权可能不全）：{}", e.getMessage());
-        }
-        int fixed = 0;
-        for (Long cid : companyIds) {
-            if (cid == null) continue;
-            try {
-                // ① 克隆缺失的角色行（源：平台模板角色 company_id=0；super_admin 除外）
-                int added = jdbcTemplate.update(
-                        "INSERT INTO sys_role (role_name, role_code, status, remark, company_id, customized_menu) "
-                                + "SELECT t.role_name, t.role_code, t.status, t.remark, ?, 0 "
-                                + "FROM sys_role t "
-                                + "WHERE t.company_id = ? AND t.role_code <> ? "
-                                + "AND NOT EXISTS (SELECT 1 FROM (SELECT * FROM sys_role) x "
-                                + "                WHERE x.company_id = ? AND x.role_code = t.role_code)",
-                        cid, SystemConstants.PLATFORM_COMPANY_ID, SystemConstants.SUPER_ADMIN_ROLE_CODE, cid);
-                // ② 复制菜单授权：用上面算好的「最完整模板行」作源（uk_role_menu 唯一键 + INSERT IGNORE 兜底幂等）
-                for (java.util.Map.Entry<String, Long> tpl : templateByCode.entrySet()) {
-                    jdbcTemplate.update(
-                            "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) "
-                                    + "SELECT nr.id, rm.menu_id FROM sys_role nr "
-                                    + "JOIN sys_role_menu rm ON rm.role_id = ? "
-                                    + "WHERE nr.company_id = ? AND nr.role_code = ?",
-                            tpl.getValue(), cid, tpl.getKey());
-                }
-                if (added > 0) {
-                    fixed++;
-                    log.info("[S-9②] 公司 {} 补齐本公司角色 {} 个（幂等：仅补缺失的角色编码）", cid, added);
-                }
-            } catch (Exception e) {
-                log.warn("[S-9②] 公司 {} 角色补齐失败（跳过，下次启动重试）：{}", cid, e.getMessage());
-            }
-        }
-        if (fixed > 0) {
-            log.info("[S-9②] 已为 {} 个公司补齐本公司角色（修复「角色管理列表为空」）", fixed);
-        }
+        companyRoleProvisioner.provisionAll();
     }
 
     /**
