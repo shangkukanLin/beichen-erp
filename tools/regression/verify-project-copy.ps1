@@ -1,4 +1,5 @@
 ﻿# 「研发项目 → 研发立项」文案统一校验（2026-09-16，可复跑）
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

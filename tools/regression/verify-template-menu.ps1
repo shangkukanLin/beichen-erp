@@ -4,6 +4,7 @@
 #         ③ ?tab=contract 深链直达 ④ 旧地址 /dev/phase-template、/outsource/contract-template 正确重定向
 #         ⑤ 首页两个快捷按钮指向新页对应 TAB
 # 注意：每次先清 localStorage 的菜单缓存 —— 后端新增菜单后，浏览器里的旧缓存会让新路径被判 403（见文档 §12.73）
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

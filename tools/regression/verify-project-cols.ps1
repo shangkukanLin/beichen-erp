@@ -1,5 +1,6 @@
 ﻿# 研发立项列表列校验（2026-09-16）：4 个页签都应含「项目名称 / 改配尺寸」，且**不显示**「总成名称」
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-project-cols.ps1
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

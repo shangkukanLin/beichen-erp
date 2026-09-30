@@ -15,6 +15,7 @@
 # evaluated JS as a \uXXXX escape, so PowerShell only ever compares booleans.
 # READ-ONLY. Rerunnable.
 
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

@@ -2,6 +2,7 @@
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-required-star.ps1
 # 原理：Element Plus 对 required（或 prop+rules.required）的表单项会加 class="el-form-item is-required"，
 #       并渲染出红色 *。这里用真实浏览器打开页面/弹窗，断言必填项确实带 is-required。
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

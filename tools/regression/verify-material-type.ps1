@@ -2,6 +2,7 @@
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-material-type.ps1
 # 覆盖：库表/接口/字段（material_type / materialTypeId）改名后 —— 菜单与页面、旧地址重定向、
 #       委外物料按类型过滤链路、页面上不再出现「BOM类型」字样
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

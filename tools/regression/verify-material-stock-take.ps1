@@ -9,6 +9,7 @@
 #
 # 注：物料盘点的「接口级角色限制（仅跟单专员）」negative 用例需非跟单专员账号，
 #     本脚本不依赖临时账号，见文档 12.91 的实测记录。
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $global:fail = 0

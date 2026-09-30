@@ -14,6 +14,7 @@
 #     上限缩到该条记录，而后端 returnMaterial 不落来源收货单 ⇒ 没有追溯价值）；带真实收货记录的行级强断言
 #     在 ui-e2e-11 的 S2（本脚本的夹具订单没有收货记录，只能做页面级"已无该按钮"的弱断言）。
 #   自建夹具（SQL）+ 自清理，可重复运行。中文直写（本脚本带 UTF-8 BOM，与 verify-* 同范式）。
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $base = 'http://localhost:5173'
 $global:fail = 0
 $script:MYSQL = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'

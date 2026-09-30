@@ -1,5 +1,6 @@
 ﻿# 产品规格下线后逐页烟测（2026-09-15）：产品口径页面不应再出现「规格」；物料口径页面应仍保留
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-spec-removed.ps1
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 # expect: 'no' = 该页不应再出现「规格」；'yes' = 物料/BOM 口径，应仍保留

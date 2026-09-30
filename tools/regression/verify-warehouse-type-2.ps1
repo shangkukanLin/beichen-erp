@@ -1,6 +1,7 @@
 ﻿# 仓型收敛为 2 种（成品仓 / 辅料仓）验证 —— 2026-09-16 方案 A
 # 覆盖：①自有仓缺仓型→拦 ②仓型非法(DEFECT/已取消)→拦 ③建成品仓 ④建辅料仓 ⑤建委外仓(不写仓型)
 #       ⑥页面下拉只有 成品仓/辅料仓 ⑦清理测试仓
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

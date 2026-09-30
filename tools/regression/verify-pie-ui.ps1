@@ -1,5 +1,6 @@
 ﻿# 销售分析：① 6 张饼图卡片「有数据 / 无数据」等高 ② 退货率/换货率「金额/件数」switch（2026-09-15）
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-pie-ui.ps1
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $url = 'http://localhost:5173/analysis/sale'
 $jsCards = "JSON.stringify([...document.querySelectorAll('.pie-grid .pie-card')].map(c=>({t:(c.querySelector('.pie-title')||{}).innerText,h:Math.round(c.getBoundingClientRect().height),v:(c.querySelector('.pie-total')||{}).innerText,empty:!!c.querySelector('.pie-empty')&&getComputedStyle(c.querySelector('.pie-empty')).display!=='none'})))"

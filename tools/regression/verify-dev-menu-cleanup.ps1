@@ -3,6 +3,7 @@
 #       ② 旧地址 /dev/bom、/dev/drawing 重定向到 /dev/project（不 403）
 #       ③ 仪表盘不再有 BOM总数卡 / BOM管理 / 图纸文档 入口
 #       ④ 【关键回归】研发立项编辑页内的 BOM / 图纸 页签仍然可用（数据模型保留）
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

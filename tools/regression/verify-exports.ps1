@@ -1,4 +1,5 @@
 ﻿# 批量验证各页面「导出 Excel」：逐个打开页面 → 点击导出按钮 → 解析下载文件（单次调用跑完整轮）
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $dl = 'c:\Users\75629\CodeBuddy\20260710123705\dl'
 $self = 'c:\Users\75629\CodeBuddy\20260710123705'
 New-Item -ItemType Directory -Force -Path $dl | Out-Null

@@ -10,6 +10,7 @@
 #          （2026-09-21 用户口径：收货统一从「成品收货」菜单进）
 #       ⑥ /outsource/material-order/delivery 直达不 403（生产中订单可能为 0 行 ⇒ 只验渲染/不报错，
 #          并**负向守卫**：行内操作文案不得再出现「收料」—— 2026-09-21 用户口径已改为「收货」）
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $global:fail = 0

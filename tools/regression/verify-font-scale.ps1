@@ -2,6 +2,7 @@
 # 阶梯：12 辅助 / 14 正文（表格·表单·按钮·菜单）/ 15 卡片·弹窗标题 / 18 页面标题 / 16·22 统计数字
 # 断言：① 源码无字号硬编码（tokens.css 除外，403 插图例外）② 无 --app-font-sm 残留
 #       ③ 浏览器逐页：表格 td/th=14px、表头字重 500、卡片标题=15px、标签=12px、统计数字=22/16px
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $root = 'c:\Users\75629\CodeBuddy\20260710123705\beichen-erp\beichen-erp-web'
 $src = Join-Path $root 'src'

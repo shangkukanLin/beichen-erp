@@ -1,5 +1,6 @@
 ﻿# 进货分析两个饼图 UI 校验：卡片等高 / 有无数据同高 / 位置在列表卡（供货商分析，2026-09-22 前为采购单据明细）上方 / 金额·件数 switch（2026-09-15）
 # 用法：powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-purchase-pie-ui.ps1
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $url = 'http://localhost:5173/analysis/purchase'
 $jsCards = "JSON.stringify([...document.querySelectorAll('.pie-grid .pie-card')].map(c=>({t:(c.querySelector('.pie-title')||{}).innerText,h:Math.round(c.getBoundingClientRect().height),v:(c.querySelector('.pie-total')||{}).innerText,empty:!!c.querySelector('.pie-empty')&&getComputedStyle(c.querySelector('.pie-empty')).display!=='none'})))"

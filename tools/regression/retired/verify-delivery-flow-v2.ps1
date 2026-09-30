@@ -13,6 +13,7 @@
 #  6 正向端到端：调拨 委外仓 → 我方物料仓 建单/审核/反审核/作废
 # 说明：原先写死 wh 12/29、物料 7、仓名 AUX-WH-1/FIN-WH-1，数据一变整脚本全 FAIL（2026-09-17 实测 8 项失败）；
 #       现全部改为**按仓库类别/类型从库里取**（我方物料仓 = INVENTORY+AUXILIARY；委外仓 = OUTSOURCE）。
+. (Join-Path $PSScriptRoot '..\ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $global:fail = 0

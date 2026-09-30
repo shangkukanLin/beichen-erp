@@ -11,6 +11,7 @@
 #
 # 前置（本脚本按开发库现状写死）：订单 16 处于 PRODUCING、其工厂仓 = 14、我方物料仓 = 29；清算用供应商 18（仓 24）。
 param([string]$Phase, [int]$IoId = 0, [int]$DocId = 0, [int]$SupplierId = 0, [switch]$Force)
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 # 以库为准（原写死 16/14/29/12）：清库或换环境后写死的 id 必然失效

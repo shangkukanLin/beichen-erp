@@ -1,4 +1,5 @@
 ﻿# 研发立项列表「改配尺寸」列校验（2026-09-16，一次性/可复跑）
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

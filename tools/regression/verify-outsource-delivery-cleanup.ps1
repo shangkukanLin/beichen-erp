@@ -5,6 +5,7 @@
 #       ④ 【关键回归】收退业务本身完好：两个页面（加工收退 / 物料收退，原「成品收货 / 物料收货」）均能直达且不 403
 #          —— 2026-09-16 起「交货管理」已由订单详情页签移出为独立菜单页，
 #             页签级的深度断言改由 verify-delivery-menu.ps1 覆盖
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $global:fail = 0

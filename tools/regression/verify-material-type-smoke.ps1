@@ -1,4 +1,5 @@
 ﻿# 物料类型重命名后的跨模块冒烟（2026-09-15）：逐页打开，断言可渲染 + 无「BOM类型」残留
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

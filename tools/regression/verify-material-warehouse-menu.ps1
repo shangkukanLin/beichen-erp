@@ -12,6 +12,7 @@
 #       ⑤ 委外仓库 / 自有物料仓 已归「基础数据」（2026-09-22 新增）
 # 说明：②③ 的期望值不写死中文，而是**以库为准**与侧栏渲染比对（菜单改名无需改本脚本）；
 #       只有 ②b 这一条故意写死 id 顺序 —— 它锁的是**用户点定的排序口径**。
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $global:fail = 0

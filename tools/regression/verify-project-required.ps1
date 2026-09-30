@@ -3,6 +3,7 @@
 # 2026-09-21 适配：立项页改版 —— 「总成名称」→「产品名称」（占位符随之变化）、
 #   新增必填「规格」（原配/改配）与「产品SKU」。规格=原配时页面会隐藏改配信息 5 项，
 #   故本脚本先选「改配」，再校验原有 9 项必填与提交拦截。
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $fail = 0

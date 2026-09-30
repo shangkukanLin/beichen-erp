@@ -3,6 +3,7 @@
 #  ① 静态：从 SFC 源码解析 4 张表的「配置列宽合计」（width + min-width），断言 ≤ 940px
 #     —— 940 ≈ 1200px 宽窗口 − 侧栏 210 − 主区左右内边距 32（再留余量）
 #  ② 浏览器：逐页签实测「没有横向滚动条」且滚动容器无横向溢出
+. (Join-Path $PSScriptRoot 'ab-bounded.ps1')
 $ErrorActionPreference = 'Continue'
 $base = 'http://localhost:5173'
 $vueFile = 'c:\Users\75629\CodeBuddy\20260710123705\beichen-erp\beichen-erp-web\src\views\dev\project\index.vue'
