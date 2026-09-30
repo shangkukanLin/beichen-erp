@@ -14,6 +14,7 @@ import {
 // 2026-09-21：列表新增「规格」列（原「分类」不在列表展示）
 import { ProductSpecLabel } from '@/api/enums'
 import request from '@/utils/request'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 
 const router = useRouter()
 
@@ -141,9 +142,13 @@ function statusType(status: string) {
   return ProductStatusTag[status] || 'warning'
 }
 
+// 2026-09-30：本页原先只有 onMounted（且**没有**任何 *_DIRTY_KEY），而本页在 <keep-alive> 内被复用 ⇒
+// 从 /product/add 保存返回、或从详情页改完返回时，列表停在旧数据（现象：新增产品后列表看不到，要 F5）。
+// 改由「数据域失效总线」按需刷新：只有 product 域被写过（新增/编辑/停用/上传等）才重拉，
+// 单纯切页签来回浏览不会白刷接口。
+useDomainRefresh('product', loadData)
 onMounted(() => {
   loadBrands()
-  loadData()
 })
 
 </script>

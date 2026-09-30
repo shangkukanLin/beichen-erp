@@ -2,6 +2,7 @@ import axios, { type AxiosInstance, type InternalAxiosRequestConfig, type AxiosR
 import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import router from '@/router'
+import { invalidateByRequest } from '@/utils/dataFreshness'
 
 interface ApiResult<T = unknown> {
   code: number
@@ -36,6 +37,12 @@ http.interceptors.response.use(
       return res as unknown as AxiosResponse
     }
     if (res.code === 200) {
+      // 2026-09-30：写请求成功后，按 URL 前缀把对应的「数据域」标记为已变更（见 utils/dataFreshness.ts）。
+      // 放在请求层而不是各业务页面，是为了根治“新增/编辑后忘了通知列表刷新”——产品列表
+      // (material/index.vue) 与物料新增弹窗(outsource/material-info.vue) 就是这么漏的。
+      // 口径：只认写方法（post/put/delete/patch）+ 业务成功；本后端业务失败也返回 HTTP 200 + code≠200，
+      // 而这里已是 code===200 分支，所以失败/字段校验被拦不会触发刷新。
+      invalidateByRequest(response.config?.method, response.config?.url)
       return res.data as unknown as AxiosResponse
     }
     if (res.code === 401) {

@@ -9,6 +9,7 @@ import { usePageGuardStore } from '@/stores/pageGuard'
 import { logout as logoutApi } from '@/api/auth'
 import request from '@/utils/request'
 import SideMenu from './SideMenu.vue'
+import { invalidateAll } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -171,9 +172,13 @@ function scrollTabs(delta: number) {
 watch(() => [tabStore.tabs.length, tabStore.activePath], () => { nextTick(updateTabsScrollState) })
 
 // 刷新数据：列表/详情页整页刷新；新增/修改页仅清空下拉缓存（避免丢失未保存表单内容）
+// 2026-09-30（P3）：新增/修改页额外调用 invalidateAll()，把所有"数据域"标记为已变更 ——
+// 这样保存后返回列表时 useDomainRefresh 会重拉；同时仍派发 refresh:dropdown-data 清掉
+// RemoteSelect 的会话缓存（双保险：某下拉未声明 domain 时也能刷新）。
 function handleRefreshData() {
   const p = route.path
   if (p.includes('/add') || p.includes('/edit')) {
+    invalidateAll()
     window.dispatchEvent(new Event('refresh:dropdown-data'))
     ElMessage.success('下拉数据已刷新')
   } else {

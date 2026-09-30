@@ -17,6 +17,7 @@ import request from '@/utils/request'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -166,7 +167,7 @@ async function handleSave() {
   saving.value = true
   try {
     await updateProject(form as any)
-    ElMessage.success('已保存'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('已保存'); invalidate('devProject')
     if (specChanged) {
       ElMessage.info('规格已变更：已有阶段不会重算（阶段进度是历史快照），仅之后新建的项目按新规格套用阶段模板')
     }
@@ -230,7 +231,7 @@ async function completePhase(phaseId: number) {
   phaseCompleting.value[phaseId] = true
   try {
     await request.put(`/dev/project/phase/${phaseId}/complete`)
-    ElMessage.success('阶段已完成'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('阶段已完成'); invalidate('devProject')
     await loadPhase()
     await loadProject()
   } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '')) }
@@ -241,7 +242,7 @@ async function skipPhase(phaseId: number) {
   phaseCompleting.value[phaseId] = true
   try {
     await request.put(`/dev/project/phase/${phaseId}/skip`)
-    ElMessage.success('阶段已跳过'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('阶段已跳过'); invalidate('devProject')
     await loadPhase()
     await loadProject()
   } catch (e: any) { ElMessage.error('操作失败: ' + (e?.message || '')) }
@@ -253,7 +254,7 @@ async function revertPhase(phaseId: number) {
   try {
     await ElMessageBox.confirm('撤销后将恢复该阶段为进行中，后续阶段将全部重置为未开始。确认撤销？', '确认撤销', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' })
     await request.put(`/dev/project/phase/${phaseId}/revert`)
-    ElMessage.success('阶段已撤销'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('阶段已撤销'); invalidate('devProject')
     await loadPhase()
     await loadProject()
   } catch (e: any) {
@@ -283,7 +284,7 @@ async function completeAllPhases() {
   try {
     const n: any = await request.put(`/dev/project/${projectId}/phase/complete-all`)
     ElMessage.success(n ? `已完成 ${n} 个阶段` : '所有阶段均已完成')
-    sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    invalidate('devProject')
     await loadPhase()
     // 必须同时刷新项目：全完成后后端已自动结项，基础信息页签顶部的状态要跟着变
     await loadProject()
@@ -297,7 +298,7 @@ async function recalcPlannedEnds() {
   try {
     await ElMessageBox.confirm('将以第一个进行中阶段为起点，级联推算后续所有未开始阶段的计划日期。确认重算？', '确认重算', { confirmButtonText: '确定', cancelButtonText: '取消', type: 'info' })
     await request.put(`/dev/project/phase/recalc`, null, { params: { projectId } })
-    ElMessage.success('计划日期已重算'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('计划日期已重算'); invalidate('devProject')
     await loadPhase()
   } catch (e: any) {
     if (e !== 'cancel') ElMessage.error('操作失败: ' + (e?.message || ''))
@@ -418,7 +419,7 @@ async function saveBom() {
     unit: b.unit
   }))
   await saveProjectBom(projectId, bomData)
-  ElMessage.success('BOM已保存'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+  ElMessage.success('BOM已保存'); invalidate('devProject')
   await loadBom()
   // BOM 为准：同步刷新改配信息（驱动IC/触摸IC/码片IC）回显
   const p: any = await getProject(projectId)
@@ -468,11 +469,11 @@ async function loadBugs() {
 function handleAddBug() { Object.assign(bugForm, { id: undefined, title: '', severity: SeverityType.NORMAL, bugType: BugTypeEnum.DISPLAY, status: BugStatus.OPEN, description: '' }); isBugEdit.value = false; bugDialogVisible.value = true }
 function handleEditBug(row: BugDTO) { Object.assign(bugForm, row); isBugEdit.value = true; bugDialogVisible.value = true }
 async function handleBugSubmit() {
-  if (isBugEdit.value && bugForm.id) { await updateProjectBug(projectId, bugForm); ElMessage.success('已更新'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') }
-  else { await addProjectBug(projectId, bugForm); ElMessage.success('已添加'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') }
+  if (isBugEdit.value && bugForm.id) { await updateProjectBug(projectId, bugForm); ElMessage.success('已更新'); invalidate('devProject') }
+  else { await addProjectBug(projectId, bugForm); ElMessage.success('已添加'); invalidate('devProject') }
   bugDialogVisible.value = false; loadBugs()
 }
-async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(projectId, row.id!); ElMessage.success('已删除'); loadBugs(); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
+async function handleDeleteBug(row: BugDTO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectBug(projectId, row.id!); ElMessage.success('已删除'); loadBugs(); invalidate('devProject') } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 // ===================== 图纸（含排线图纸上传） =====================
 const drawingList = ref<DrawingVO[]>([])
@@ -512,11 +513,11 @@ async function handleDrawingSubmit() {
       drawingForm.fileUrl = res as unknown as string
     }
     await addProjectDrawing(projectId, drawingForm as any)
-    ElMessage.success('图纸已上传'); drawingVisible.value = false; loadDrawings(); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('图纸已上传'); drawingVisible.value = false; loadDrawings(); invalidate('devProject')
   } catch (e: any) { ElMessage.error('上传失败: ' + (e?.message || '未知错误')) } finally { uploading.value = false }
 }
 function downloadFile(url: string) { window.open(url) }
-async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings(); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1') } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
+async function handleDeleteDrawing(row: DrawingVO) { try { await ElMessageBox.confirm('确定删除？', '提示', { type: 'warning' }); await deleteProjectDrawing(projectId, row.id!); ElMessage.success('已删除'); loadDrawings(); invalidate('devProject') } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } } }
 
 // ===================== 项目物料 =====================
 interface DevPurchaseItem {
@@ -554,7 +555,7 @@ async function handleDeleteDevMaterial(row: any) {
   try {
     await ElMessageBox.confirm('确定删除该记录吗？', '提示', { type: 'warning' })
     await request.delete(`/dev/purchase-item/${row.id}`)
-    ElMessage.success('已删除'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('已删除'); invalidate('devProject')
     loadDevMaterials()
   } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
@@ -624,13 +625,13 @@ function onNameBlur() {
 
               <el-col :span="8"><el-form-item label="打样工厂">
                 <div style="display:flex;gap:4px;align-items:center">
-                  <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" :preset="form.sampleFactoryId ? { id: form.sampleFactoryId, name: form.sampleFactoryName } : null" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+                  <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" :preset="form.sampleFactoryId ? { id: form.sampleFactoryId, name: form.sampleFactoryName } : null" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }" domain="vendor" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
                   <el-button v-if="form.sampleFactoryId" type="success" @click="goCreateOrder('sample')">下单</el-button>
                 </div>
               </el-form-item></el-col>
               <el-col :span="8"><el-form-item label="委外工厂">
                 <div style="display:flex;gap:4px;align-items:center">
-                  <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" :preset="form.outsourceFactoryId ? { id: form.outsourceFactoryId, name: form.outsourceFactoryName } : null" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+                  <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" :preset="form.outsourceFactoryId ? { id: form.outsourceFactoryId, name: form.outsourceFactoryName } : null" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }" domain="vendor" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
                   <el-button v-if="form.outsourceFactoryId" type="success" @click="goCreateOrder('outsource')">下单</el-button>
                 </div>
               </el-form-item></el-col>
@@ -798,7 +799,7 @@ function onNameBlur() {
             <el-table-column label="类型" width="100">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.materialTypeName }}</span>
-                <RemoteSelect v-else v-model="row.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" size="small" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialTypeId = ''; router.push('/dev/material-type'); return } row.outsourceMaterialId = undefined; row.materialName = '' }">
+                <RemoteSelect v-else v-model="row.materialTypeId" :fetch="fetchMaterialTypes" label-key="typeName" size="small" clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialTypeId = ''; router.push('/dev/material-type'); return } row.outsourceMaterialId = undefined; row.materialName = '' }" domain="materialType" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>
@@ -814,7 +815,7 @@ function onNameBlur() {
             <el-table-column label="供应商" width="100">
               <template #default="{row}">
                 <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span>
-                <RemoteSelect v-else v-model="row.supplierId" :fetch="fetchAllSuppliers" size="small" clearable filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.supplierId = undefined; router.push('/supplier/manage'); return } }">
+                <RemoteSelect v-else v-model="row.supplierId" :fetch="fetchAllSuppliers" size="small" clearable filterable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.supplierId = undefined; router.push('/supplier/manage'); return } }" domain="supplier" >
                   <el-option label="+ 新增" :value="ADD_MARKER" />
                 </RemoteSelect>
               </template>

@@ -12,6 +12,7 @@ import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import request from '@/utils/request'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
+import { invalidate } from '@/utils/dataFreshness'
 
 const router = useRouter()
 const route = useRoute()
@@ -179,7 +180,7 @@ async function handleSubmit() {
   saving.value = true
   try {
     await addProject(form as any, linkExistingProductId)
-    ElMessage.success('项目已新增'); sessionStorage.setItem(DEV_PROJECT_DIRTY_KEY, '1')
+    ElMessage.success('项目已新增'); invalidate('devProject')
     resetForm()
     // 提交成功 ⇒ 先清脏标记（否则离开会被未保存确认拦住），再关掉本次录入的页签并回列表
     markClean()
@@ -249,10 +250,10 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
             <el-select v-model="form.touchSupplierName" filterable allow-create style="width:100%" placeholder="选择或输入" @change="(v: string) => { if (v === ADD_MARKER) { form.touchSupplierName = ''; router.push('/supplier/manage'); return } }"><el-option v-for="s in solutionSupplierOptions" :key="s.id" :label="s.name" :value="s.name" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="打样工厂">
-            <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+            <RemoteSelect v-model="form.sampleFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.sampleFactoryId = undefined; router.push('/supplier/manage'); return } }" domain="vendor" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="委外工厂">
-            <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }"><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
+            <RemoteSelect v-model="form.outsourceFactoryId" :fetch="fetchFactorySuppliers" clearable placeholder="选择工厂" @change="(v: any) => { if (v === ADD_MARKER) { form.outsourceFactoryId = undefined; router.push('/supplier/manage'); return } }" domain="vendor" ><el-option label="+ 新增" :value="ADD_MARKER" /></RemoteSelect>
           </el-form-item></el-col>
         </el-row>
 

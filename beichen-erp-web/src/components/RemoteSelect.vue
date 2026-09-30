@@ -21,6 +21,7 @@
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
 import request from '@/utils/request'
+import { domainVersion, type Domain } from '@/utils/dataFreshness'
 
 // Odoo 风格下拉框：不预缓存全量，展开 / 输入搜索时实时查库。
 // 数据保存在组件本地 state，不写入全局 optionsStore，因此天然支持多用户/多标签页实时一致。
@@ -39,6 +40,9 @@ const props = withDefaults(defineProps<{
   preset?: any                                // 编辑回显预置当前项 {valueKey, labelKey}，后端已随详情返回名称，免查库
   disableCache?: boolean                      // true: 不启用会话缓存，每次展开实时查库（用于 fetch 依赖行参数的过滤下拉）
   disabled?: boolean                          // 禁用整个下拉
+  domain?: Domain                             // 该下拉数据所属“数据域”（见 utils/dataFreshness.ts）：
+                                              // 域被写过就自动丢弃会话缓存重查，无需用户点“刷新数据”。
+                                              // 不传 = 行为与旧版完全一致（缓存只由 refresh:dropdown-data 清）。
 }>(), {
   valueKey: 'id',
   labelKey: 'name',
@@ -150,13 +154,21 @@ function getLabel(o: any) {
 // 输入关键字搜索仍实时查库；顶栏"刷新数据"派发 refresh:dropdown-data 事件清空缓存强制重查。
 let loadedOnce = false
 let cachedAll: any[] = []
+let cachedVer = -1
 async function load(kw: string) {
-  if (kw === '' && loadedOnce) { options.value = cachedAll; return }
+  if (kw === '') {
+    const ver = domainVersion(props.domain)
+    if (loadedOnce && cachedVer === ver) { options.value = cachedAll; return }
+  }
   loading.value = true
   try {
     const res = await props.fetch(kw)
     options.value = res?.records || res || []
-    if (kw === '' && !props.disableCache) { loadedOnce = true; cachedAll = options.value }
+    if (kw === '' && !props.disableCache) {
+      loadedOnce = true
+      cachedAll = options.value
+      cachedVer = domainVersion(props.domain)
+    }
   } catch (e) { options.value = [] }
   finally { loading.value = false }
 }
@@ -165,6 +177,7 @@ async function load(kw: string) {
 function onRefreshDropdownData() {
   loadedOnce = false
   cachedAll = []
+  cachedVer = -1
   options.value = []
   const mv = props.modelValue
   if (mv != null && mv !== '' && !(Array.isArray(mv) && mv.length === 0)) {
