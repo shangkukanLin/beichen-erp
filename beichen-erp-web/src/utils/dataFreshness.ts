@@ -32,9 +32,9 @@ export type Domain =
   // 基础档案
   | 'product' | 'brand' | 'material' | 'materialType'
   | 'customer' | 'supplier' | 'vendor' | 'warehouse'
-  | 'outsourceMaterial' | 'outsourceMaterialType' | 'outsourceContract' | 'resource'
+  | 'outsourceContract'
   // 销售
-  | 'saleOrder' | 'saleReturn' | 'saleExchange' | 'saleAfter'
+  | 'saleOrder' | 'saleReturn' | 'saleExchange'
   // 采购
   | 'purchaseOrder' | 'purchaseReturn' | 'purchaseExchange'
   // 委外
@@ -139,6 +139,17 @@ const URL_DOMAIN: Array<[RegExp, Domain]> = [
   [/^\/settings\/params(\/|$)/, 'sysParam'],
   [/^\/memo(\/|$)/, 'memo'],
   [/^\/supplier-settlement(\/|$)/, 'supplierSettlement'],
+  // ---- P3-2 真实接口前缀补齐 ----
+  // audit-url-domain-coverage.ps1 扫**全方法**后报出的写缺口。教训：域表不能只按 views 目录名推断 ——
+  // 后端接口前缀与前端路由/目录并不总是一致，漏登记的后果是"写操作不 bump 域" ⇒
+  // 下拉不刷新（用户实测：新增客户后销售单页客户下拉找不到），甚至列表本身也不刷新。
+  // 新增域或接口后请务必重跑该 audit 脚本。
+  [/^\/inventory\/sale\/check-stock(\/|$)/, 'saleOrder'],
+  [/^\/inventory\/sale(\/|$)/, 'saleOrder'],
+  [/^\/inventory\/outbound(\/|$)/, 'saleOrder'],
+  [/^\/inventory\/customer(\/|$)/, 'customer'],
+  [/^\/inventory\/purchase-exchange(\/|$)/, 'purchaseExchange'],
+  [/^\/outsource\/contract-template(\/|$)/, 'outsourceContract'],
 ]
 
 /**
@@ -235,10 +246,26 @@ export function invalidateAll() {
  * 按请求失效（给响应拦截器调用）。只有**写方法**才判定；读请求（get）一律忽略。
  * 一条 URL 只映射到第一个命中的域（域表按具体→宽泛排序）。
  */
+/**
+ * 写这些接口会让“几乎所有数据”失效，单独维护比塞进域表更清晰：
+ * 切公司（换了一套数据）、数据导入、清空本公司数据。
+ */
+const ALL_TRIGGERS = [
+  /^\/company\/switch(\/|$)/,
+  /^\/system\/import-data(\/|$)/,
+  /^\/system\/clear-company-data(\/|$)/,
+]
+
 export function invalidateByRequest(method?: string, url?: string) {
   if (!method || !url) return
   if (!WRITE_METHODS.includes(method.toLowerCase())) return
   const path = url.split('?')[0]
+  for (const re of ALL_TRIGGERS) {
+    if (re.test(path)) {
+      invalidateAll()
+      return
+    }
+  }
   for (const [re, d] of URL_DOMAIN) {
     if (re.test(path)) {
       invalidate(d)

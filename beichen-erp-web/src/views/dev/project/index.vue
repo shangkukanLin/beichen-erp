@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
@@ -109,7 +110,10 @@ async function handleReactivate(row: any) {
 useDomainRefresh('devProject', () => {
     loadData()
 }, DEV_PROJECT_DIRTY_KEY)
-onMounted(() => { loadData(); loadBrandOptions() })
+// 2026-09-30: 品牌筛选是本地下拉（/brand/enabled 进页面只拉一次）⇒ 品牌在别处新增/改名后，
+// 回到本页要能拿到新数据；之前只在 onMounted 拉，keep-alive 下永远不更新。
+useDomainRefresh('brand', loadBrandOptions)
+onMounted(() => { loadData() })
 
 </script>
 
@@ -119,7 +123,7 @@ onMounted(() => { loadData(); loadBrandOptions() })
       <div class="query-bar">
       <el-form :inline="true" :model="query" class="query-form">
         <el-form-item label="项目名称"><el-input v-model="query.name" placeholder="项目名称" clearable @keyup.enter="handleQuery" /></el-form-item>
-        <el-form-item label="品牌"><el-select v-model="query.brandId" filterable clearable placeholder="全部" style="width:150px" @change="handleQuery"><el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" /></el-select></el-form-item>
+        <el-form-item label="品牌"><el-select v-model="query.brandId" filterable clearable placeholder="全部" style="width:150px" @change="(v: any) => { if (v === ADD_MARKER) { query.brandId = undefined; $router.push('/inventory/brand'); return } handleQuery() }"><el-option v-for="b in brandOptions" :key="b.id" :label="b.brandName" :value="b.id" /><el-option label="+ 新增" :value="ADD_MARKER" /></el-select></el-form-item>
       </el-form>
       <div class="toolbar">
         <el-button type="primary" :icon="'Search'" @click="handleQuery">查询</el-button>

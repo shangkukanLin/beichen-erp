@@ -1,5 +1,6 @@
  <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
 import { MemoStatus } from '@/api/enums'
@@ -154,7 +155,7 @@ async function handleDeleteProgress(p: any) {
   } catch (e: any) { ElMessage.error(e?.message || '删除失败') }
 }
 
-onMounted(() => loadMemoList())
+useDomainRefresh('memo', loadMemoList)
 </script>
 
 <template>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
+import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { reactive, ref, onMounted, onActivated } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import * as XLSX from 'xlsx'
@@ -158,9 +159,11 @@ onActivated(() => { loadData() })
       <div class="query-bar">
         <el-form :inline="true" :model="query" class="query-form">
           <el-form-item label="品牌">
-            <el-select v-model="query.brand" placeholder="全部" clearable filterable style="width:130px">
+            <el-select v-model="query.brand" placeholder="全部" clearable filterable style="width:130px" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/inventory/brand') } }">
               <el-option v-for="b in brandOptions" :key="b" :label="b" :value="b" />
-            </el-select>
+            
+                <el-option label="+ 鏂板" :value="ADD_MARKER" />
+              </el-select>
           </el-form-item>
           <el-form-item label="主屏尺寸">
             <el-select v-model="query.screenSize" placeholder="全部" clearable filterable style="width:120px" @change="handleQuery">

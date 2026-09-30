@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { reactive, ref, computed, onMounted, watch } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
@@ -21,7 +21,7 @@ import {
   getSaleOrder, getSaleOrderItems, createSaleOrder, updateSaleOrder, checkSaleOrderStock, SALE_ORDER_DIRTY_KEY,
   type SaleOrder, type SaleOrderItem
 } from '@/api/sale'
-import { invalidate } from '@/utils/dataFreshness'
+import { invalidate, createDomainWatcher } from '@/utils/dataFreshness'
 
 const route = useRoute()
 const router = useRouter()
@@ -95,6 +95,10 @@ async function loadAccounts() {
   // 账户列表是异步拉取的：若用户先切到「现金」、后列表才回来，这里补一次默认带出
   if (isCash.value && !form.settleAccountId) onSettleTypeChange()
 }
+// 2026-09-30: 收款账户是**本地下拉**（进页面只拉一次，不是 RemoteSelect），而本页被 keep-alive 缓存 ⇒
+// 在「账户管理」新增账户后返回，本下拉里选不到新账户。按 account 域补拉一次。
+const accountWatcher = createDomainWatcher('account')
+onActivated(() => { if (accountWatcher.changed()) loadAccounts() })
 /** 切到「现金」时若未选账户，默认带出现金账户（account_type=cash） */
 function onSettleTypeChange() {
   if (!isCash.value) { form.settleAccountId = undefined; return }
@@ -335,9 +339,11 @@ onMounted(async () => {
           </el-col>
           <el-col :span="8" v-if="isCash">
             <el-form-item required label="收款账户">
-              <el-select v-model="form.settleAccountId" filterable clearable placeholder="选择现金账户" style="width:100%">
+              <el-select v-model="form.settleAccountId" filterable clearable placeholder="选择现金账户" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/finance/account') } }">
                 <el-option v-for="a in accountOptions" :key="a.id" :value="a.id"
                   :label="a.accountName + '（' + (AccountTypeLabel[String(a.accountType || '').toLowerCase()] || a.accountType || '') + '）'" />
+              
+                <el-option label="+ 鏂板" :value="ADD_MARKER" />
               </el-select>
             </el-form-item>
           </el-col>
