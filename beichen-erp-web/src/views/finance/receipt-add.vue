@@ -14,6 +14,7 @@ import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import AccountSplitTable from '@/components/AccountSplitTable.vue'
 import { createReceipt, getReceiptUnpaidReceivables, getReceiptPartySummary, type FinanceReceipt, type FinanceReceiptAccount, type FinanceReceiptItem, type FinanceReceivable, type PartyDebtSummary } from '@/api/finance'
 import { SubjectType } from '@/api/enums'
 
@@ -24,6 +25,8 @@ const accounts = ref<{id:number;accountName:string}[]>([])
 const form = reactive<FinanceReceipt>({ customerId: undefined, supplierId: undefined, subjectType: SubjectType.CUSTOMER as string, receiptDate: '', remark: '' })
 /** 收款账户分款明细（2026-09-29 口径①）：一行 = 一个账户本次收到的钱；初始给一行空行，用户直接填 */
 const rows = ref<FinanceReceiptAccount[]>([{ accountId: undefined, amount: 0, remark: '' }])
+const total = ref<number | null>(null)
+const splitRef = ref<any>(null)
 /** 核销开关（2026-09-29 口径②：**默认关** = 只记收款不核销） */
 const writeOff = ref(false)
 const items = ref<FinanceReceiptItem[]>([])
@@ -94,14 +97,10 @@ async function submit() {
   if (form.subjectType === SubjectType.SUPPLIER && !form.supplierId) { ElMessage.warning('请选择供应商'); return }
   if (form.subjectType !== SubjectType.SUPPLIER && !form.customerId) { ElMessage.warning('请选择客户'); return }
   // 分款校验（与后端 saveAccounts 逐条对齐：账户必选、金额 > 0、同账户不许重复行）
-  const accRows = rows.value.filter(r => r.accountId != null || Number(r.amount || 0) > 0)
-  if (accRows.length === 0) { ElMessage.warning('请至少添加一个收款账户'); return }
-  for (let i = 0; i < accRows.length; i++) {
-    if (accRows[i].accountId == null) { ElMessage.warning(`收款账户第 ${i + 1} 行未选择账户`); return }
-    if (!(Number(accRows[i].amount) > 0)) { ElMessage.warning(`收款账户第 ${i + 1} 行金额必须大于 0`); return }
-  }
-  const ids = accRows.map(r => Number(r.accountId))
-  if (new Set(ids).size !== ids.length) { ElMessage.warning('同一账户请合并为一行（账户不允许重复）'); return }
+  // 2026-09-30: validation moved into AccountSplitTable.validate() (same rules as backend saveAccounts)
+  const accError = splitRef.value?.validate?.()
+  if (accError) { ElMessage.warning(accError); return }
+  const accRows = rows.value.filter(r => r.accountId != null && Number(r.amount || 0) > 0)
   // 核销校验：开关关闭 ⇒ 一律不核销；打开 ⇒ 每行必须选应收，且核销合计 ≤ 收款合计
   const useItems = writeOff.value ? items.value : []
   if (writeOff.value) {
@@ -183,34 +182,16 @@ onMounted(async () => {
         <el-divider>
           收款账户（可分多账户收款，如 A 账户 50 + B 账户 100）
         </el-divider>
-        <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <el-button type="primary" @click="addRow">添加账户</el-button>
-          <!-- 收款金额 = 分款合计（只读，后端同样按分款合计落库 amount） -->
-          <span style="font-size:var(--app-font-base)">
-            收款金额：<b style="font-size:var(--app-font-lg);color:var(--app-color-primary)">¥{{ fmt(receivedTotal) }}</b>
-            <span style="color:var(--app-text-secondary)">（{{ usedAccountCount }} 个账户）</span>
-          </span>
-        </div>
-        <el-table :data="rows" border>
-          <el-table-column label="收款账户" min-width="200">
-            <template #default="{row}">
-              <el-select v-model="row.accountId" placeholder="选择收款账户" filterable clearable style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/finance/account') } }">
-                <el-option v-for="a in accounts" :key="a.id" :label="a.accountName" :value="a.id"/>
-              
-                <el-option label="+ 鏂板" :value="ADD_MARKER" />
-              </el-select>
-            </template>
-          </el-table-column>
-          <el-table-column label="收款金额" width="160">
-            <template #default="{row}"><el-input-number v-model="row.amount" :min="0" :precision="2" controls-position="right" style="width:100%"/></template>
-          </el-table-column>
-          <el-table-column label="备注" min-width="160">
-            <template #default="{row}"><el-input v-model="row.remark" placeholder="可不填"/></template>
-          </el-table-column>
-          <el-table-column label="操作" width="70" align="center">
-            <template #default="{$index}"><el-button type="danger" link @click="removeRow($index)">删除</el-button></template>
-          </el-table-column>
-        </el-table>
+        <AccountSplitTable
+          ref="splitRef"
+          v-model="rows"
+          v-model:total="total"
+          :accounts="accounts"
+          account-column-label="收款账户"
+          amount-column-label="收款金额"
+          total-label="本次收款总额"
+          add-route="/finance/account"
+        />
 
         <!-- ===== 核销明细（2026-09-29 口径②：开关项，默认关）===== -->
         <el-divider>

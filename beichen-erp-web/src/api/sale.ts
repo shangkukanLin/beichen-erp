@@ -1,4 +1,4 @@
-﻿import request from '@/utils/request'
+import request from '@/utils/request'
 
 export interface SaleOrderItem {
   id?: number
@@ -11,6 +11,16 @@ export interface SaleOrderItem {
   qualityType?: string
   quantity?: number
   unitPrice?: number
+  amount?: number
+  remark?: string
+}
+
+/** Cash settlement split rows (2026-09-30): a sale order collected through multiple accounts. */
+export interface SaleOrderSettleAccount {
+  id?: number
+  orderId?: number
+  accountId?: number
+  accountName?: string
   amount?: number
   remark?: string
 }
@@ -33,6 +43,10 @@ export interface SaleOrder {
   settleAccountId?: number
   /** 结算账户名（后端实时回显，不落库） */
   settleAccountName?: string
+  /** Amount actually collected this time (cash settlement). Empty for credit terms. */
+  settleAmount?: number
+  /** Cash split rows (multi-account). Not a column on the main table. */
+  settleAccounts?: SaleOrderSettleAccount[]
   taxRate?: number
   taxAmount?: number
   totalAmount?: number
@@ -87,6 +101,10 @@ export function getSaleOrderItems(id: number) {
   return request.get<SaleOrderItem[]>(`/inventory/sale/${id}/items`)
 }
 /** 标记销售单列表需刷新（详情页数据变动后置位，列表页 onActivated 消费） */
+export function getSaleOrderSettleAccounts(id: number) {
+  return request.get<SaleOrderSettleAccount[]>(`/inventory/sale/${id}/settle-accounts`)
+}
+
 export const SALE_ORDER_DIRTY_KEY = 'saleOrderListDirty'
 export function createSaleOrder(data: any) {
   return request.post<void>('/inventory/sale', data)

@@ -13,6 +13,7 @@ import {
 } from '@/api/enums'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import AccountSplitTable from '@/components/AccountSplitTable.vue'
 import PageShell from '@/components/PageShell.vue'
 import SectionCard from '@/components/SectionCard.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
@@ -99,9 +100,25 @@ async function loadAccounts() {
 // 在「账户管理」新增账户后返回，本下拉里选不到新账户。按 account 域补拉一次。
 const accountWatcher = createDomainWatcher('account')
 onActivated(() => { if (accountWatcher.changed()) loadAccounts() })
-/** 切到「现金」时若未选账户，默认带出现金账户（account_type=cash） */
+
+// ==================== 现金收款·多账户分款（2026-09-30） ====================
+// 用户口径：本次收款总额可录入（**默认带出应收**，可改小 = 部分收款，差额后端挂预收），且只能 ≤ 应收；
+// 各账户金额由 AccountSplitTable 按"单一自动吸收行"分摊，分摊合计恒等于总额。
+// 提交：order.settleAmount + order.settleAccounts；后端 normalizeSettle 校验并回写首行快照。
+const settleRows = ref<any[]>([])
+const settleTotal = ref<number | null>(null)
+const splitRef = ref<any>(null)
+// 注：orderTotal / settleRemaining / watch 定义在 goodsTotal 之后（见下），
+// 因为 watch 会在建立依赖时立刻求值，若提到前面会触发 goodsTotal 的 TDZ 报错、整页挂载失败。
+/** 切到「现金」时默认带出**一行现金账户**（金额交给组件按总额自动分配）；切回账期则清空分款 */
 function onSettleTypeChange() {
-  if (!isCash.value) { form.settleAccountId = undefined; return }
+  if (!isCash.value) { form.settleAccountId = undefined; settleRows.value = []; settleTotal.value = null; return }
+  if (settleRows.value.length === 0 && accountOptions.value.length > 0) {
+    const cash = accountOptions.value.find((a: any) => String(a.accountType || '').toLowerCase() === AccountType.CASH)
+    const first = cash || accountOptions.value[0]
+    if (first) settleRows.value = [{ accountId: first.id, amount: 0, remark: '' }]
+  }
+  if (!(Number(settleTotal.value) > 0)) settleTotal.value = orderTotal.value > 0 ? orderTotal.value : null
   if (form.settleAccountId) return
   if (accountOptions.value.length === 0) return // 账户还没加载完，loadAccounts 回调里会再试
   const cash = accountOptions.value.find((a: any) => String(a.accountType || '').toLowerCase() === AccountType.CASH)
@@ -124,6 +141,15 @@ function itemAmount(row: SaleOrderItem) { const q = Number(row.quantity) || 0; c
 
 // 税额拆分（单价含税口径）：应付总额不变，按税率从总额中拆出税额
 const goodsTotal = computed(() => items.value.reduce((s, r) => s + (Number(r.quantity) || 0) * (Number(r.unitPrice) || 0), 0))
+/** 应收总额（含税）= 明细合计，四舍五入到分；作为「本次收款总额」的默认值与上限 */
+const orderTotal = computed(() => Math.round(goodsTotal.value * 100) / 100)
+/** 待收差额（> 0 时审核后作为预收挂账；< 0 由组件拦下，禁止超收） */
+const settleRemaining = computed(() => Math.round((orderTotal.value - Number(settleTotal.value || 0)) * 100) / 100)
+// 明细变化：总额尚未填写（或为 0）时跟随应收；用户已填金额则不打扰
+watch(orderTotal, v => {
+  if (!isCash.value) return
+  if (!(Number(settleTotal.value) > 0)) settleTotal.value = v > 0 ? v : null
+})
 const taxAmount = computed(() => form.taxIncluded === 1 && Number(form.taxRate) > 0
   ? Math.round(goodsTotal.value * (Number(form.taxRate) / (100 + Number(form.taxRate))) * 100) / 100
   : 0)
@@ -256,11 +282,29 @@ async function doSubmit() {
       + `销售单只能卖 A规/B规/C规 良品，不能是不良品或待整理`)
     return
   }
-  // 现金结算必须给出收款账户（后端 normalizeSettle 同样校验，这里先给友好提示）
-  if (isCash.value && !form.settleAccountId) { ElMessage.warning('结算方式为「现金」时请选择收款账户'); return }
+  // 现金结算：多账户分款校验（账户必选 / 金额 > 0 / 不重复 / 合计 = 本次收款总额）+ 禁止超收；
+  // 后端 normalizeSettle 用同一口径兜底（分款行与 settleAmount 不一致会直接拒绝）。
+  if (isCash.value) {
+    const err = splitRef.value?.validate?.()
+    if (err) { ElMessage.warning(err); return }
+    if (settleRemaining.value < -0.004) {
+      ElMessage.warning(`本次收款总额不能超过应收总额 ¥${orderTotal.value.toFixed(2)}`)
+      return
+    }
+  }
   submitLoading.value = true
   try {
-    const payload = { order: { ...form }, items: items.value }
+    // 现金结算：提交本次收款总额 + 分款明细（账期单不带，后端 normalizeSettle 会清空这两个字段）
+    const payload = {
+      order: {
+        ...form,
+        settleAmount: isCash.value ? Number(settleTotal.value || 0) : undefined,
+        settleAccounts: isCash.value
+          ? settleRows.value.map(r => ({ accountId: Number(r.accountId), amount: Number(r.amount || 0), remark: r.remark }))
+          : undefined
+      },
+      items: items.value
+    }
     if (editId.value !== null) { await updateSaleOrder(editId.value, payload); ElMessage.success('已更新') }
     else { await createSaleOrder(payload); ElMessage.success('已新增') }
     invalidate('saleOrder')
@@ -301,7 +345,7 @@ onMounted(async () => {
     <!-- 主操作「保存」放页头右侧操作区（2026-09-23 用户口径：与左侧「返回」左右对调）；
          原底部「取消」已并入「返回」 -->
     <template #actions>
-      <el-button type="primary" :loading="submitLoading" @click="handleSubmit">保存</el-button>
+      <el-button type="primary" data-role="submit" :loading="submitLoading" @click="handleSubmit">保存</el-button>
     </template>
 
     <SectionCard title="基本信息">
@@ -337,14 +381,16 @@ onMounted(async () => {
               <span style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ isCash ? '立即到账' : '挂应收' }}</span>
             </el-form-item>
           </el-col>
-          <el-col :span="8" v-if="isCash">
+          <el-col :span="24" v-if="isCash">
             <el-form-item required label="收款账户">
-              <el-select v-model="form.settleAccountId" filterable clearable placeholder="选择现金账户" style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/finance/account') } }">
-                <el-option v-for="a in accountOptions" :key="a.id" :value="a.id"
-                  :label="a.accountName + '（' + (AccountTypeLabel[String(a.accountType || '').toLowerCase()] || a.accountType || '') + '）'" />
-              
-                <el-option label="+ 鏂板" :value="ADD_MARKER" />
-              </el-select>
+              <AccountSplitTable
+                ref="splitRef"
+                v-model="settleRows"
+                v-model:total="settleTotal"
+                :accounts="accountOptions"
+                :upper-limit="orderTotal"
+                add-route="/finance/account"
+              />
             </el-form-item>
           </el-col>
           <el-col :span="4">

@@ -10,11 +10,12 @@ import { AccountType, AccountTypeLabel, SettleType, SettleTypeLabel, SettleTypeT
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import AccountSplitTable from '@/components/AccountSplitTable.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
 import {
-  getSaleOrder, getSaleOrderItems, updateSaleOrder, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, checkSaleOrderStock, SALE_ORDER_DIRTY_KEY,
+  getSaleOrder, getSaleOrderItems, getSaleOrderSettleAccounts, updateSaleOrder, auditSaleOrder, cancelSaleOrder, unAuditSaleOrder, checkSaleOrderStock, SALE_ORDER_DIRTY_KEY,
   SaleReturnStatus, SaleReturnStatusLabel,
   type SaleOrder, type SaleOrderItem
 } from '@/api/sale'
@@ -108,6 +109,26 @@ const isCashForm = computed(() => form.settleType === SettleType.CASH)
 const isCashHead = computed(() => head.value.settleType === SettleType.CASH)
 const accounts = ref<any[]>([])
 const accountOptions = computed(() => accounts.value.filter((a: any) => a.status === undefined || a.status === 1))
+// 2026-09-30: cash settlement split across accounts (mirrors sale/order/add.vue).
+const settleRows = ref<any[]>([])
+const settleTotal = ref<number | null>(null)
+const splitRef = ref<any>(null)
+/** Load split rows: prefer the dedicated endpoint; fall back to a single legacy row. */
+async function loadSettleRows() {
+  settleRows.value = []
+  settleTotal.value = null
+  if (!isCashForm.value) return
+  try {
+    const rows: any = await getSaleOrderSettleAccounts(orderId)
+    settleRows.value = (rows || []).map((r: any) => ({ accountId: r.accountId, accountName: r.accountName, amount: Number(r.amount || 0), remark: r.remark || '' }))
+  } catch { settleRows.value = [] }
+  // Legacy drafts have no split rows: degrade to the single settleAccountId + order total.
+  if (settleRows.value.length === 0 && form.settleAccountId) {
+    settleRows.value = [{ accountId: form.settleAccountId, amount: Number(head.value.settleAmount ?? head.value.totalAmount ?? 0), remark: '' }]
+  }
+  const sum = settleRows.value.reduce((s: number, r: any) => s + Number(r.amount || 0), 0)
+  settleTotal.value = Number(head.value.settleAmount ?? sum) || null
+}
 async function loadAccounts() {
   try { const res: any = await getAccountPage({ pageSize: 200 }); accounts.value = res?.records || [] } catch { accounts.value = [] }
   // 账户列表是异步拉取的：若已切到「现金」而还没带出账户，回调里补一次
@@ -115,7 +136,16 @@ async function loadAccounts() {
 }
 /** 切到「现金」时若未选账户，默认带出现金账户（account_type=cash） */
 function onSettleTypeChange() {
-  if (!isCashForm.value) { form.settleAccountId = undefined; return }
+  if (!isCashForm.value) { form.settleAccountId = undefined; settleRows.value = []; settleTotal.value = null; return }
+  if (settleRows.value.length === 0 && accountOptions.value.length > 0) {
+    const c0 = accountOptions.value.find((a: any) => String(a.accountType || "").toLowerCase() === AccountType.CASH)
+    const first = c0 || accountOptions.value[0]
+    if (first) settleRows.value = [{ accountId: first.id, amount: 0, remark: "" }]
+  }
+  if (!(Number(settleTotal.value) > 0)) {
+    const t0 = Math.round(goodsTotal.value * 100) / 100
+    settleTotal.value = t0 > 0 ? t0 : null
+  }
   if (form.settleAccountId) return
   if (accountOptions.value.length === 0) return
   const cash = accountOptions.value.find((a: any) => String(a.accountType || '').toLowerCase() === AccountType.CASH)
@@ -253,6 +283,7 @@ async function loadData() {
     returns.value = h?.returns || []
     exchanges.value = h?.exchanges || []
     linkedReceipts.value = h?.receipts || []
+    await loadSettleRows()
     await loadWarehouseName()
   } catch { } finally { loading.value = false }
   // 数据加载完成 ⇒ 重建"未保存"基线（保存/审核/作废后都会重跑本函数 ⇒ 自动重置，不误报）
@@ -286,7 +317,22 @@ async function handleSubmit() {
 async function doSubmit() {
   submitLoading.value = true
   try {
-    const payload = { order: { ...form }, items: items.value }
+    // Cash settlement: same split rules as the backend (accounts required / amount>0 / no dupes /
+    // rows sum == settleAmount / not exceeding the receivable).
+    if (isCashForm.value) {
+      const err = splitRef.value?.validate?.()
+      if (err) { ElMessage.warning(err); return }
+    }
+    const payload = {
+      order: {
+        ...form,
+        settleAmount: isCashForm.value ? Number(settleTotal.value || 0) : undefined,
+        settleAccounts: isCashForm.value
+          ? settleRows.value.map((r: any) => ({ accountId: Number(r.accountId), amount: Number(r.amount || 0), remark: r.remark }))
+          : undefined
+      },
+      items: items.value
+    }
     await updateSaleOrder(orderId, payload)
     ElMessage.success('已保存')
     invalidate('saleOrder')
@@ -392,14 +438,16 @@ onActivated(async () => { await loadData(); takeBaseline() })
                 </el-select>
               </el-form-item>
             </el-col>
-            <el-col :span="12" v-if="isCashForm">
+            <el-col :span="24" v-if="isCashForm">
               <el-form-item required label="收款账户">
-                <el-select v-model="form.settleAccountId" filterable clearable placeholder="选择现金账户" style="width:100%">
-                  <el-option v-for="a in accountOptions" :key="a.id" :value="a.id"
-                    :label="a.accountName + '（' + (AccountTypeLabel[String(a.accountType || '').toLowerCase()] || a.accountType || '') + '）'" />
-                
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
-              </el-select>
+                <AccountSplitTable
+                  ref="splitRef"
+                  v-model="settleRows"
+                  v-model:total="settleTotal"
+                  :accounts="accountOptions"
+                  :upper-limit="goodsTotal"
+                  add-route="/finance/account"
+                />
               </el-form-item>
             </el-col>
             <el-col :span="6">
@@ -524,6 +572,12 @@ onActivated(async () => { await loadData(); takeBaseline() })
           <el-descriptions-item label="结算方式">
             <el-tag :type="SettleTypeTag[String(head.settleType || 'CREDIT')] || 'info'" size="small">{{ SettleTypeLabel[String(head.settleType || 'CREDIT')] || '账期' }}</el-tag>
             <span v-if="isCashHead" style="margin-left:6px; color:var(--app-text-secondary)">{{ head.settleAccountName || '（未选收款账户）' }}</span>
+          </el-descriptions-item>
+          <!-- 2026-09-30 现金多账户分款：只读态逐行列账户与金额（首行即上面的账户快照） -->
+          <el-descriptions-item v-if="isCashHead && settleRows.length" label="收款分款">
+            <span v-for="(r, i) in settleRows" :key="i" style="margin-right:14px">
+              {{ r.accountName || r.accountId }} ¥{{ fmt(Number(r.amount || 0)) }}
+            </span>
           </el-descriptions-item>
           <el-descriptions-item v-if="isCashHead" label="关联收款单">
             <template v-if="linkedReceipts.length">
