@@ -18,6 +18,7 @@ import com.beichen.erp.finance.common.SourceBillType;
 import com.beichen.erp.finance.common.SubjectType;
 import com.beichen.erp.finance.entity.FinanceAccount;
 import com.beichen.erp.finance.entity.FinanceReceipt;
+import com.beichen.erp.finance.entity.FinanceReceiptAccount;
 import com.beichen.erp.finance.entity.FinanceReceiptItem;
 import com.beichen.erp.finance.mapper.FinanceAccountMapper;
 import com.beichen.erp.finance.service.FinanceReceiptService;
@@ -35,8 +36,10 @@ import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOrderItem;
+import com.beichen.erp.sale.entity.SaleOrderSettleAccount;
 import com.beichen.erp.sale.mapper.SaleOrderMapper;
 import com.beichen.erp.sale.mapper.SaleOrderItemMapper;
+import com.beichen.erp.sale.mapper.SaleOrderSettleAccountMapper;
 import com.beichen.erp.sale.service.SaleOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -70,6 +73,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
     private final FinanceReceiptService receiptService;
     /** 结算账户校验/回显用 */
     private final FinanceAccountMapper accountMapper;
+    /** 现金结算的**分款明细**（2026-09-30 多账户收款）：落库 sale_order_settle_account，与 finance_receipt_account 同构 */
+    private final SaleOrderSettleAccountMapper settleAccountMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long customerId, String code,
@@ -163,6 +168,27 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         return items;
     }
 
+    /** 现金结算的分款明细查询（详情页回显；与 finance_receipt 的 /{id}/accounts 同构） */
+    @Override
+    public List<SaleOrderSettleAccount> getSettleAccounts(Long orderId) {
+        return settleAccountMapper.selectList(
+                new LambdaQueryWrapper<SaleOrderSettleAccount>()
+                        .eq(SaleOrderSettleAccount::getOrderId, orderId)
+                        .orderByAsc(SaleOrderSettleAccount::getId));
+    }
+
+    /** 落库分款明细（2026-09-30）：调用前 normalizeSettle 已完成校验与首行快照；行 id 一律重建 */
+    private void saveSettleAccounts(SaleOrder order, Long cid) {
+        List<SaleOrderSettleAccount> rows = order.getSettleAccounts();
+        if (rows == null || rows.isEmpty()) return;
+        for (SaleOrderSettleAccount acc : rows) {
+            acc.setId(null);
+            acc.setOrderId(order.getId());
+            if (cid != null && cid > 0) acc.setCompanyId(cid);
+            settleAccountMapper.insert(acc);
+        }
+    }
+
     /** 批量回填产品名称/规格/单位，消除 N+1 */
     private void fillProductInfo(List<SaleOrderItem> items) {
         List<Long> productIds = items.stream().map(SaleOrderItem::getProductId)
@@ -191,20 +217,77 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         order.setSettleType(st.getCode());
         if (st != SettleType.CASH) {
             order.setSettleAccountId(null);
+            order.setSettleAmount(null);
+            order.setSettleAccounts(null);
             return;
         }
-        if (order.getSettleAccountId() == null)
-            throw new BusinessException("结算方式为「现金」时必须选择收款账户");
-        FinanceAccount acc = accountMapper.selectById(order.getSettleAccountId());
-        if (acc == null) throw new BusinessException("收款账户不存在：ID=" + order.getSettleAccountId());
-        if (acc.getStatus() != null && acc.getStatus() == 0)
-            throw new BusinessException("收款账户已停用，请重新选择：" + acc.getAccountName());
+        // 2026-09-30 多账户收款：有分款行时**以行数据为准**（校验后合计写入 settleAmount、
+        // 首行写入 settleAccountId 作为快照）；没有分款行时回退旧的单账户口径（老前端/历史草稿）。
+        List<SaleOrderSettleAccount> rows = normalizeSettleRows(order.getSettleAccounts());
+        if (rows.isEmpty()) {
+            if (order.getSettleAccountId() == null)
+                throw new BusinessException("结算方式为「现金」时必须选择收款账户");
+            FinanceAccount acc = accountMapper.selectById(order.getSettleAccountId());
+            if (acc == null) throw new BusinessException("收款账户不存在：ID=" + order.getSettleAccountId());
+            if (acc.getStatus() != null && acc.getStatus() == 0)
+                throw new BusinessException("收款账户已停用，请重新选择：" + acc.getAccountName());
+            return;
+        }
+        order.setSettleAccounts(rows);
+        BigDecimal splitTotal = BigDecimal.ZERO;
+        for (SaleOrderSettleAccount acc : rows) splitTotal = splitTotal.add(acc.getAmount());
+        if (order.getSettleAmount() != null && order.getSettleAmount().compareTo(splitTotal) != 0)
+            throw new BusinessException("本次收款总额与各账户金额合计不一致（总额 "
+                    + order.getSettleAmount().stripTrailingZeros().toPlainString() + "，合计 "
+                    + splitTotal.stripTrailingZeros().toPlainString() + "）");
+        order.setSettleAmount(splitTotal);
+        // 首行快照（与 finance_receipt.account_id 同口径：列表列与旧读法都认它）
+        SaleOrderSettleAccount first = rows.get(0);
+        order.setSettleAccountId(first.getAccountId());
+        order.setSettleAccountName(first.getAccountName());
+    }
+
+    /**
+     * 分款行校验并归一（2026-09-30）：账户必选、金额 &gt; 0、同账户不许重复、账户存在且未停用；
+     * 同时回填账户名快照并清掉前端传来的行 id（交给"先删后插"重建）。口径与收款单 saveAccounts 一致。
+     */
+    private List<SaleOrderSettleAccount> normalizeSettleRows(List<SaleOrderSettleAccount> input) {
+        List<SaleOrderSettleAccount> rows = new ArrayList<>();
+        if (input == null) return rows;
+        Set<Long> seen = new HashSet<>();
+        int rowNo = 0;
+        for (SaleOrderSettleAccount acc : input) {
+            if (acc == null) continue;
+            if (acc.getAccountId() == null && acc.getAmount() == null) continue;   // 空行忽略
+            rowNo++;
+            if (acc.getAccountId() == null)
+                throw new BusinessException("收款账户第 " + rowNo + " 行未选择账户");
+            if (!seen.add(acc.getAccountId()))
+                throw new BusinessException("同一账户请合并为一行（账户不允许重复）");
+            BigDecimal amt = acc.getAmount() != null ? acc.getAmount() : BigDecimal.ZERO;
+            if (amt.compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("收款账户第 " + rowNo + " 行金额必须大于 0");
+            FinanceAccount fa = accountMapper.selectById(acc.getAccountId());
+            if (fa == null) throw new BusinessException("收款账户不存在：ID=" + acc.getAccountId());
+            if (fa.getStatus() != null && fa.getStatus() == 0)
+                throw new BusinessException("收款账户已停用，请重新选择：" + fa.getAccountName());
+            acc.setId(null);
+            acc.setAccountName(fa.getAccountName());
+            rows.add(acc);
+        }
+        return rows;
     }
 
     /**
      * 现金结算：生成收款单**并立即审核**（2026-09-18 用户口径：**现金 = 立刻到账、即结算**）。
      * <p>审核销售单时一步到位：核销本单应收 + 写资金流水 + 更新账户余额（全部复用 finance 既有逻辑，
      * 账务口径不变）；收款单落库即为「已审核」，备注标注为系统自动收款。</p>
+     * <p><b>2026-10-01 多账户（第 4 步）</b>：按 {@code sale_order_settle_account} 分款明细**逐账户**生成
+     * 收款单分款行（A 800 + B 200 ⇒ 两条资金流水，各自账户余额对得上）；收款单主表金额 = 分款合计。
+     * 核销金额取「本次收款总额」（{@code settle_amount}）—— **部分收款时只核销收到的这部分**，
+     * 差额由收款单审核按「未核销余额」落预收台账（既有 createUnsettledAdvance 能力，不改口径）。</p>
+     * <p><b>历史兼容</b>：没有分款行的老销售单（旧草稿/旧数据）回退旧的单账户口径
+     * （首行快照账户 + 核销全额），行为与改造前完全一致。</p>
      * <p>幂等：同一销售单已有**未作废**的收款单（草稿或已审核）时不再生成 —— 反审核会把自动收款单
      * 冲正并作废，重新审核才会再生成一张，不会重复挂账。</p>
      */
@@ -212,21 +295,59 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         boolean existValid = receiptService.findBySource(SourceBillType.SALE_ORDER.getCode(), order.getId()).stream()
                 .anyMatch(r -> !DocStatus.CANCELLED.getCode().equals(r.getStatus()));
         if (existValid) return;
+        // 分款明细（新口径）= 权威金额来源；为空 ⇒ 历史单，走下面的单账户分支
+        List<SaleOrderSettleAccount> split = getSettleAccounts(order.getId());
+        BigDecimal orderTotal = order.getTotalAmount() != null ? order.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal received;
+        if (split.isEmpty()) {
+            received = order.getSettleAmount() != null ? order.getSettleAmount() : orderTotal;
+        } else {
+            received = BigDecimal.ZERO;
+            for (SaleOrderSettleAccount sa : split)
+                received = received.add(sa.getAmount() != null ? sa.getAmount() : BigDecimal.ZERO);
+        }
+        // 兜底护栏（前端已拦、normalizeSettle 已校验合计=总额）：本次收款不得超过应收，否则核销会超出台账、
+        // 多出的部分反被当成"多收预收"，与「禁止超收」口径冲突。此处在审核事务内抛错 ⇒ 整单回滚，不会留下半截数据。
+        if (received.compareTo(orderTotal) > 0)
+            throw new BusinessException("本次收款总额 " + received.stripTrailingZeros().toPlainString()
+                    + " 不能超过销售单应收总额 " + orderTotal.stripTrailingZeros().toPlainString());
         FinanceReceipt r = new FinanceReceipt();
         r.setSubjectType(SubjectType.CUSTOMER.getCode());
         r.setCustomerId(order.getCustomerId());
-        r.setAccountId(order.getSettleAccountId());
         r.setReceiptDate(order.getOrderDate() != null ? order.getOrderDate() : LocalDate.now());
         r.setSourceBillType(SourceBillType.SALE_ORDER.getCode());
         r.setSourceBillNo(order.getCode());
         r.setSourceId(order.getId());
-        r.setRemark("现金结算·系统自动收款（销售单 " + order.getCode() + "）");
+        r.setRemark(split.size() > 1
+                ? "现金结算·系统自动收款（销售单 " + order.getCode() + "，" + split.size() + " 个账户分款）"
+                : "现金结算·系统自动收款（销售单 " + order.getCode() + "）");
+        List<FinanceReceiptAccount> accounts = new ArrayList<>();
+        if (split.isEmpty()) {
+            // 历史单兼容：只有单账户快照、没有分款行 ⇒ 单账户、金额 = 本次收款（= 应收，旧行为）
+            r.setAccountId(order.getSettleAccountId());
+            FinanceReceiptAccount only = new FinanceReceiptAccount();
+            only.setAccountId(order.getSettleAccountId());
+            only.setAmount(received);
+            only.setRemark("单账户（历史销售单回退）");
+            accounts.add(only);
+        } else {
+            // 首行快照交回收款单主表（saveAccounts 会按分款首行回写，这里显式设一次便于 raw 读法）
+            r.setAccountId(split.get(0).getAccountId());
+            for (SaleOrderSettleAccount sa : split) {
+                FinanceReceiptAccount fa = new FinanceReceiptAccount();
+                fa.setAccountId(sa.getAccountId());
+                fa.setAmount(sa.getAmount());
+                fa.setRemark(sa.getRemark());
+                accounts.add(fa);
+            }
+        }
         FinanceReceiptItem it = new FinanceReceiptItem();
         it.setReceivableId(fr.getId());
         it.setReceivableBillNo(order.getCode());
-        it.setThisAmount(order.getTotalAmount());
-        receiptService.create(r, List.of(it));
-        // 立刻到账：紧接着审核该收款单（核销应收 + 资金流水 + 账户余额）。create 未回填 id 时按来源反查兜底。
+        it.setThisAmount(received);
+        // 三参重载：多账户分款 + 核销明细（金额一律由分款推导，收款单主表 amount = 分款合计）
+        receiptService.create(r, accounts, List.of(it));
+        // 立刻到账：紧接着审核该收款单（核销应收 + **逐账户**资金流水 + 账户余额）。create 未回填 id 时按来源反查兜底。
         Long rid = r.getId();
         if (rid == null) {
             rid = receiptService.findBySource(SourceBillType.SALE_ORDER.getCode(), order.getId()).stream()
@@ -305,6 +426,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         if (cid != null && cid > 0) order.setCompanyId(cid);
         BigDecimal total = BigDecimal.ZERO;
         orderMapper.insert(order);
+        // 2026-09-30：现金结算的多账户分款行落库（账期单的 settleAccounts 已被 normalizeSettle 清空）
+        saveSettleAccounts(order, cid);
         for (SaleOrderItem it : items) {
             it.setId(null);
             it.setOrderId(order.getId());
@@ -343,6 +466,10 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         // 出库单又要求挂**已审核**销售单 ⇒ 草稿阶段不可能存在引用。
         // **若将来允许编辑已审核单，或新增任何"按 item.id 引用销售明细"的功能（如批次/序列号追溯），
         // 必须改为按 id 差量更新**，否则那些引用会静默悬空。
+        // 2026-09-30：分款明细同样"先删后插"（与明细同一策略；只有草稿可编辑，无外部引用）
+        settleAccountMapper.delete(new LambdaQueryWrapper<SaleOrderSettleAccount>()
+                .eq(SaleOrderSettleAccount::getOrderId, order.getId()));
+        if (SettleType.isCash(order.getSettleType())) saveSettleAccounts(order, CompanyContext.get());
         itemMapper.delete(new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, order.getId()));
         BigDecimal total = BigDecimal.ZERO;
         Long cid = CompanyContext.get();

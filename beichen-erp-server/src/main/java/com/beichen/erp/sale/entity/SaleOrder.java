@@ -6,6 +6,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @TableName("sale_order")
@@ -63,6 +64,19 @@ public class SaleOrder {
     /** 结算账户名（实时查名，不落库） */
     @TableField(exist = false)
     private String settleAccountName;
+
+    /**
+     * 本次收款总额（2026-09-30 多账户分款口径）：现金结算时由用户录入，默认带出应收总额，
+     * 可小于应收 = 部分收款（差额由后端挂预收台账）。= 分款明细金额合计；账期单为空。
+     */
+    private BigDecimal settleAmount;
+
+    /**
+     * 现金结算的分款明细（多账户收款）。**不落主表**：落库走 {@code sale_order_settle_account}
+     * （一单多账户，见 {@link SaleOrderSettleAccount}），主表只保留 settleAmount 与首行快照。
+     */
+    @TableField(exist = false)
+    private List<SaleOrderSettleAccount> settleAccounts;
 
     private String remark;
 

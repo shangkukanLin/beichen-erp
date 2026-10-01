@@ -5,6 +5,7 @@ import com.beichen.erp.common.R;
 import com.beichen.erp.finance.service.FinanceReceiptService;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOrderItem;
+import com.beichen.erp.sale.entity.SaleOrderSettleAccount;
 import com.beichen.erp.sale.service.SaleExchangeService;
 import com.beichen.erp.sale.service.SaleOrderService;
 import com.beichen.erp.sale.service.SaleReturnService;
@@ -67,6 +68,10 @@ public class SaleOrderController {
         return R.ok(m);
     }
 
+    /** Cash split rows (multi-account collection). Same shape as finance_receipt /{id}/accounts. */
+    @GetMapping("/{id}/settle-accounts")
+    public R<List<SaleOrderSettleAccount>> getSettleAccounts(@PathVariable Long id) { return R.ok(service.getSettleAccounts(id)); }
+
     @GetMapping("/{id}/items")
     public R<List<SaleOrderItem>> getItems(@PathVariable Long id) { return R.ok(service.getItems(id)); }
 
@@ -104,6 +109,26 @@ public class SaleOrderController {
     }
 
     @SuppressWarnings("unchecked")
+    private List<SaleOrderSettleAccount> parseSettleAccounts(Object raw) {
+        List<SaleOrderSettleAccount> list = new ArrayList<>();
+        if (raw instanceof List<?> rows) {
+            for (Object o : rows) {
+                if (o instanceof Map<?, ?> m) {
+                    Map<String, Object> map = (Map<String, Object>) m;
+                    SaleOrderSettleAccount acc = new SaleOrderSettleAccount();
+                    if (map.get("accountId") != null && !map.get("accountId").toString().isBlank())
+                        acc.setAccountId(Long.valueOf(map.get("accountId").toString()));
+                    if (map.get("amount") != null && !map.get("amount").toString().isBlank())
+                        acc.setAmount(new BigDecimal(map.get("amount").toString()));
+                    acc.setRemark((String) map.get("remark"));
+                    list.add(acc);
+                }
+            }
+        }
+        return list;
+    }
+
+    @SuppressWarnings("unchecked")
     private SaleOrder parseOrder(Map<String, Object> body) {
         Map<String, Object> d = body.containsKey("order") ? (Map<String, Object>) body.get("order") : body;
         SaleOrder o = new SaleOrder();
@@ -118,6 +143,12 @@ public class SaleOrderController {
         if (d.get("settleType") != null) o.setSettleType(d.get("settleType").toString());
         if (d.get("settleAccountId") != null && !d.get("settleAccountId").toString().isBlank())
             o.setSettleAccountId(Long.valueOf(d.get("settleAccountId").toString()));
+        // 2026-09-30: cash settlement can be split across accounts. Accept order-level
+        // settleAccounts/settleAmount and, for compatibility, a top-level accounts array.
+        if (d.get("settleAmount") != null && !d.get("settleAmount").toString().isBlank())
+            o.setSettleAmount(new BigDecimal(d.get("settleAmount").toString()));
+        Object accRaw = d.get("settleAccounts") != null ? d.get("settleAccounts") : body.get("accounts");
+        o.setSettleAccounts(parseSettleAccounts(accRaw));
         o.setRemark((String) d.get("remark"));
         return o;
     }

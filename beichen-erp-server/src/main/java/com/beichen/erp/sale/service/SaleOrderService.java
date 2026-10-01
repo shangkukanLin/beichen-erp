@@ -3,6 +3,7 @@ package com.beichen.erp.sale.service;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.beichen.erp.sale.entity.SaleOrder;
 import com.beichen.erp.sale.entity.SaleOrderItem;
+import com.beichen.erp.sale.entity.SaleOrderSettleAccount;
 
 import java.util.List;
 import java.util.Map;
@@ -20,6 +21,9 @@ public interface SaleOrderService {
     SaleOrder getById(Long id);
 
     List<SaleOrderItem> getItems(Long orderId);
+
+    /** 现金结算的分款明细（多账户收款；详情页回显，与 finance_receipt 的 /{id}/accounts 同构） */
+    List<SaleOrderSettleAccount> getSettleAccounts(Long orderId);
 
     /**
      * 某客户**已审核**的销售单列表（供售后退货 / 换货关联选择）。
