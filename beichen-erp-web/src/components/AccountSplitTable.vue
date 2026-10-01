@@ -33,7 +33,7 @@
             @change="onRowsChanged"
           >
             <el-option
-              v-for="a in accounts"
+              v-for="a in optionsFor(row)"
               :key="a[accountValueKey]"
               :label="labelOf(a)"
               :value="a[accountValueKey]"
@@ -174,6 +174,25 @@ function fmt(v: number) { return Number(v || 0).toFixed(2) }
 function round2(n: number) { return Math.round((Number(n) + Number.EPSILON) * 100) / 100 }
 function labelOf(a: any) {
   return typeof props.accountLabelKey === 'function' ? props.accountLabelKey(a) : a?.[props.accountLabelKey]
+}
+/**
+ * 2026-10-01（用户口径）：**同一个账户只能被选一次** —— 某行的下拉里不再显示「其它行已经选过」的账户，
+ * 避免选重后提交才报错。
+ * <p>本行自己已选的账户必须保留，否则 el-select 找不到匹配选项、会把原始 id 直接显示出来。</p>
+ * <p>本函数在模板里被调用 → 渲染副作用会收集它同步访问到的响应式数据（modelValue / accounts），
+ * 所以任一行改账户后，其它行的选项会自动刷新，无需额外的 watch。</p>
+ */
+function optionsFor(row: AccountSplitRow) {
+  const used = new Set<any>()
+  for (const r of rows.value) {
+    if (r === row) continue
+    if (r.accountId != null && (r.accountId as any) !== '') used.add(r.accountId)
+  }
+  if (used.size === 0) return props.accounts
+  return props.accounts.filter(a => {
+    const v = a?.[props.accountValueKey]
+    return v === row.accountId || !used.has(v)
+  })
 }
 function autoMarked(row: AccountSplitRow) { return autoRow.value === row }
 function emitRows() { emit('update:modelValue', [...rows.value]) }
