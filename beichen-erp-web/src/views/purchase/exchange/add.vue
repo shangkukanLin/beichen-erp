@@ -22,9 +22,15 @@
                  不选 = 无单换货（下方「添加明细」手工选产品）；选了则自动带出可换明细（可换量受采购单约束）。 -->
             <el-form-item label="来源采购单">
               <RemoteSelect :model-value="form.purchaseOrderId" :fetch="fetchPurchaseOrders"
-                label-key="code" placeholder="可不选（不选则手工录入明细）" :disabled="isEdit" style="width:100%"
+                label-key="code" :placeholder="sourceLocked ? '' : '可不选（不选则手工录入明细）'"
+                :disabled="isEdit || sourceLocked" style="width:100%"
                 @update:model-value="(v:any)=>{ form.purchaseOrderId = v ?? null }"
                 @pick="(opts:any[])=>{ onPurchaseOrderChange(form.purchaseOrderId, opts?.[0]) }" domain="purchaseOrder" />
+              <!-- 2026-10-01（第 3 步，用户口径「从采购单发起要强关联」）：带 ?fromOrder= 进入时来源锁死，
+                   不允许清空退化成无单换货；只有从子菜单裸进时才可自选/不选。 -->
+              <span v-if="sourceLocked" style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+                由来源采购单发起，不可更改
+              </span>
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -71,8 +77,10 @@
           <!-- 2026-09-21（UI 优化）：明细表原来 12 列、合计 1440px ⇒ 必然横向滚动。
                ① 删掉「SKU」独占列（产品格显示「SKU | 名称」，与选品下拉同一格式，信息不丢）
                ② 输入控件统一 size="small"，数量/单价用 :controls="false"（不带加减按钮 ⇒ 更窄）
-               ③ 按内容重新配宽 ⇒ 合计 920px < 内容区 948px（1262 窗口），**一行显示完、不左右滑动** -->
-          <el-table-column label="退回产品" width="128" show-overflow-tooltip>
+               ③ 按内容重新配宽 ⇒ 合计 920px < 内容区 948px（1262 窗口），**一行显示完、不左右滑动**
+               ④ 2026-10-01（用户口径）：明细「备注」列已去掉（整单一个备注即可）⇒ 合计 902px。
+                  「退回产品」改用 min-width 吸收余量（Element 只有存在 min-width 列时才会把余量分给它） -->
+          <el-table-column label="退回产品" min-width="128" show-overflow-tooltip>
             <template #default="{ row }">
               <!-- 无单换货：手工选产品（可输 SKU 远程搜）；关联采购单：产品由采购明细带出，只读 -->
               <el-select v-if="!form.purchaseOrderId" v-model="row.productId" placeholder="选择产品（可输SKU）"
@@ -80,27 +88,33 @@
                 @change="(v: number) => onProductChange(v, row)">
                 <el-option v-for="m in productOptions" :key="m.id" :label="productLabel(m)" :value="m.id" />
               
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 新增</div></template>
               </el-select>
               <span v-else>{{ productText(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column label="可换数量" width="64" align="right">
-            <template #default="{ row }">{{ row.maxQuantity ?? '-' }}</template>
-          </el-table-column>
-          <el-table-column label="退回数量" width="78">
+          <!-- 2026-10-01（用户口径）：原「可换数量」改为「库存数量」= 该**退回出库仓** + 该产品 +
+               该**退回品质**的库存（stockForm=MATERIAL，与审核出库口径一致）；
+               退回数量的 :max = min(来源采购单数量, 库存数量)；无来源（无单换货）⇒ :max = 库存数量。 -->
+          <el-table-column label="库存数量" width="74" align="right">
             <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
+              <span v-if="row.stock !== undefined" :style="{ color: Number(row.stock) <= 0 ? 'red' : '' }">{{ row.stock }}</span>
+              <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column label="退回品质" width="78">
+          <el-table-column label="退回数量" width="88">
             <template #default="{ row }">
-              <el-select v-model="row.qualityType" size="small" style="width:100%">
+              <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" size="small" :controls="false" :max="row.quantityLimit" style="width:100%" />
+            </template>
+          </el-table-column>
+          <el-table-column label="退回品质" width="88">
+            <template #default="{ row }">
+              <el-select v-model="row.qualityType" size="small" style="width:100%" @change="() => refreshStock(row)">
                 <el-option v-for="o in qualityOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="退回单价" width="78">
+          <el-table-column label="退回单价" width="88">
             <template #default="{ row }">
               <el-input-number v-model="row.unitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
@@ -109,19 +123,19 @@
 
         <!-- ===== 换入侧：供货商换回，入我方仓 ===== -->
         <el-table-column label="换入（供货商换回）" align="center">
-          <el-table-column label="换入数量" width="78">
+          <el-table-column label="换入数量" width="88">
             <template #default="{ row }">
               <el-input-number v-model="row.inQuantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="换入品质" width="78">
+          <el-table-column label="换入品质" width="88">
             <template #default="{ row }">
               <el-select v-model="row.inQualityType" size="small" style="width:100%">
                 <el-option v-for="o in qualityOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="换入单价" width="78">
+          <el-table-column label="换入单价" width="88">
             <template #default="{ row }">
               <el-input-number v-model="row.inUnitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
@@ -143,9 +157,8 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="备注" min-width="88">
-          <template #default="{ row }"><el-input v-model="row.remark" size="small" /></template>
-        </el-table-column>
+        <!-- 2026-10-01（用户口径）：退换货明细**不再逐行备注**，整单只需一个「备注」（表单头部的 form.remark）。
+             明细 remark 字段在后端仍保留（原样存取、不参与台账；台账备注是自动生成的付费摘要），删列不影响旧数据。 -->
         <el-table-column label="操作" width="52" align="center">
           <template #default="{ $index }">
             <el-button link type="danger" @click="removeItem($index)">删除</el-button>
@@ -220,6 +233,12 @@ const formRef = ref()
 const saving = ref(false)
 const isEdit = ref(false)
 
+/**
+ * 由来源采购单发起（`?fromOrder=` 进入）⇒ 来源锁定不可改（2026-10-01 第 3 步，用户口径
+ * 「成品采购单里面的退换货和成品采购单强关联」）。从子菜单裸进时才允许自选/不选。
+ */
+const sourceLocked = computed(() => !!route.query.fromOrder)
+
 const form = reactive({
   id: null as number | null,
   supplierId: null as number | null,
@@ -283,8 +302,8 @@ const fetchFinishedWarehouses = (kw: string) => request.get('/warehouse/page',
 
 /**
  * 选择来源采购单后带出明细。
- * 可换数量 = 已购 − 已退 − 已换，直接取后端 purchase-order-items 返回的 canExchange，
- * 与保存/审核时的后端校验口径完全一致。
+ * 2026-10-01（用户口径）：后端 canExchange 现在 = **该采购明细的数量**，前端存为 sourceQty；
+ * 真正的数量上限 = min(sourceQty, 退回出库仓 + 该产品 + 该退回品质的库存数量)，由 refreshStock 计算。
  */
 async function onPurchaseOrderChange(purchaseOrderId: number | null, opt: any) {
   form.purchaseOrderCode = opt?.code || ''
@@ -304,7 +323,8 @@ async function onPurchaseOrderChange(purchaseOrderId: number | null, opt: any) {
       // SKU 由后端随可换明细一起返回（2026-09-21）：明细表把「SKU | 名称」并到一列，不再单列 SKU
       sku: r.sku || '',
       quantity: qty,
-      maxQuantity: qty,
+      // 来源采购单数量（**不是上限**）：上限 = min(本值, 库存)，见 refreshStock
+      sourceQty: qty,
       qualityType: ProductQualityType.DEFECT,
       unitPrice: price,
       // ===== 换入侧：同品，数量默认 1:1、默认 A 规、单价默认 = 退回单价（改高即加价换新）=====
@@ -314,6 +334,8 @@ async function onPurchaseOrderChange(purchaseOrderId: number | null, opt: any) {
       remark: ''
     }
   })
+  // 补齐「库存数量」与上限（依赖退回出库仓 + 退回品质，故必须在上面的仓库回填之后）
+  await Promise.all(items.value.map((it: any) => refreshStock(it)))
 }
 
 /**
@@ -379,7 +401,7 @@ function productText(row: any) {
  * 退回默认不良品 DEFECT、换入默认 A 规；数量各 1；产品/单价由用户选择后补齐。
  */
 function addItem() {
-  items.value.push({
+  const row: any = {
     purchaseOrderItemId: null,
     productId: null,
     productName: '',
@@ -388,15 +410,23 @@ function addItem() {
     chargeAmount: 0,
     chargeType: '',
     quantity: 1,
-    maxQuantity: null,
+    // 无来源（无单换货）⇒ 没有来源数量，上限 = 退回出库仓 + 该产品 + 该退回品质的库存（见 refreshStock）
+    sourceQty: null,
     qualityType: ProductQualityType.DEFECT,
     unitPrice: 0,
     inQuantity: 1,
     inQualityType: ProductQualityType.A,
     inUnitPrice: 0,
     remark: ''
-  })
+  }
+  items.value.push(row)
+  refreshStock(row)
 }
+
+/**
+ * 2026-10-01：切换「退回出库仓」后所有行的库存与上限都失效（库存是按仓取的）⇒ 整表重算。
+ */
+watch(() => form.warehouseOutId, () => { items.value.forEach((it: any) => refreshStock(it)) })
 
 /** 产品候选：远程搜（可输 SKU），与采购退货同款接口 */
 async function loadProducts(query?: string) {
@@ -407,11 +437,32 @@ async function loadProducts(query?: string) {
 }
 
 /**
- * 选中产品后带出 SKU/名称与默认单价（最近进价 lastInPrice，其次标准价 price）。
- * <p>⚠️ 无单换货**不设"可换数量"上限**（没有采购单可算）——退回能否出库由**审核时的库存校验**把关：
- * 后端会按品质逐行算出缺口并列清（产品/品质/需量/可用/缺口），比前端预判更准。</p>
+ * 2026-10-01（用户口径）：刷新某行的「库存数量」与**数量上限**。
+ * 上限 = min(来源采购单数量, 该**退回出库仓** + 该产品 + 该**退回品质**的库存)；无来源（无单换货）⇒ 上限 = 库存。
+ * ⚠️ 库存按 stockForm=MATERIAL 求和：审核退回出库走的 changeStock 重载缺省形态即 MATERIAL
+ * （同一「仓+产品+品质」还可能有 PRODUCT_DEFECT / PRODUCT_REPAIR 等形态行，混加会高估上限）。
  */
-function onProductChange(val: number, row: any) {
+async function refreshStock(row: any) {
+  row.stock = undefined
+  row.quantityLimit = undefined
+  if (!row.productId || !form.warehouseOutId) return
+  try {
+    const p: any = { warehouseId: form.warehouseOutId, productId: row.productId, pageSize: 500 }
+    if (row.qualityType) p.qualityType = row.qualityType
+    const res: any = await request.get('/warehouse/stock/page', { params: p })
+    const arr: any[] = res?.records || []
+    const stock = arr
+      .filter((x: any) => !x.stockForm || x.stockForm === 'MATERIAL')
+      .reduce((s: number, x: any) => s + (Number(x.quantity) || 0), 0)
+    row.stock = stock
+    row.quantityLimit = row.sourceQty != null ? Math.min(Number(row.sourceQty), stock) : stock
+  } catch { row.stock = undefined; row.quantityLimit = undefined }
+}
+
+/**
+ * 选中产品后带出 SKU/名称与默认单价（最近进价 lastInPrice，其次标准价 price），并刷新库存与上限。
+ */
+async function onProductChange(val: number, row: any) {
   const m = productOptions.value.find((x: any) => x.id === val)
   if (!m) return
   row.productName = m.name || ''
@@ -420,6 +471,7 @@ function onProductChange(val: number, row: any) {
   row.unitPrice = price
   if (!row.inUnitPrice) row.inUnitPrice = price
   if (!row.inQuantity) row.inQuantity = row.quantity
+  await refreshStock(row)
 }
 
 async function submit() {
@@ -431,9 +483,12 @@ async function submit() {
   if (its.length === 0) { ElMessage.warning('请至少录入一条换货明细'); return }
   if (its.some((i) => !i.productId)) { ElMessage.warning('请为每条明细选择退回产品'); return }
   for (const it of its) {
-    // 可换量只约束退回数量（换入属正常入库，不受限）；无单换货没有上限，靠审核时的库存校验
-    if (it.maxQuantity != null && Number(it.quantity) > it.maxQuantity) {
-      ElMessage.warning(`产品「${it.productName}」退回数量(${it.quantity})超过可换数量(${it.maxQuantity})`)
+    // 2026-10-01（用户口径）：上限 = min(来源采购单数量, 退回出库仓+产品+退回品质的库存数量)；
+    // 无来源（无单换货）时上限 = 库存 ⇒ **两种情形都要校验**（原先无单时完全靠审核兜底）。换入不受限。
+    const lim = (it as any).quantityLimit
+    if (lim != null && Number(it.quantity) > lim) {
+      const how = (it as any).sourceQty != null ? '取「采购数量」与「库存数量」中的较小值' : '该仓库该品质的库存数量'
+      ElMessage.warning(`产品「${it.productName}」退回数量(${it.quantity})超过上限(${lim}，${how})`)
       return
     }
     if (!(Number(it.inQuantity) > 0)) {

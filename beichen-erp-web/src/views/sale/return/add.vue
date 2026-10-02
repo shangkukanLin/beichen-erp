@@ -23,7 +23,14 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="关联销售单">
-              <RemoteSelect v-model="form.saleOrderId" :fetch="fetchSaleOrders" label-key="code" placeholder="选填，可追溯原销售单" style="width: 100%" :disabled="!form.customerId" domain="saleOrder" />
+              <RemoteSelect v-model="form.saleOrderId" :fetch="fetchSaleOrders" label-key="code"
+                :placeholder="sourceLocked ? '' : '选填，可追溯原销售单'" style="width: 100%"
+                :disabled="!form.customerId || sourceLocked" domain="saleOrder" />
+              <!-- 2026-10-01（第 3 步，用户口径「销售单里面的退换货和销售单强关联」）：带 ?saleOrderId= 进入时
+                   来源锁死，不允许清空退化成无来源退货；只有从子菜单裸进时才可自选/不选。 -->
+              <span v-if="sourceLocked" style="font-size: var(--app-font-xs); color: #909399">
+                由来源销售单发起，不可更改
+              </span>
             </el-form-item>
           </el-col>
           <el-col :span="8">
@@ -79,9 +86,12 @@
               <el-tag :type="ProductQualityTypeTag[row.qualityType] || 'info'">{{ ProductQualityTypeLabel[row.qualityType] || '待整理' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="可退数量" width="80" align="center">
+          <!-- 2026-10-01（用户口径）：原「可退数量」改为「库存数量」= 该**退货仓库** + 该产品 +
+               PENDING（待整理）品质的库存（stockForm=MATERIAL）。**仅作展示，不参与上限** ——
+               销售退货是入库（客户把货退回来），不消耗我方库存，故数量上限仍为「来源销售单的销售数量」。 -->
+          <el-table-column label="库存数量" width="80" align="center">
             <template #default="{ row }">
-              <span v-if="row.canReturn !== undefined">{{ row.canReturn }}</span>
+              <span v-if="row.stock !== undefined" :style="{ color: Number(row.stock) <= 0 ? 'red' : '' }">{{ row.stock }}</span>
               <span v-else>—</span>
             </template>
           </el-table-column>
@@ -164,6 +174,12 @@ const tabStore = useTabStore()
 const formRef = ref()
 const saving = ref(false)
 const isEdit = ref(false)
+
+/**
+ * 由来源销售单发起（`?saleOrderId=` 进入）⇒ 来源锁定不可改（2026-10-01 第 3 步，用户口径
+ * 「销售单里面的退换货和销售单强关联」）。从子菜单裸进时才允许自选/不选。
+ */
+const sourceLocked = computed(() => !!route.query.saleOrderId)
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
@@ -250,7 +266,11 @@ function onCustomerChange(id: number) {
   addItem()
 }
 
-/** 从销售单带入明细（含可退数量） */
+/**
+ * 从销售单带入明细。
+ * 2026-10-01（用户口径）：后端 canReturn = **该销售明细的销售数量**，本页把它作为**退货数量上限**
+ * （销售退货是入库、不消耗我方库存，故**不参与"与库存取小"**）；列「库存数量」仅作展示。
+ */
 async function loadFromSaleOrder() {
   if (!form.saleOrderId) { ElMessage.warning('请先选择销售单'); return }
   try {
@@ -259,6 +279,7 @@ async function loadFromSaleOrder() {
       productId: r.productId,
       productName: r.productName,
       saleOrderItemId: r.saleOrderItemId,
+      // = 该销售明细的销售数量：本页作为退货数量上限（不与该仓库存取小）
       canReturn: Number(r.canReturn),
       quantity: 0,
       unitPrice: Number(r.unitPrice || 0),
@@ -269,15 +290,44 @@ async function loadFromSaleOrder() {
       qualityType: 'PENDING',
     }))
     if (!form.items.length) ElMessage.info('该销售单暂无明细')
+    // 补齐「库存数量」展示（依赖退货仓库 + PENDING 品质）
+    await Promise.all(form.items.map((it: any) => refreshStock(it)))
   } catch (e: any) {
     ElMessage.error(e?.msg || e?.message || '加载销售单明细失败')
   }
 }
-function onProductChange(row: any, id: number) {
+/**
+ * 2026-10-01（用户口径）：刷新该行的「库存数量」展示。
+ * 销售退货是**入库**（客户退回，品质固定 PENDING），不消耗我方库存 ⇒ 库存**仅作展示**，
+ * 数量上限仍是「来源销售单的销售数量」（row.canReturn，见列 :max）。本口径已与用户确认。
+ * 库存按 退货仓库 + 该产品 + PENDING 品质、stockForm=MATERIAL 取（与审核入库的品质口径一致）。
+ */
+async function refreshStock(row: any) {
+  row.stock = undefined
+  if (!row.productId || !form.warehouseId) return
+  try {
+    const res: any = await request.get('/warehouse/stock/page', {
+      params: {
+        warehouseId: form.warehouseId, productId: row.productId,
+        qualityType: 'PENDING', pageSize: 500
+      }
+    })
+    const arr: any[] = res?.records || []
+    row.stock = arr
+      .filter((x: any) => !x.stockForm || x.stockForm === 'MATERIAL')
+      .reduce((s: number, x: any) => s + (Number(x.quantity) || 0), 0)
+  } catch { row.stock = undefined }
+}
+
+async function onProductChange(row: any, id: number) {
   const p = products.value.find((x) => x.id === id)
   row.productName = p ? p.name : ''
   row.sku = p ? (p.sku || '') : ''
+  await refreshStock(row)
 }
+
+/** 2026-10-01：切换「退货仓库」后库存展示失效（库存是按仓取的）⇒ 整表重算。 */
+watch(() => form.warehouseId, () => { form.items.forEach((it: any) => refreshStock(it)) })
 
 /**
  * 从销售单详情「退货」按钮跳转过来时（?saleOrderId=xxx）：

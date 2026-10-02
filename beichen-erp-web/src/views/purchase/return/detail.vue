@@ -66,6 +66,18 @@ async function loadData() {
     // 后端随明细返回 productName，前端不再逐条查库
     items.value = await getPurchaseReturnItems(id) || []
     await loadWarehouseName()
+    // 2026-10-02（用户口径）：草稿态补齐「库存数量」与数量上限。来源「采购数量」不在明细里
+    // （canReturn 是前端字段、不落库）⇒ 按 purchaseOrderItemId 从来源单反查一次。
+    if (isDraft()) {
+      const srcMap = await loadSourceQtyMap()
+      if (srcMap.size) {
+        items.value.forEach((it: any) => {
+          const q = srcMap.get(Number(it.purchaseOrderItemId))
+          if (q != null) it.sourceQty = q
+        })
+      }
+      await Promise.all(items.value.map((it: any) => refreshStock(it)))
+    }
   } finally { loading.value = false }
   // 数据加载完成 ⇒ 重建"未保存"基线（保存后本函数会重跑 ⇒ 自动重置，不误报）
   takeBaseline()
@@ -101,12 +113,50 @@ async function handleCancel() {
   } catch { /* */ }
 }
 
+// ===== 2026-10-02（用户口径）：草稿态实时「库存数量」+ 数量上限 =====
+// 上限 = min(来源采购单数量, 该退货仓库 + 该产品 + 该品质的库存数量)；无来源（不关联采购单）⇒ 上限 = 库存。
+// ⚠️ 库存只算 stockForm=MATERIAL：审核退回出库走的 changeStock 重载缺省形态即 MATERIAL
+// （同一「仓+产品+品质」还可能有其它形态行，混加会高估上限）。
+// 本页特殊性：退货仓在详情页只读展示、品质列不展示也不可改 ⇒ 无需 watch 仓库 / 品质联动。
+/** 来源采购明细的「采购数量」映射（purchaseOrderItemId → 数量）；无来源或取不到时为空 Map */
+async function loadSourceQtyMap(): Promise<Map<number, number>> {
+  const map = new Map<number, number>()
+  const oid = detail.value.purchaseOrderId
+  if (!oid) return map
+  try {
+    const rows: any[] = await getPurchaseReturnPurchaseOrderItems(oid) || []
+    for (const r of rows) {
+      if (r?.purchaseOrderItemId != null) map.set(Number(r.purchaseOrderItemId), Number(r.canReturn ?? 0))
+    }
+  } catch { /* 取不到来源数量 ⇒ 上限退化为「库存数量」，不阻断页面 */ }
+  return map
+}
+
+/** 刷新某行的「库存数量」与数量上限（依赖 退货仓库 + 产品 + 品质） */
+async function refreshStock(row: any) {
+  row.stock = undefined
+  row.quantityLimit = undefined
+  const wid = detail.value.warehouseId
+  if (!row.productId || !wid) return
+  try {
+    const p: any = { warehouseId: wid, productId: row.productId, pageSize: 500 }
+    if (row.qualityType) p.qualityType = row.qualityType
+    const res: any = await request.get('/warehouse/stock/page', { params: p })
+    const arr: any[] = res?.records || []
+    const stock = arr
+      .filter((x: any) => !x.stockForm || x.stockForm === 'MATERIAL')
+      .reduce((s: number, x: any) => s + (Number(x.quantity) || 0), 0)
+    row.stock = stock
+    row.quantityLimit = row.sourceQty != null ? Math.min(Number(row.sourceQty), stock) : stock
+  } catch { row.stock = undefined; row.quantityLimit = undefined }
+}
+
 // ==================== 草稿内联编辑 ====================
 const poDialogVisible = ref(false)
 const poItems = ref<any[]>([])
 const poSelection = ref<any[]>([])
 
-/** 添加行：从关联采购单明细中选择（含可退数量），已在本单明细中的行自动排除 */
+/** 添加行：从关联采购单明细中选择（含采购数量），已在本单明细中的行自动排除 */
 async function openAddRowDialog() {
   const oid = detail.value.purchaseOrderId
   if (!oid) { ElMessage.warning('该退货单未关联采购单，无法添加行'); return }
@@ -123,7 +173,7 @@ async function openAddRowDialog() {
 function confirmAddRows() {
   if (!poSelection.value.length) { ElMessage.warning('请先勾选要退货的明细'); return }
   for (const r of poSelection.value) {
-    items.value.push({
+    const row: any = {
       purchaseOrderItemId: r.purchaseOrderItemId,
       productId: r.productId,
       sku: r.sku || '',
@@ -133,29 +183,33 @@ function confirmAddRows() {
       unitPrice: Number(r.unitPrice || 0),
       remark: '',
       canReturn: Number(r.canReturn),
-    })
+      // 来源采购明细数量（**不是上限**）：上限 = min(本值, 库存)，见 refreshStock
+      sourceQty: Number(r.canReturn),
+    }
+    items.value.push(row)
+    refreshStock(row)
   }
   poDialogVisible.value = false
 }
 
 function removeItem(idx: number) { items.value.splice(idx, 1) }
 
-/** 保存：仅草稿。后端校验可退数量并自动重算总金额 */
+/** 保存：仅草稿。后端校验退货数量上限（min(采购数量, 该仓库该品质库存)）并自动重算总金额 */
 async function handleSave() {
   if (!items.value.length) { ElMessage.warning('退货明细不能为空'); return }
   for (const it of items.value) {
     if (!(Number(it.quantity) > 0)) { ElMessage.warning('明细数量必须大于 0'); return }
     if (Number(it.unitPrice) < 0) { ElMessage.warning('单价不能为负数'); return }
   }
-  // 前端预校验：同采购单明细行的本次退货合计不可超过可退数量
-  const qtyMap: Record<number, number> = {}
+  // 2026-10-02（用户口径）：上限 = min(来源采购单数量, 该退货仓库+该产品+该品质的库存数量)；
+  // 无来源时上限 = 库存 ⇒ 两种情形都校验。
+  // （原先只比「采购数量」且用的是前端临时字段 canReturn —— 详情回填的行没有该字段 ⇒ 实际形同不校验。）
   for (const it of items.value) {
-    const poi = Number(it.purchaseOrderItemId)
-    if (!poi) continue
-    const can = Number((it as any).canReturn ?? Infinity)
-    if (can !== Infinity) {
-      qtyMap[poi] = (qtyMap[poi] || 0) + (Number(it.quantity) || 0)
-      if (qtyMap[poi] > can) { ElMessage.warning('存在明细本次退货数量超过可退数量，请检查'); return }
+    const lim = (it as any).quantityLimit
+    if (lim != null && Number(it.quantity) > lim) {
+      const how = (it as any).sourceQty != null ? '取「采购数量」与「库存数量」中的较小值' : '该仓库该品质的库存数量'
+      ElMessage.warning(`产品「${productName(it)}」退货数量(${it.quantity})超过上限(${lim}，${how})`)
+      return
     }
   }
   saving.value = true
@@ -258,14 +312,30 @@ onActivated(() => { loadData() })
         <span>退货明细</span>
         <el-button v-if="isDraft()" type="primary" size="small" style="margin-left:12px" @click="openAddRowDialog">+ 添加行</el-button>
       </el-divider>
-      <el-table :data="items" border stripe size="small">
+      <!-- 2026-10-01（用户口径「退货明细宽度要充满布局」）：Element 在 table-layout:fixed 下，
+           只有存在 min-width 列时才会把容器余量分配出去；原先全固定宽 ⇒ 右侧留白。
+           这里把「产品」与「备注」两列改为 min-width（文本列，长了也有意义），二者平分余量；
+           SKU/库存数量/数量/单价/金额/付费/操作 仍固定宽，宽窄屏都不抖动。
+           2026-10-02（用户口径）：新增「库存数量」列（74px）⇒ 固定宽合计 800→874，
+           仍远小于内容区（约 948）⇒ 不横向滚动。 -->
+      <el-table :data="items" border stripe size="small" style="width:100%">
         <el-table-column prop="sku" label="SKU" width="112" />
-        <el-table-column label="产品" width="132" show-overflow-tooltip>
+        <el-table-column label="产品" min-width="132" show-overflow-tooltip>
           <template #default="{ row }">{{ row.productName || productName(row) }}</template>
+        </el-table-column>
+        <!-- 2026-10-02（用户口径）：实时「库存数量」= 该**退货仓库** + 该产品 + 该**品质**的库存
+             （stockForm=MATERIAL，与审核退回出库口径一致）；≤0 红字。
+             数量 :max = min(来源采购单数量, 库存数量)；无来源 ⇒ :max = 库存数量。
+             仅草稿态显示：库存只对"还要不要/能不能退"有意义，已审核单是历史留痕（与换货详情页一致）。 -->
+        <el-table-column v-if="isDraft()" label="库存数量" width="74" align="right">
+          <template #default="{ row }">
+            <span v-if="row.stock !== undefined" :style="{ color: Number(row.stock) <= 0 ? 'red' : '' }">{{ row.stock }}</span>
+            <span v-else>—</span>
+          </template>
         </el-table-column>
         <el-table-column label="数量" width="86" align="right">
           <template #default="{ row }">
-            <el-input-number v-if="isDraft()" v-model="row.quantity" :min="1" :precision="0" size="small" :controls="false" style="width:100%" />
+            <el-input-number v-if="isDraft()" v-model="row.quantity" :min="1" :precision="0" :max="row.quantityLimit" size="small" :controls="false" style="width:100%" />
             <span v-else>{{ row.quantity }}</span>
           </template>
         </el-table-column>
@@ -297,7 +367,7 @@ onActivated(() => { loadData() })
             <span v-else style="color:#c0c4cc">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="备注" width="76" show-overflow-tooltip>
+        <el-table-column label="备注" min-width="76" show-overflow-tooltip>
           <template #default="{ row }">
             <el-input v-if="isDraft()" v-model="row.remark" size="small" placeholder="备注" />
             <span v-else>{{ row.remark || '—' }}</span>
@@ -310,7 +380,8 @@ onActivated(() => { loadData() })
         </el-table-column>
       </el-table>
       <div v-if="isDraft()" style="margin-top:12px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
-        提示：保存后总金额按「数量 × 单价」自动重算；审核时将校验本次退货数量不超过可退数量。
+        提示：保存后总金额按「数量 × 单价」自动重算；退货数量上限 = min(来源采购单数量, 库存数量)，
+        见「库存数量」列（实时，无来源时即库存数量）；保存/审核时后端会再校验一次。
       </div>
     </el-card>
 
@@ -328,7 +399,9 @@ onActivated(() => { loadData() })
         <el-table-column prop="productName" label="产品" min-width="140" show-overflow-tooltip />
         <el-table-column prop="qualityType" label="品质" width="70" align="center" />
         <el-table-column prop="quantity" label="已入库" width="90" align="right" />
-        <el-table-column label="可退数量" width="90" align="right">
+        <!-- 2026-10-01（用户口径）：本列值来自来源接口的 canReturn = **该采购明细的数量**（不是库存），
+             故列名如实写「采购数量」；真正的数量上限 = min(采购数量, 该退货仓库+产品+品质的库存)，由后端把关。 -->
+        <el-table-column label="采购数量" width="90" align="right">
           <template #default="{ row }"><span style="color:var(--app-color-primary);font-weight:600">{{ row.canReturn }}</span></template>
         </el-table-column>
         <el-table-column prop="unitPrice" label="单价" width="100" align="right" />
