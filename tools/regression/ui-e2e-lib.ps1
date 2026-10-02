@@ -110,7 +110,16 @@ function ErrHookSelfTest() {
   }
   return (Errs)
 }
-function Errs() { return (EvalJs "JSON.stringify(window.__errs||[])") }
+# 2026-10-02 bugfix: this snippet used to be "JSON.stringify(window.__errs||[])" -- no SPACE anywhere.
+#   The agent-browser CLI is a .cmd shim, so PowerShell 5.1 hands a space-free argument to cmd.exe
+#   WITHOUT quoting => cmd parses the literal '||' as a pipe:  'JSON.stringify(window.__errs'  +  '[])'.
+#   Measured: EvalJs "1||2" -> "Evaluation error: SyntaxError: missing ) after argument list" while
+#   "1 ? 1 : 2" -> 1 (spaces make PS quote the whole argument, so cmd never sees the operator).
+#   Consequence: EVERY guard asserting (Errs) -eq '[]' reported a permanent FALSE failure; and the
+#   scan scripts will still choke that way if a snippet is ever shortened to a single token.
+#   Rule for any snippet added below: keep at least one space in it (or base64 it) =>
+#   never 'a||b' / 'a>b' / 'a&b' without spaces.
+function Errs() { return (EvalJs "JSON.stringify(window.__errs ? window.__errs : [])") }
 function ClearErrs() { EvalJs "window.__errs=[];'ok'" | Out-Null }
 
 # ---- UI primitives ----

@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import request from '@/utils/request'
 import StatRange from '@/components/StatRange.vue'
+import StagnantPanel from '@/components/StagnantPanel.vue'
 import { PRODUCT_ANALYSIS_FORMULA } from '@/utils/kpiFormula'
 // 2026-09-20：饼图外侧标签与 tooltip 共用同一数值口径（与销售分析/进货分析同做法）
 import { pieOutsideLabel, pieTooltip } from '@/utils/pieLabel'
@@ -211,8 +212,24 @@ function productSummary({ columns }: any) {
   })
 }
 
+// ===== 滞销与呆滞块（共用组件）=====
+/**
+ * 面板自身不在 mounted 里拉数据 ⇒ 由本页驱动（见组件说明：否则父页面与组件各拉一次 = 首屏白拉两遍）。
+ * ⚠️ 本页是 keep-alive 页：首次进入 mounted → activated **各触发一次**（上方 loadData 因此本来就拉两遍），
+ * 这里用 firstLoad 记账，保证滞销面板首屏只拉一次。
+ */
+const stagnantRef = ref<any>(null)
+let stagnantFirstLoad = true
+/** 面板里的产品行点击 → 产品主数据详情（本页没有"仓库分布"上下文，点行与点产品名都进产品详情） */
+function stagnantDetail(row: any) { if (row?.productId) router.push(`/product/detail/${row.productId}`) }
+
 onMounted(() => { loadData() })
 onActivated(() => { loadData() })
+onMounted(() => { stagnantRef.value?.reload() })
+onActivated(() => {
+  if (stagnantFirstLoad) { stagnantFirstLoad = false; return }
+  stagnantRef.value?.reload()
+})
 /** 口径开关切换 → 只重绘对应饼图（两套数据已在本地，不重新请求接口；与销售分析同做法） */
 watch([retMetric, exchMetric], async () => {
   await nextTick()
@@ -378,7 +395,10 @@ onUnmounted(() => {
     <el-card shadow="never">
       <template #header>产品净额排行（销售 − 退货；点「明细」看该产品的销售单 / 退货单）</template>
       <el-table :data="data.byProduct" border stripe max-height="420" show-summary :summary-method="productSummary">
-        <el-table-column prop="sku" label="SKU" width="84" show-overflow-tooltip/>
+        <!-- SKU 是标识列（不许被省略号截断，scan-col-truncation.ps1 的规则）：原 width="84" 实测
+             10 位编码（SKU-000003）需 110px ⇒ 2 行被截断（2026-10-02 跑守卫时发现，非本次新增缺陷）。
+             改 min-width 让它在宽屏再多分一点余量（该表其余列是固定宽、由「产品」列吸收富余空间）。 -->
+        <el-table-column prop="sku" label="SKU" min-width="112" show-overflow-tooltip/>
         <el-table-column prop="productName" label="产品" min-width="118" show-overflow-tooltip/>
         <el-table-column label="净销量" width="76" align="right">
           <template #default="{row}">{{ fmtQty(row.netQty) }}</template>
@@ -414,6 +434,14 @@ onUnmounted(() => {
         </el-table-column>
       </el-table>
     </el-card>
+    <!--
+      滞销与呆滞（2026-10-02 用户要求：仓管页有了，经营页也要一份）—— 直接复用 components/StagnantPanel.vue，
+      与「成品库存情况」页是同一份口径与同一张表（列宽预算也共用，两个页面内容区宽度相同）。
+      ⚠️ 它与本页上方的 StatRange **无关**：滞销是"截至今天"的**时点**概念（有库存 × 多久没卖），
+         不随分析区间变化；区间只影响上方的销售额/退货率/毛利那一套。两处天数各自可调：
+         滞销判定线（默认 15 天）与统计窗口（默认 90 天，可选 30/60/90/180）。
+    -->
+    <StagnantPanel ref="stagnantRef" title="滞销与呆滞" @row-click="stagnantDetail" @product-click="stagnantDetail" />
   </div>
 </template>
 <style scoped>
