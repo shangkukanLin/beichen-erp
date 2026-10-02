@@ -20,6 +20,19 @@ function SqlOne([string]$q) {
   return ("$v").Trim()
 }
 
+# 2026-10-02 BUGFIX -- why 6 assertions could never pass even though the page was correct:
+#   Chinese text COMING BACK from the page (EvalJs/agent-browser stdout) is decoded as GBK on this host,
+#   so comparing it against the ZH needles ('全部' / '已结算' ...) always missed -- while every ASCII-only
+#   check (pager total, disabled state) passed. The page itself was measured correct (options = 全部|应收|应付,
+#   headers = ...|已结算|未结算|...). The repo convention for page text is BASE64 in the probe + decode here
+#   (same as scan-col-truncation.ps1's Dec); passing Chinese INTO the page already used B64.
+#   NOTE the encoding bug also made the "no combined wording" assertion a FALSE PASS (mojibake can never
+#   contain the forbidden word), so this fix makes that check real too.
+function Dec([string]$b) {
+  if ([string]::IsNullOrEmpty($b)) { return '' }
+  try { return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b)) } catch { return '?' }
+}
+
 $parts = (ZH 'text_bill_col_parts') -split '\|'
 $recvPaid = $parts[0]; $recvUnpaid = $parts[1]
 $payPaid = $parts[2]; $payUnpaid = $parts[3]
@@ -37,8 +50,11 @@ Write-Host ('[BASE] bills: all=' + $nAll + ' receivable=' + $nRecv + ' payable='
 Ok (($nAll -gt 0) -and ($nRecv -gt 0) -and ($nPay -gt 0)) 'fixture: the DB holds BOTH kinds of bill'
 
 # --- helpers: drive the query bar + read the rendered header / pager ---
+# 2026-10-02: clicking an already-open select TOGGLES IT CLOSED (measured: section A leaves the dropdown
+# open, so B2's click closed it -> PickOption found nothing -> NOHIT -> the receivable state never applied,
+# which looked like a page bug but was this probe's). Only click when no dropdown is open => idempotent.
 function OpenTypeSelect() {
-  return (EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const s=[...document.querySelectorAll('.query-form .el-select')].filter(vis)[0];if(!s)return 'NOSEL';const inp=s.querySelector('input')||s;inp.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));inp.click();return 'OPEN'})()")
+  return (EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const already=[...document.querySelectorAll('.el-select-dropdown')].filter(vis).some(d=>[...d.querySelectorAll('li')].some(e=>vis(e)));if(already)return 'OPEN';const s=[...document.querySelectorAll('.query-form .el-select')].filter(vis)[0];if(!s)return 'NOSEL';const inp=s.querySelector('input')||s;inp.dispatchEvent(new MouseEvent('mousedown',{bubbles:true}));inp.click();return 'OPEN'})()")
 }
 function PickOption([string]$text) {
   $b = B64 $text
@@ -48,8 +64,12 @@ function ClickQuery() {
   $b = B64 $queryBtn
   return (EvalJs "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const N=T('$b');const vis=e=>e.getClientRects().length>0;const b=[...document.querySelectorAll('button')].filter(vis).find(e=>(e.innerText||'').trim()===N);if(!b)return 'NOBTN';b.click();return 'OK'})()")
 }
+# headers come back as ONE base64 blob of items joined by U+0001 (a JSON array round-trip turned into a
+# single concatenated string on this host -- measured "账单号类型往来单位..." with no separators) and are then
+# re-joined with '|' so the existing -match assertions keep working.
 function Heads() {
-  return (EvalJs "JSON.stringify([...document.querySelectorAll('.el-table th')].map(e=>(e.innerText||'').trim()).filter(x=>x!==''))")
+  $raw = EvalJs "(()=>{const B=s=>btoa(unescape(encodeURIComponent(s||'')));return B([...document.querySelectorAll('.el-table th')].map(e=>(e.innerText||'').trim()).filter(x=>x!=='').join('\u0001'))})()"
+  return (((Dec $raw) -split ([char]1)) -join '|')
 }
 function PagerTotal() {
   $s = EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const e=[...document.querySelectorAll('.el-pagination__total')].filter(vis)[0];return e?(e.innerText||''):'NOTOTAL'})()"
@@ -74,11 +94,14 @@ Start-Sleep -Milliseconds 1700
 Write-Host '--- A) the type filter offers the "all" option ---'
 Ok ((OpenTypeSelect) -match 'OPEN') 'type select opens'
 Start-Sleep -Milliseconds 700
-$opts = EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const dds=[...document.querySelectorAll('.el-select-dropdown')].filter(vis);for(const d of dds){const li=[...d.querySelectorAll('li')].filter(e=>vis(e)&&(e.innerText||'').trim()!=='');if(li.length)return JSON.stringify(li.map(e=>(e.innerText||'').trim()))}return '[]'})()"
+# options come back as ONE base64 blob joined by U+0001 (same reason as Heads above)
+$optsRaw = EvalJs "(()=>{const B=s=>btoa(unescape(encodeURIComponent(s||'')));const vis=e=>e.getClientRects().length>0;const dds=[...document.querySelectorAll('.el-select-dropdown')].filter(vis);for(const d of dds){const li=[...d.querySelectorAll('li')].filter(e=>vis(e)&&(e.innerText||'').trim()!=='');if(li.length)return B(li.map(e=>(e.innerText||'').trim()).join('\u0001'))}return B('')})()"
+$optArr = @(((Dec $optsRaw) -split ([char]1)) | Where-Object { $_ -ne '' })
+$opts = ($optArr -join '|')
 Write-Host ('  options: ' + $opts)
 Ok ($opts -match [regex]::Escape($allOpt)) ('type filter offers the all option (' + $allOpt + ')')
 Ok (($opts -match [regex]::Escape($recvOpt)) -and ($opts -match [regex]::Escape($payOpt))) 'type filter still offers both concrete types'
-Ok ((([regex]::Matches($opts, '","').Count) + 1) -ge 3) 'type filter has >= 3 options'
+Ok ($optArr.Count -ge 3) ('type filter has >= 3 options (' + $optArr.Count + ')')
 
 Write-Host '--- B1) DEFAULT state must be all (2026-09-29 user rule: default = all) ---'
 $heads = Heads
