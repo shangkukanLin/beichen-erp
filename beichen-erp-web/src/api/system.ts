@@ -51,16 +51,18 @@ export interface UserDTO {
  * 首页业务 TAB 标识与名称（与 dashboard/index.vue 的 hasModule 键一致）。
  *
  * 2026-09-27：**label 与顺序都与侧栏一级目录对齐** —— `dev` 目录名是「研发管理」（原 label 写「项目研发」）、
- * `finance` 是「财务管理」（原 label 写「财务」）；顺序改为侧栏 sort 序（物料仓库在 销售业务 之后、成品库存 之前）。
+ * `finance` 是「财务管理」（原 label 写「财务」）；顺序改为侧栏 sort 序。
+ * 2026-10-02 用户口径「菜单物料仓库放在委外加工下面」：侧栏「物料仓库」移到「委外加工」之后 ⇒ 本表 `materialWarehouse`
+ * 同步移到 `outsource` 之后（当前顺序：研发管理 → 委外加工 → 物料仓库 → 进货业务 → 销售业务 → 成品库存 → 财务管理）。
  * 本列表用于角色配置里的「首页 TAB 可见性」，顺序即首页页签顺序 ⇒ 与 dashboard/index.vue 的 pane 顺序**必须同步**
  * （`verify-dashboard-tab-menu.ps1` 会同时校验本文件与 pane 顺序）。
  */
 export const DASHBOARD_TABS: { key: string; label: string }[] = [
   { key: 'dev', label: '研发管理' },
   { key: 'outsource', label: '委外加工' },
+  { key: 'materialWarehouse', label: '物料仓库' },
   { key: 'purchase', label: '进货业务' },
   { key: 'sale', label: '销售业务' },
-  { key: 'materialWarehouse', label: '物料仓库' },
   { key: 'stock', label: '成品库存' },
   { key: 'finance', label: '财务管理' }
 ]

@@ -333,11 +333,17 @@ public class DataInitializer {
             {2L, 0L, "基础数据", "catalog", "", "", "DataBoard", 3},
             {3L, 0L, "研发管理", "catalog", "", "", "Cpu", 4},
             {4L, 0L, "委外加工", "catalog", "", "", "Setting", 5},
-            {5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 6},
-            {6L, 0L, "销售业务", "catalog", "", "", "Sell", 7},
+            {5L, 0L, "进货业务", "catalog", "", "", "ShoppingCart", 7},
+            {6L, 0L, "销售业务", "catalog", "", "", "Sell", 8},
             // 物料仓库（2026-09-16 用户要求新增）：自「委外加工」迁入 5 个物料收发/仓储/报损子菜单。
-            // 排在「成品库存」之前，使两个仓库模块相邻（成品库存 8→9、财务管理 9→10、设置 10→11）
-            {11L, 0L, "物料仓库", "catalog", "", "", "Box", 8},
+            // 2026-10-02 用户口径「菜单物料仓库放在委外加工下面」：「物料仓库」**紧跟在「委外加工」之后**
+            //   （物料收发本属委外业务线，两块相邻便于来回切）⇒ 物料仓库 8→6、进货业务 6→7、销售业务 7→8；
+            //   成品库存 9 / 财务管理 10 / 设置 11 不变，仍保持两个仓库模块相邻。
+            //   ⚠️ 只改 sort_order：id / 父级 / 路由 / route_name / perms / 授权一律不动（不涉菜单白名单、重定向、接口权限）。
+            //   首页页签顺序**必须同步**（dashboard/index.vue 的 pane 顺序 + api/system.ts 的 DASHBOARD_TABS），
+            //   由 verify-dashboard-tab-menu.ps1「页签顺序 == 顶层目录顺序」动态校验；
+            //   verify-material-warehouse-menu.ps1 ① 同步加"紧随委外加工"的邻接断言。
+            {11L, 0L, "物料仓库", "catalog", "", "", "Box", 6},
             {7L, 0L, "成品库存", "catalog", "", "", "Odometer", 9},
             {8L, 0L, "财务管理", "catalog", "", "", "Money", 10},
             {9L, 0L, "设置", "catalog", "", "", "Tools", 11},

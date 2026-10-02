@@ -243,6 +243,68 @@
         </div>
       </el-tab-pane>
 
+      <!-- 物料仓库（2026-09-16 新增 TAB，对应侧栏一级目录「物料仓库」）。2026-10-02 用户口径「菜单物料仓库放在
+           委外加工下面」⇒ 侧栏目录 sort_order 8→6，本 pane 随之挪回「委外加工」之后（2026-09-27 曾按当时的目录顺序
+           移到「销售业务」之后）—— 页签顺序始终与侧栏目录 sort_order 严格一致，见文首「三条对齐规则」。
+           快捷入口首块 = 该目录 6 个当前子菜单（物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 →
+           物料其他出入库 → 物料报损，逐项同序；2026-09-29 用户口径：其他出入库提到报损前面）；其后 2 个是跨目录补充入口：「委外仓库 / 自有物料仓」
+           2026-09-22 起在侧栏归「基础数据」（仓库主数据），而首页无「基础数据」TAB
+           （主数据按使用场景分散在各 TAB），故这两颗按钮仍留在本 TAB。
+
+           2026-09-27（用户实测：「首页的 TAB 物料仓库，怎么是空白的？」）：本 TAB 建时**只做了快捷入口容器、
+           零统计卡片**（原注释即"本模块暂无汇总统计卡片…另行补充"），其余 6 个 TAB 都以 4 张 stat-card 开场
+           ⇒ 对比之下它就是个空白页。现按「成品库存」TAB 的形态补齐：4 张卡片 + 各仓库物料库存分布表。
+           数据全部来自后端聚合 /dashboard/module-pages 的 materialWarehouse 块（读隔离口径，不前端直连物料各页接口），
+           口径（只算物料行 / 委外仓+自有物料仓 / 数量取良品）见 DashboardService.materialWarehouseStat 注释。 -->
+      <el-tab-pane v-if="hasModule['materialWarehouse']" label="物料仓库" name="materialWarehouse">
+        <div class="stat-grid">
+          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
+            <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtQty(mwItemCount) }}</div>
+            <div class="stat-label">库存品项数（良品）</div>
+          </div>
+          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
+            <div class="stat-value" style="color:var(--app-color-success)">{{ fmtQty(mwGoodQty) }}</div>
+            <div class="stat-label">库存总数量（良品）</div>
+          </div>
+          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
+            <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtQty(mwOnSiteQty) }}</div>
+            <div class="stat-label">在厂维修物料</div>
+          </div>
+          <!-- 待处理单据：草稿态未审核（与 /dashboard/pending 的 counts 同口径）；不可点击 —— 三张单据三个入口，
+               点一颗会误指，故只在卡片内列明明细 -->
+          <div class="stat-card">
+            <div class="stat-value" style="color:var(--app-color-danger)">{{ fmtQty(mwPendingDocs.total) }}</div>
+            <div class="stat-label">待处理单据（草稿）</div>
+            <div class="stat-sub">移仓 {{ fmtQty(mwPendingDocs.materialMove) }} · 报损 {{ fmtQty(mwPendingDocs.stockLoss) }} · 其他出入库 {{ fmtQty(mwPendingDocs.otherIo) }}</div>
+          </div>
+        </div>
+        <el-card shadow="never" class="section-card" v-if="mwWhRows.length">
+          <template #header><span class="section-title">各仓库物料库存分布</span></template>
+          <el-table :data="mwWhRows" size="small" stripe>
+            <el-table-column prop="warehouseName" label="仓库" min-width="140" show-overflow-tooltip>
+              <template #default="{row}"><el-link type="primary" @click="goMaterialWarehouse(row)">{{ row.warehouseName }}</el-link></template>
+            </el-table-column>
+            <el-table-column prop="itemCount" label="物料数" width="90" align="center" />
+            <el-table-column label="库存量（良品）" width="130" align="right"><template #default="{row}">{{ fmtQty(row.goodQuantity) }}</template></el-table-column>
+            <el-table-column label="其中在厂维修" width="130" align="right"><template #default="{row}">{{ fmtQty(row.onSiteRepairQuantity) }}</template></el-table-column>
+          </el-table>
+        </el-card>
+        <div class="quick-links">
+          <span class="links-label">快捷入口：</span>
+          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径；2026-09-29 用户口径「物料其他出入库放在物料报损前面」
+               ⇒ 本块同步换位，与侧栏 sort_order 逐项同序：
+               物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 → 物料其他出入库 → 物料报损）。
+               原「委外仓库管理 / 自有物料仓管理」2 颗属「基础数据」⇒ 已移除（它们与「成品仓库管理」共用
+               route_name "Warehouse"，此前只能按路径判权限；移除后 `hasPath` 一并删除）。 -->
+          <el-button v-if="hasMenu['InventoryMaterialMove']" type="primary" size="small" text @click="$router.push('/inventory/material-move')">物料移仓</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialStock']" type="primary" size="small" text @click="$router.push('/outsource/material-stock')">物料库存详情</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialStockLog']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-log')">物料库存流水</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
+          <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
+          <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
+        </div>
+      </el-tab-pane>
+
       <el-tab-pane v-if="hasModule['purchase']" label="进货业务" name="purchase">
         <div class="stat-grid">
           <div class="stat-card clickable" @click="$router.push('/inventory/purchase')">
@@ -344,67 +406,6 @@
           <el-button v-if="hasMenu['InventorySale']" type="primary" size="small" text @click="$router.push('/inventory/sale')">销售单</el-button>
           <el-button v-if="hasMenu['SaleReturn']" type="primary" size="small" text @click="$router.push('/sale/return')">销售退货单</el-button>
           <el-button v-if="hasMenu['SaleExchange']" type="primary" size="small" text @click="$router.push('/sale/exchange')">销售换货单</el-button>
-        </div>
-      </el-tab-pane>
-
-      <!-- 物料仓库（2026-09-16 新增 TAB，对应侧栏一级目录「物料仓库」；2026-09-27 按用户口径把本 pane 从
-           「委外加工」之后**移到「销售业务」之后** —— 使页签顺序与侧栏目录 sort_order 严格一致，见文首「三条对齐规则」）。
-           快捷入口首块 = 该目录 6 个当前子菜单（物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 →
-           物料其他出入库 → 物料报损，逐项同序；2026-09-29 用户口径：其他出入库提到报损前面）；其后 2 个是跨目录补充入口：「委外仓库 / 自有物料仓」
-           2026-09-22 起在侧栏归「基础数据」（仓库主数据），而首页无「基础数据」TAB
-           （主数据按使用场景分散在各 TAB），故这两颗按钮仍留在本 TAB。
-
-           2026-09-27（用户实测：「首页的 TAB 物料仓库，怎么是空白的？」）：本 TAB 建时**只做了快捷入口容器、
-           零统计卡片**（原注释即"本模块暂无汇总统计卡片…另行补充"），其余 6 个 TAB 都以 4 张 stat-card 开场
-           ⇒ 对比之下它就是个空白页。现按「成品库存」TAB 的形态补齐：4 张卡片 + 各仓库物料库存分布表。
-           数据全部来自后端聚合 /dashboard/module-pages 的 materialWarehouse 块（读隔离口径，不前端直连物料各页接口），
-           口径（只算物料行 / 委外仓+自有物料仓 / 数量取良品）见 DashboardService.materialWarehouseStat 注释。 -->
-      <el-tab-pane v-if="hasModule['materialWarehouse']" label="物料仓库" name="materialWarehouse">
-        <div class="stat-grid">
-          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
-            <div class="stat-value" style="color:var(--app-color-primary)">{{ fmtQty(mwItemCount) }}</div>
-            <div class="stat-label">库存品项数（良品）</div>
-          </div>
-          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
-            <div class="stat-value" style="color:var(--app-color-success)">{{ fmtQty(mwGoodQty) }}</div>
-            <div class="stat-label">库存总数量（良品）</div>
-          </div>
-          <div class="stat-card" :class="{clickable:mwCanStock}" @click="mwGotoStock">
-            <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtQty(mwOnSiteQty) }}</div>
-            <div class="stat-label">在厂维修物料</div>
-          </div>
-          <!-- 待处理单据：草稿态未审核（与 /dashboard/pending 的 counts 同口径）；不可点击 —— 三张单据三个入口，
-               点一颗会误指，故只在卡片内列明明细 -->
-          <div class="stat-card">
-            <div class="stat-value" style="color:var(--app-color-danger)">{{ fmtQty(mwPendingDocs.total) }}</div>
-            <div class="stat-label">待处理单据（草稿）</div>
-            <div class="stat-sub">移仓 {{ fmtQty(mwPendingDocs.materialMove) }} · 报损 {{ fmtQty(mwPendingDocs.stockLoss) }} · 其他出入库 {{ fmtQty(mwPendingDocs.otherIo) }}</div>
-          </div>
-        </div>
-        <el-card shadow="never" class="section-card" v-if="mwWhRows.length">
-          <template #header><span class="section-title">各仓库物料库存分布</span></template>
-          <el-table :data="mwWhRows" size="small" stripe>
-            <el-table-column prop="warehouseName" label="仓库" min-width="140" show-overflow-tooltip>
-              <template #default="{row}"><el-link type="primary" @click="goMaterialWarehouse(row)">{{ row.warehouseName }}</el-link></template>
-            </el-table-column>
-            <el-table-column prop="itemCount" label="物料数" width="90" align="center" />
-            <el-table-column label="库存量（良品）" width="130" align="right"><template #default="{row}">{{ fmtQty(row.goodQuantity) }}</template></el-table-column>
-            <el-table-column label="其中在厂维修" width="130" align="right"><template #default="{row}">{{ fmtQty(row.onSiteRepairQuantity) }}</template></el-table-column>
-          </el-table>
-        </el-card>
-        <div class="quick-links">
-          <span class="links-label">快捷入口：</span>
-          <!-- 严格 = **本目录子菜单**（2026-09-27 用户口径；2026-09-29 用户口径「物料其他出入库放在物料报损前面」
-               ⇒ 本块同步换位，与侧栏 sort_order 逐项同序：
-               物料移仓 → 物料库存详情 → 物料库存流水 → 物料库存盘点 → 物料其他出入库 → 物料报损）。
-               原「委外仓库管理 / 自有物料仓管理」2 颗属「基础数据」⇒ 已移除（它们与「成品仓库管理」共用
-               route_name "Warehouse"，此前只能按路径判权限；移除后 `hasPath` 一并删除）。 -->
-          <el-button v-if="hasMenu['InventoryMaterialMove']" type="primary" size="small" text @click="$router.push('/inventory/material-move')">物料移仓</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialStock']" type="primary" size="small" text @click="$router.push('/outsource/material-stock')">物料库存详情</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialStockLog']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-log')">物料库存流水</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialStockTake']" type="primary" size="small" text @click="$router.push('/outsource/material-stock-take')">物料库存盘点</el-button>
-          <el-button v-if="hasMenu['OutsourceOtherIo']" type="primary" size="small" text @click="$router.push('/outsource/other-io')">物料其他出入库</el-button>
-          <el-button v-if="hasMenu['OutsourceStockLoss']" type="primary" size="small" text @click="$router.push('/outsource/stock-loss')">物料报损</el-button>
         </div>
       </el-tab-pane>
 
