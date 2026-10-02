@@ -211,7 +211,7 @@ onMounted(() => { loadData() })
             <el-select v-model="row.productId" placeholder="搜索选择产品（可输SKU）" filterable remote :remote-method="loadProductOptions" style="width:100%" size="small">
               <el-option v-for="p in productOptions" :key="p.id" :label="productLabel(p)" :value="p.id" />
             
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 新增</div></template>
               </el-select>
           </template>
         </el-table-column>

@@ -182,7 +182,7 @@ onMounted(() => { if (props.visible) open() })
           <el-select v-model="form.projectId" style="width:100%" :disabled="lockedProject" clearable placeholder="不关联研发立项">
             <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
           
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/project/add')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/project/add')">+ 新增</div></template>
               </el-select>
         </el-form-item></el-col>
         <el-col :span="12"><el-form-item label="数量"><el-input-number v-model="form.quantity" :min="0" :precision="0" style="width:100%" /></el-form-item></el-col>
@@ -213,7 +213,7 @@ onMounted(() => { if (props.visible) open() })
             <el-select v-model="rdForm.accountId" placeholder="请选择" style="width:100%">
               <el-option v-for="a in rdAccounts" :key="a.id" :label="`${a.accountName}（余额 ${Number((a as any).balance ?? 0).toFixed(2)}）`" :value="a.id ?? ''" />
             
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 新增</div></template>
               </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="费用日期"><el-date-picker v-model="rdForm.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item></el-col>

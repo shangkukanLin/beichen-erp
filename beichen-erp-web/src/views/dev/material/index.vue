@@ -178,7 +178,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
           <el-select v-model="rdRowForm.accountId" placeholder="请选择" style="width:100%">
             <el-option v-for="a in rdAccounts" :key="a.id" :label="`${a.accountName}（余额 ${Number((a as any).balance ?? 0).toFixed(2)}）`" :value="a.id ?? ''" />
           
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/finance/account')">+ 新增</div></template>
               </el-select>
         </el-form-item>
         <el-form-item label="费用日期"><el-date-picker v-model="rdRowForm.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>

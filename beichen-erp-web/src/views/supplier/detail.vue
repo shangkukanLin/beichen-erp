@@ -386,7 +386,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
                 <el-select v-else v-model="row.productId" placeholder="搜索产品（可输SKU）" filterable remote :remote-method="searchProducts" size="small" style="width:100%">
                   <el-option v-for="p in prodOptions" :key="p.id" :label="productLabel(p)" :value="p.id" />
                 
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/product/add')">+ 新增</div></template>
               </el-select>
               </template>
             </el-table-column>
@@ -420,7 +420,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
                 <el-select v-else v-model="row.materialId" placeholder="搜索物料" filterable remote :remote-method="searchMaterials" size="small" style="width:100%">
                   <el-option v-for="m in matOptions" :key="m.id" :label="m.materialName || ('物料#' + m.id)" :value="m.id" />
                 
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/material-info')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/material-info')">+ 新增</div></template>
               </el-select>
               </template>
             </el-table-column>

@@ -222,7 +222,7 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
             <el-select v-model="material.projectId" style="width:100%" placeholder="未关联项目" clearable filterable>
               <el-option v-for="p in projectOptions" :key="p.id" :label="p.name" :value="p.id" />
             
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/project/add')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/dev/project/add')">+ 新增</div></template>
               </el-select>
           </el-form-item></el-col>
           <el-col :span="12"><el-form-item label="当前所在">
@@ -293,7 +293,7 @@ function loadMaterialType() { materialTypeOptions.value = codeLabelOptions(DevMa
               <el-option v-for="c in customerOptions" :key="c.id" :label="c.name" :value="c.id" />
             </el-option-group>
           
-                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/supplier/manage/add')">+ 鏂板</div></template>
+                <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/supplier/manage/add')">+ 新增</div></template>
               </el-select>
         </el-form-item>
         <el-form-item v-else label="位置"><el-input v-model="flowForm.placeDetail" placeholder="输入自定义位置" /></el-form-item>

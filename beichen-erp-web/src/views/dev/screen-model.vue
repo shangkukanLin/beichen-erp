@@ -162,7 +162,7 @@ onActivated(() => { loadData() })
             <el-select v-model="query.brand" placeholder="全部" clearable filterable style="width:130px" @change="(v: any) => { if (v === ADD_MARKER) { $router.push('/inventory/brand') } }">
               <el-option v-for="b in brandOptions" :key="b" :label="b" :value="b" />
             
-                <el-option label="+ 鏂板" :value="ADD_MARKER" />
+                <el-option label="+ 新增" :value="ADD_MARKER" />
               </el-select>
           </el-form-item>
           <el-form-item label="主屏尺寸">
