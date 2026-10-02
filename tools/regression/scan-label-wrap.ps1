@@ -12,8 +12,10 @@
 # Do NOT use the element height - el-form-item__label height is pinned to the control height, so a
 # wrapped label keeps h == single-line height while the overflow text visually sits on a second line.
 #
-# COVERAGE: (1) every static route in router/index.ts, (2) 12 main document detail/edit pages
-# (ids read from the DB), (3) the query-parameter entry pages that a plain route scan cannot reach,
+# COVERAGE: (1) every static route in router/index.ts, (2) 15 main document detail/edit pages
+# (ids read from the DB; 2026-10-02 补入 sale/exchange、purchase/exchange、purchase/return 三个详情页 ——
+# 用户报的「换入仓(售后)」折行正是发生在 sale/exchange/detail，而它此前不在覆盖内),
+# (3) the query-parameter entry pages that a plain route scan cannot reach,
 # (4) the first "new/create" dialog on every page (opened, scanned, cancelled - read only, no writes).
 
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
@@ -47,11 +49,17 @@ $del = SqlOne "SELECT id FROM outsource_order_delivery ORDER BY id DESC LIMIT 1"
 $so = SqlOne "SELECT id FROM sale_order ORDER BY id DESC LIMIT 1"
 $sr = SqlOne "SELECT id FROM sale_return ORDER BY id DESC LIMIT 1"
 $prj = SqlOne "SELECT id FROM dev_project ORDER BY id DESC LIMIT 1"
+# 2026-10-02 补：退换货三个详情页（用户正是在 sale/exchange/detail 上报「换入仓(售后)」标签折行，
+# 此前这三个页面不在守卫范围内 ⇒ 漏检）。它们的路由带 :id，静态路由扫描覆盖不到，必须单列。
+$sx = SqlOne "SELECT id FROM sale_exchange ORDER BY id DESC LIMIT 1"
+$px = SqlOne "SELECT id FROM purchase_exchange ORDER BY id DESC LIMIT 1"
+$pr = SqlOne "SELECT id FROM purchase_return ORDER BY id DESC LIMIT 1"
 $detail = @(
   ('/outsource/order/detail/' + $oid), ('/outsource/order/delivery/' + $oid), ('/outsource/material-order/detail/' + $moid),
   ('/outsource/return-order/detail/' + $roR), ('/outsource/defect-return/detail/' + $dr),
   ('/outsource/material-return/detail/' + $mrL), ('/outsource/material-return/detail/' + $mrN), ('/outsource/material-return/detail/' + $mrR),
-  ('/outsource/order/delivery/record/' + $del), ('/sale/order/detail/' + $so), ('/sale/return/detail/' + $sr), ('/dev/project/edit/' + $prj)
+  ('/outsource/order/delivery/record/' + $del), ('/sale/order/detail/' + $so), ('/sale/return/detail/' + $sr), ('/dev/project/edit/' + $prj),
+  ('/sale/exchange/detail/' + $sx), ('/inventory/purchase-exchange/detail/' + $px), ('/inventory/purchase-return/detail/' + $pr)
 ) | Where-Object { $_ -notmatch '/$' }
 $entry = @(
   '/outsource/material-return/add?returnType=REFUND&linked=WITH_ORDER',

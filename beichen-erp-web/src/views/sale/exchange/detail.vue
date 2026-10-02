@@ -17,7 +17,12 @@
 
     <el-card shadow="never">
       <!-- ============ 草稿：可编辑（字段/校验/payload 与 add.vue 完全一致） ============ -->
-      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width)">
+      <!-- 2026-10-02（用户口径）：原来用 --app-label-width（90px），而本页有 8 字标签「换入仓(售后)」
+           「换出仓(成品)」—— 实测文字 78px + 必填星号 12px = 90px，正好顶满 90px 标签框 ⇒ 标签被压成
+           两行（「换入仓(售」/「后)」）。Element 的 form label 是 nowrap，超宽不会自己变高，只会折行/越界，
+           用"高度"是查不出来的。改用 --app-label-width-lg（112px）：90 ≤ 112，留 22px 余量。
+           （同款问题的全局排查见本文件注释；新增页 add.vue 早已用 -xl，同因。） -->
+      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width-lg)">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="换货单号">{{ head.code }}</el-form-item>
@@ -112,9 +117,17 @@
           未关联销售单（无单换货）：可增删明细并更换产品；已经审核过的单据不再可编辑
         </span>
       </div>
+      <!-- 2026-10-02（用户口径「换货明细列表宽度要充满布局」）：Element 在 table-layout:fixed + width:100% 下
+           列宽之和 < 容器 ⇒ 右侧留白（只有存在 min-width 列时才会把余量分给该列）；
+           之和 > 容器 ⇒ 横向滚动（实测本表原为 1002 > 971，溢出 31px）。故：
+           ① 「退回产品」改 min-width=128 吸收余量；② 收窄若干数字列（金额 80→76、数量/单价 86→84、收费 146→130）。
+           2026-10-02（用户口径「以下列各 +15px」）：库存数量 74→89、退回数量 84→99、原单价 84→99、退回金额 76→91、
+           换出数量 84→99、换出品质 88→103、换出单价 84→99、换出金额 76→91 ⇒ 其余固定列合计 968（含操作列）/ 916（不含）。
+           ⚠️ 968 + 128 = 1096 > 1262 窗口下的容器 971 ⇒ 该窗口会出现横向滚动条（用户明确要求加宽，接受此权衡）；
+           更宽的窗口下仍是「固定列 + 退回产品吸收余量 = 正好充满」。 -->
       <el-table v-if="isDraft" :data="items" border size="small">
         <el-table-column label="退回（客户退回，入成品仓待整理）" align="center">
-          <el-table-column label="退回产品" width="138" show-overflow-tooltip>
+          <el-table-column label="退回产品" min-width="128" show-overflow-tooltip>
             <template #default="{ row }">
               <!-- 无来源换货：可更换产品（远程搜，可输 SKU）；有来源：产品由销售明细固定，只读 -->
               <el-select v-if="!head.saleOrderId" v-model="row.productId" placeholder="选择产品（可输SKU）"
@@ -129,48 +142,48 @@
                该**换出品质**的库存（stockForm=MATERIAL，与审核换出扣减口径一致）；
                退回数量的 :max = min(来源销售单数量, 库存数量)；无来源（无单换货）⇒ :max = 库存数量。
                与新增页 add.vue 同款（详情页这列此前恒为「-」，故一并接上实时库存）。 -->
-          <el-table-column label="库存数量" width="74" align="right">
+          <el-table-column label="库存数量" width="89" align="right">
             <template #default="{ row }">
               <span v-if="row.stock !== undefined" :style="{ color: Number(row.stock) <= 0 ? 'red' : '' }">{{ row.stock }}</span>
               <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column label="退回数量" width="86">
+          <el-table-column label="退回数量" width="99">
             <template #default="{ row }">
               <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" size="small" :controls="false" :max="row.quantityLimit" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="原单价" width="86" align="right">
+          <el-table-column label="原单价" width="99" align="right">
             <template #default="{ row }">{{ formatMoney(row.unitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="退回金额" width="80" align="right">
+          <el-table-column label="退回金额" width="91" align="right">
             <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
           </el-table-column>
         </el-table-column>
         <el-table-column label="换出（发给客户，从成品仓扣减）" align="center">
-          <el-table-column label="换出数量" width="86">
+          <el-table-column label="换出数量" width="99">
             <template #default="{ row }">
               <el-input-number v-model="row.outQuantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="换出品质" width="88">
+          <el-table-column label="换出品质" width="103">
             <template #default="{ row }">
               <el-select v-model="row.outQualityType" size="small" style="width:100%" @change="() => refreshStock(row)">
                 <el-option v-for="o in qualityOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="换出单价" width="86">
+          <el-table-column label="换出单价" width="99">
             <template #default="{ row }">
               <el-input-number v-model="row.outUnitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="换出金额" width="80" align="right">
+          <el-table-column label="换出金额" width="91" align="right">
             <template #default="{ row }">{{ formatMoney(row.outAmount) }}</template>
           </el-table-column>
         </el-table-column>
         <!-- 逐产品收费（2026-09-21）：本行产品向客户收取的金额 + 类型（金额 0 = 该产品不收费，类型必选） -->
-        <el-table-column label="收费" width="146" align="center">
+        <el-table-column label="收费" width="130" align="center">
           <template #default="{ row }">
             <div style="display:flex;gap:4px">
               <el-input-number v-model="row.chargeAmount" :min="0" :precision="2" size="small" :controls="false"
@@ -190,32 +203,37 @@
         </el-table-column>
       </el-table>
 
-      <!-- 已审核 / 已作废：只读（原口径原样保留） -->
+      <!-- 已审核 / 已作废：只读（原口径原样保留）
+           2026-10-02（用户口径「换货明细列表宽度要充满布局」）：同上，退回产品用 min-width=146 吸收余量
+           （原先全固定宽 ⇒ 右侧留白 79px）。
+           2026-10-02（用户口径「以下列各 +15px」）：退回数量 82→97、原单价 90→105、退回金额 88→103、
+           换出数量 82→97、换出品质 80→95、换出单价 90→105、换出金额 88→103 ⇒ 固定列合计 851。
+           ⚠️ 851 + 146 = 997 > 1262 窗口下的容器 971 ⇒ 该窗口会出现横向滚动条；更宽窗口下正好充满。 -->
       <el-table v-else :data="items" border>
         <el-table-column label="退回（客户退回，入成品仓待整理）" align="center">
-          <el-table-column label="退回产品" width="146" show-overflow-tooltip>
+          <el-table-column label="退回产品" min-width="146" show-overflow-tooltip>
             <template #default="{ row }">
               <el-button v-if="row.productId" type="primary" link @click="goProduct(row.productId)">{{ productText(row) }}</el-button>
               <span v-else>{{ productText(row) }}</span>
             </template>
           </el-table-column>
-          <el-table-column prop="quantity" label="退回数量" width="82" align="right" />
-          <el-table-column label="原单价" width="90" align="right">
+          <el-table-column prop="quantity" label="退回数量" width="97" align="right" />
+          <el-table-column label="原单价" width="105" align="right">
             <template #default="{ row }">{{ formatMoney(row.unitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="退回金额" width="88" align="right">
+          <el-table-column label="退回金额" width="103" align="right">
             <template #default="{ row }">{{ formatMoney(row.amount) }}</template>
           </el-table-column>
         </el-table-column>
         <el-table-column label="换出（发给客户，从成品仓扣减）" align="center">
-          <el-table-column prop="outQuantity" label="换出数量" width="82" align="right" />
-          <el-table-column label="换出品质" width="80" align="center">
+          <el-table-column prop="outQuantity" label="换出数量" width="97" align="right" />
+          <el-table-column label="换出品质" width="95" align="center">
             <template #default="{ row }">{{ ProductQualityTypeLabel[String(row.outQualityType)] || row.outQualityType || '-' }}</template>
           </el-table-column>
-          <el-table-column label="换出单价" width="90" align="right">
+          <el-table-column label="换出单价" width="105" align="right">
             <template #default="{ row }">{{ formatMoney(row.outUnitPrice) }}</template>
           </el-table-column>
-          <el-table-column label="换出金额" width="88" align="right">
+          <el-table-column label="换出金额" width="103" align="right">
             <template #default="{ row }">{{ formatMoney(row.outAmount) }}</template>
           </el-table-column>
         </el-table-column>

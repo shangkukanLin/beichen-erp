@@ -322,8 +322,13 @@ onActivated(async () => { await loadData(); takeBaseline() })
       <el-tab-pane label="基础信息" name="info">
         <el-card shadow="never">
           <template #header><span style="font-weight:600">基础信息</span></template>
-          <!-- label-width 110px：标签带模块前缀（供货商名称/供应商编码 5 字）+ 必填星号，80px 会把标签压成两行 -->
-          <el-form :model="form" label-width="var(--app-label-width)" size="small">
+          <!-- 2026-10-02（用户口径「检查全局」）：本条注释原写「label-width 110px」，但代码是 --app-label-width(90px)
+               —— 注释记录的是改造期用 110px 修掉折行的做法，而代码后来被改回 90px、修复丢了。
+               实测（守卫 scan-label-wrap 同款 Range.getClientRects 行数判定）：本页必填标签「供货商名称」
+               （5 字 + 必填星号）在 90px 下 **实为 2 行** ✗ ⇒ 恢复 110px 的做法，取同档的
+               --app-label-width-lg(112px)（口径见 tokens.css：5 字及以上标签的表单一律用本档）。
+               注：文字实宽估算（70~82px）在这一档不可靠，必须以行数判定为准。 -->
+          <el-form :model="form" label-width="var(--app-label-width-lg)" size="small">
             <el-row :gutter="12">
               <el-col :span="8"><el-form-item required :label="entityLabel + '名称'"><el-input v-model="form.name" /></el-form-item></el-col>
               <el-col :span="8"><el-form-item :label="entityLabel + '编码'"><el-input :model-value="form.code" disabled /></el-form-item></el-col>

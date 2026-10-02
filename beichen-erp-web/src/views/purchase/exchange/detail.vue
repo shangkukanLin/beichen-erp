@@ -17,7 +17,11 @@
     <el-card shadow="never">
       <!-- ============ 草稿：可编辑（字段/校验/payload 与 add.vue 完全一致） ============ -->
       <template v-if="isDraft">
-        <el-form :model="form" label-width="var(--app-label-width)">
+        <!-- 2026-10-02（用户口径「检查全局」）：本页原用 --app-label-width(90px)，实测「退回出库仓」
+           「换入入库仓」两个 5 字必填标签（70px + 星号 12px ≈ 87~92px）卡在 90px 边缘 ⇒ **折成两行**
+           （守卫 scan-label-wrap 抓出 4 处）。按 tokens.css 既定档位改用 -lg(112px)：
+           凡含 5 字及以上标签的表单一律用本档。 -->
+      <el-form :model="form" label-width="var(--app-label-width-lg)">
           <el-row :gutter="16">
             <el-col :span="8">
               <el-form-item label="换货单号">{{ head.code }}</el-form-item>
@@ -172,13 +176,14 @@
 
         <el-row :gutter="16" style="margin-top:8px">
           <el-col :span="6">
-            <el-form-item label="付费合计（自动）">
+            <!-- 2026-10-02：全角括号长标签实测需 124px ⇒ 与新增页同款，本项单独用 -xl(128px) -->
+        <el-form-item label="付费合计（自动）" label-width="var(--app-label-width-xl)">
               <span style="font-weight:600;color:#e6a23c">{{ chargeTotal.toFixed(2) }}</span>
               <span style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">= Σ 明细行付费</span>
             </el-form-item>
           </el-col>
           <el-col :span="10">
-            <el-form-item label="付费说明（整单）">
+            <el-form-item label="付费说明（整单）" label-width="var(--app-label-width-xl)">
               <el-input v-model="form.chargeReason" placeholder="选填，如：换货服务费 / 补差价（落到该单付费台账备注）" />
             </el-form-item>
           </el-col>
