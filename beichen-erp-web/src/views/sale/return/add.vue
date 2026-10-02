@@ -155,7 +155,7 @@ import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
 import { ProductQualityTypeLabel, ProductQualityTypeTag, WarehouseType, SALE_RETURN_DIRTY_KEY,
-  ExchangeChargeType, ExchangeChargeTypeLabel } from '@/api/enums'
+  SaleReturnChargeType, SaleReturnChargeTypeLabel } from '@/api/enums'
 import { productLabel } from '@/api/product'
 import {
   getSaleReturn,
@@ -220,9 +220,11 @@ const form = reactive({
   items: [] as any[],
 })
 
+// 2026-10-02（用户口径）：销售**退货**单的收费类型只保留「盖板划伤」「其他」两项
+// （此前借用销售换货的 ExchangeChargeType ⇒ 服务费/品质差价/全额货值/其他，与退单场景不符）
 const chargeTypeOptions = computed(() =>
-  Object.values(ExchangeChargeType).map((v) => ({
-    value: v, label: ExchangeChargeTypeLabel[v] || v
+  Object.values(SaleReturnChargeType).map((v) => ({
+    value: v, label: SaleReturnChargeTypeLabel[v] || v
   }))
 )
 /**

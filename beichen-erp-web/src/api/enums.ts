@@ -636,6 +636,22 @@ export const ExchangeChargeTypeLabel: Record<string, string> = {
 }
 
 /**
+ * 销售**退货**单收费类型（对应后端 sale/common/SaleReturnChargeType，存储值 COVER_SCRATCH/OTHER）
+ * 2026-10-02（用户口径）：退单只保留「盖板划伤」与「其他」两项 —— 此前退货单借用上面的
+ * ExchangeChargeType（服务费/品质差价/全额货值/其他），与退单实际场景（外观损伤责任判定）不符；
+ * 拆开后改退单的选项不再牵连销售换货单。切换前库里 4 张退货单的 charge_type 全为 NULL，无历史值。
+ */
+export const SaleReturnChargeType = {
+  COVER_SCRATCH: 'COVER_SCRATCH',  // 盖板划伤
+  OTHER: 'OTHER'                   // 其他
+} as const
+
+export const SaleReturnChargeTypeLabel: Record<string, string> = {
+  [SaleReturnChargeType.COVER_SCRATCH]: '盖板划伤',
+  [SaleReturnChargeType.OTHER]: '其他'
+}
+
+/**
  * 采购换货单付费类型（对应后端 purchase/common/PurchaseChargeType，存储值 SERVICE/DIFF/FULL/OTHER）
  * ⚠️ 方向与上面的销售侧 ExchangeChargeType 相反：这里是「**我们向供货商付费**」（审核生成正向应付），
  * 销售侧是「向客户收费」（审核生成正向应收）。两侧各自独立映射，避免方向混用。

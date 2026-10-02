@@ -38,7 +38,7 @@
           <template v-if="Number(head.chargeFlag) === 1 && Number(head.chargeAmount) > 0">
             <span style="color:#e6a23c;font-weight:600">{{ formatMoney(head.chargeAmount) }}</span>
             <span style="margin-left:6px;color:#909399">
-              {{ ExchangeChargeTypeLabel[String(head.chargeType)] || (head.chargeType ? head.chargeType : '多类型') }}
+              {{ SaleReturnChargeTypeLabel[String(head.chargeType)] || (head.chargeType ? head.chargeType : '多类型') }}
             </span>
             <span style="margin-left:6px;color:#c0c4cc;font-size:var(--app-font-xs)">（逐产品明细见下表「收费」列）</span>
           </template>
@@ -76,7 +76,7 @@
           <template #default="{ row }">
             <template v-if="Number(row.chargeAmount) > 0">
               <span style="color:#e6a23c;font-weight:600">{{ formatMoney(row.chargeAmount) }}</span>
-              <span style="margin-left:4px;color:#909399">{{ ExchangeChargeTypeLabel[String(row.chargeType)] || row.chargeType || '' }}</span>
+              <span style="margin-left:4px;color:#909399">{{ SaleReturnChargeTypeLabel[String(row.chargeType)] || row.chargeType || '' }}</span>
             </template>
             <span v-else style="color:#c0c4cc">—</span>
           </template>
@@ -93,7 +93,7 @@ import { onMounted, onActivated, reactive, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { ProductQualityTypeLabel, ProductQualityTypeTag, ExchangeChargeTypeLabel } from '@/api/enums'
+import { ProductQualityTypeLabel, ProductQualityTypeTag, SaleReturnChargeTypeLabel } from '@/api/enums'
 import PageShell from '@/components/PageShell.vue'
 import {
   getSaleReturn,

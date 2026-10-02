@@ -28,7 +28,8 @@ import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.common.DocStatus;
 import com.beichen.erp.sale.common.AfterSaleSourceType;
-import com.beichen.erp.sale.common.ExchangeChargeType;
+// 2026-10-02（用户口径）：退货单不再借用换货的 ExchangeChargeType —— 退单只用「盖板划伤 / 其他」两项
+import com.beichen.erp.sale.common.SaleReturnChargeType;
 import com.beichen.erp.sale.entity.AfterSalePending;
 import com.beichen.erp.sale.entity.SaleReturn;
 import com.beichen.erp.sale.entity.SaleReturnItem;
@@ -217,8 +218,8 @@ public class SaleReturnServiceImpl implements SaleReturnService {
      * <p>⚠️ 只选了单据级收费、却没有任何一行填金额 ⇒ **报错**（避免"看起来收了费、台账却是 0"）。</p>
      */
     private void normalizeCharge(SaleReturn e, List<Map<String, Object>> itemMaps) {
-        // 单据级类型（批量默认）必须合法
-        if (e.getChargeType() != null && !e.getChargeType().isBlank() && !ExchangeChargeType.isValid(e.getChargeType()))
+        // 单据级类型（批量默认）必须合法（2026-10-02：退单专用枚举 —— 盖板划伤 / 其他）
+        if (e.getChargeType() != null && !e.getChargeType().isBlank() && !SaleReturnChargeType.isValid(e.getChargeType()))
             throw new BusinessException("非法的收费类型：" + e.getChargeType());
         boolean anyItem = hasItemCharge(itemMaps);
         // 兼容旧前端（只填单据级金额、没逐行填）：落到**第一条明细** —— 保证「Σ明细 = 单据金额」恒等，
@@ -245,7 +246,7 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             throw new BusinessException("已选择收费，请先添加明细（收费精确到产品）");
         Map<String, Object> first = itemMaps.get(0);
         first.put("chargeAmount", amount);
-        first.put("chargeType", type != null && !type.isBlank() ? type : ExchangeChargeType.OTHER.getCode());
+        first.put("chargeType", type != null && !type.isBlank() ? type : SaleReturnChargeType.OTHER.getCode());
         if (reason != null) first.put("chargeReason", reason);
     }
 
@@ -293,8 +294,10 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             total = total.add(amt);
             String name = it.getProductName() != null && !it.getProductName().isBlank()
                     ? it.getProductName() : "产品" + it.getProductId();
+            // 2026-10-02：台账备注展示**中文标签**（原先直接拼原始编码，如 COVER_SCRATCH ⇒ 现在「盖板划伤」）
             parts.add(name + " " + fmt(amt)
-                    + (it.getChargeType() != null && !it.getChargeType().isBlank() ? "（" + it.getChargeType() + "）" : ""));
+                    + (it.getChargeType() != null && !it.getChargeType().isBlank()
+                        ? "（" + SaleReturnChargeType.labelOf(it.getChargeType()) + "）" : ""));
         }
         if (total.compareTo(BigDecimal.ZERO) <= 0) return;
         FinanceReceivable fr = new FinanceReceivable();
@@ -764,7 +767,8 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             if (chargeAmt.compareTo(BigDecimal.ZERO) > 0) {
                 String pname = map.get("productName") != null ? map.get("productName").toString() : String.valueOf(it.getProductId());
                 if (chargeType == null) throw new BusinessException("产品[" + pname + "]已填收费金额，请选择收费类型");
-                if (!ExchangeChargeType.isValid(chargeType)) throw new BusinessException("非法的收费类型：" + chargeType);
+                // 2026-10-02：退单专用枚举（盖板划伤 / 其他）
+                if (!SaleReturnChargeType.isValid(chargeType)) throw new BusinessException("非法的收费类型：" + chargeType);
             } else {
                 chargeType = null;
             }

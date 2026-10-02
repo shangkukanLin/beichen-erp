@@ -53,7 +53,7 @@
         <el-table-column label="收费" width="94" align="center">
           <template #default="{ row }">
             <el-tag v-if="Number(row.chargeFlag) === 1 && Number(row.chargeAmount) > 0" type="warning" size="small"
-              :title="ExchangeChargeTypeLabel[row.chargeType] || ''">
+              :title="SaleReturnChargeTypeLabel[row.chargeType] || ''">
               收费 {{ formatMoney(row.chargeAmount) }}
             </el-tag>
             <span v-else style="color:#c0c4cc">不收费</span>
@@ -88,7 +88,7 @@
 
 <script setup lang="ts">
 import { onMounted, onActivated, reactive, ref } from 'vue'
-import { SALE_RETURN_DIRTY_KEY, ExchangeChargeTypeLabel } from '@/api/enums'
+import { SALE_RETURN_DIRTY_KEY, SaleReturnChargeTypeLabel } from '@/api/enums'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Refresh, Plus } from '@element-plus/icons-vue'
