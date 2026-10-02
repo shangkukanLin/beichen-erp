@@ -96,11 +96,17 @@
            ① 删「SKU」独占列 —— 退回产品列直接显示「SKU | 名称」（后端 saleOrderItems 已回 sku）
            ② 控件 size=small、数量/单价 :controls=false ⇒ 更窄
            ③ 新增「收费」列（金额 + 类型，**逐产品**；金额 0 = 不收费）
-           ④ 列宽合计 886px < 内容区 948px ⇒ 一行显示完、不左右滑动（有守卫断言） -->
+           ④ 列宽合计 886px < 内容区 948px ⇒ 一行显示完、不左右滑动（有守卫断言）
+           2026-10-02（用户口径「换货明细列表宽度要充满布局」）：「退回产品」用 min-width=140 吸收余量
+           —— Element 只有存在 min-width 列时才会把容器余量分给它（原先全固定宽 ⇒ 右侧留白 62px）。
+           2026-10-02（用户口径「以下列各 +15px」）：库存数量 74→89、退回数量 88→103、原单价 88→103、
+           换出数量 88→103、换出品质 88→103、换出单价 92→107 ⇒ 其余固定列合计 836px。
+           ⚠️ 836 + 140 = 976 > 1262 窗口下的内容区 948 ⇒ 该窗口会出现横向滚动条；
+           更宽的窗口下仍是「固定列 + 退回产品吸收余量 = 正好充满」。 -->
       <el-table :data="items" border size="small" max-height="380">
         <!-- ===== 退回侧：客户退回，入成品仓（品质待整理 PENDING）待整理 ===== -->
         <el-table-column label="退回（客户退回，入成品仓待整理）" align="center">
-          <el-table-column label="退回产品" width="140" show-overflow-tooltip>
+          <el-table-column label="退回产品" min-width="140" show-overflow-tooltip>
             <template #default="{ row }">
               <!-- 无来源换货：手工选产品（可输 SKU 远程搜）；有来源：产品由销售明细带出，只读 -->
               <el-select v-if="!form.saleOrderId" v-model="row.productId" placeholder="选择产品（可输SKU）"
@@ -118,35 +124,35 @@
           <!-- 2026-10-01（用户口径）：原「可换数量」改为「库存数量」= 该**换出仓** + 该产品 +
                该**换出品质**的库存（stockForm=MATERIAL，与审核换出扣减口径一致）；
                退回数量的 :max = min(来源销售单数量, 库存数量)；无来源（无单换货）⇒ :max = 库存数量。 -->
-          <el-table-column label="库存数量" width="74" align="right">
+          <el-table-column label="库存数量" width="89" align="right">
             <template #default="{ row }">
               <span v-if="row.stock !== undefined" :style="{ color: Number(row.stock) <= 0 ? 'red' : '' }">{{ row.stock }}</span>
               <span v-else>—</span>
             </template>
           </el-table-column>
-          <el-table-column label="退回数量" width="88">
+          <el-table-column label="退回数量" width="103">
             <template #default="{ row }">
               <el-input-number v-model="row.quantity" :min="0" :precision="0" :step="1" size="small" :controls="false" :max="row.quantityLimit" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column prop="unitPrice" label="原单价" width="88" align="right" />
+          <el-table-column prop="unitPrice" label="原单价" width="103" align="right" />
         </el-table-column>
 
         <!-- ===== 换出侧：发给客户，从成品仓扣减；只支持同品，产品固定为退回产品 ===== -->
         <el-table-column label="换出（同品换货，从成品仓扣减）" align="center">
-          <el-table-column label="换出数量" width="88">
+          <el-table-column label="换出数量" width="103">
             <template #default="{ row }">
               <el-input-number v-model="row.outQuantity" :min="0" :precision="0" :step="1" size="small" :controls="false" style="width:100%" />
             </template>
           </el-table-column>
-          <el-table-column label="换出品质" width="88">
+          <el-table-column label="换出品质" width="103">
             <template #default="{ row }">
               <el-select v-model="row.outQualityType" size="small" style="width:100%" @change="() => refreshStock(row)">
                 <el-option v-for="o in qualityOptions" :key="o.value" :label="o.label" :value="o.value" />
               </el-select>
             </template>
           </el-table-column>
-          <el-table-column label="换出单价" width="92">
+          <el-table-column label="换出单价" width="107">
             <template #default="{ row }">
               <el-input-number v-model="row.outUnitPrice" :min="0" :precision="2" size="small" :controls="false" style="width:100%" />
             </template>
@@ -176,7 +182,7 @@
       <!-- 空态：有来源 = 自动带出可换明细；无来源 = 手工添加（与进货侧同一套三分支文案口径） -->
       <div v-if="items.length===0" style="text-align:center;color:#999;padding:16px">
         {{ form.saleOrderId
-          ? '明细已按来源销售单带出，可增删行；退回数量受「可换数量」约束'
+          ? '明细已按来源销售单带出，可增删行；退回数量上限 = min(销售数量, 库存数量)，见「库存数量」列'
           : '未关联销售单（无单换货）：请手工添加并选择产品；能否出库以审核时的库存校验为准' }}
       </div>
 
