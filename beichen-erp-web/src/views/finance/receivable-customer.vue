@@ -10,7 +10,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
-import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SubjectType, SourceBillDetailRoute } from '@/api/enums'
+import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SubjectType } from '@/api/enums'
 
 const route = useRoute(); const router = useRouter()
 const customerId = Number(route.params.id)
@@ -33,31 +33,6 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
 function pStType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primary' | undefined { return DocStatusTag[s || ''] || undefined }
 function goReceivableDetail(row: any) { if (row?.id != null) router.push(`/finance/receivable/detail/${row.id}`) }
 function goReceiptDetail(row: any) { if (row?.id != null) router.push(`/finance/receipt/detail/${row.id}`) }
-
-/**
- * 来源单号 → 业务单详情（2026-10-02 补：供应商应付侧一直能点，客户应收侧此前是纯文本 ⇒ 两边不一致）。
- * 路由前缀走公共映射 {@link SourceBillDetailRoute}；缺映射或无 sourceId 时列内保持纯文本，不假装可点。
- */
-function sourceRoute(row: any): string {
-  const base = SourceBillDetailRoute[row?.sourceBillType]
-  return base && row?.sourceId != null ? base : ''
-}
-/**
- * 与 payable-supplier.vue / supplier-settlement.vue 的 goSourceDetail **同一口径**：
- * 委外加工收货/超损的 sourceId 是收货记录/结单报表 id，需用通用单号解析器换成加工单 id
- * （不直读加工单页 —— 那需 outsource:order 权限，只有 finance:receivable 的用户会 403）。
- */
-async function goSourceDetail(row: any) {
-  const base = sourceRoute(row)
-  if (!base) return
-  let targetId = row.sourceId
-  if (row.sourceBillType === 'OUTSOURCE_DELIVERY' || row.sourceBillType === 'OUTSOURCE_EXCESS_LOSS') {
-    const r: any = await request.get('/common/resolve-code', { params: { code: row.sourceBillNo } })
-    targetId = r?.type === 'order' ? r.id : undefined
-  }
-  if (targetId == null) return
-  router.push(`${base}/${targetId}`)
-}
 
 async function loadAll() {
   loading.value = true
@@ -118,12 +93,7 @@ onMounted(() => loadAll())
           <template #default="{row}"><el-button type="primary" link @click="goReceivableDetail(row)">{{ row.billNo }}</el-button></template>
         </el-table-column>
         <el-table-column label="来源" width="130" show-overflow-tooltip><template #default="{row}">{{ sourceBillTypeLabel(row.sourceBillType) }}</template></el-table-column>
-        <el-table-column label="来源单号" width="160" show-overflow-tooltip>
-          <template #default="{row}">
-            <a v-if="row.sourceBillNo && sourceRoute(row)" class="bill-link" @click.stop="goSourceDetail(row)">{{ row.sourceBillNo }}</a>
-            <span v-else>{{ row.sourceBillNo || '—' }}</span>
-          </template>
-        </el-table-column>
+        <el-table-column label="来源单号" width="160" show-overflow-tooltip><template #default="{row}">{{ row.sourceBillNo || '—' }}</template></el-table-column>
         <el-table-column label="应收金额" width="110" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="已收" width="110" align="right"><template #default="{row}">{{ fmt(row.paidAmount) }}</template></el-table-column>
         <el-table-column label="未收" width="110" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>

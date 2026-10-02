@@ -12,7 +12,6 @@ import com.beichen.erp.finance.common.BillStatementExcelBuilder;
 import com.beichen.erp.finance.common.BillType;
 import com.beichen.erp.finance.entity.FinanceBill;
 import com.beichen.erp.finance.entity.FinanceBillItem;
-import com.beichen.erp.finance.service.BillProductItemService;
 import com.beichen.erp.finance.service.FinanceBillService;
 import com.beichen.erp.finance.task.FinanceBillAutoTask;
 import com.beichen.erp.supplier.entity.Supplier;
@@ -37,8 +36,6 @@ public class FinanceBillController {
 
     private final FinanceBillService service;
     private final FinanceBillAutoTask autoTask;
-    /** 账单「产品明细」解析（两跳 join，只读；见该类注释） */
-    private final BillProductItemService billProductItemService;
 
     /**
      * 对账单导出要带「公司抬头」与「往来单位联系人/电话」（2026-09-29 用户口径：账单详情加导出功能）。
@@ -63,21 +60,6 @@ public class FinanceBillController {
 
     @GetMapping("/{id}/items")
     public R<List<FinanceBillItem>> getItems(@PathVariable Long id) { return R.ok(service.getItems(id)); }
-
-    /**
-     * 账单「产品明细」：**每一张来源单卖了什么**（2026-10-02 用户要求）。
-     *
-     * <p>与 {@link #getItems} 的区别：那个只回「来源单号 + 金额」（台账行），这个把明细行的**产品/品质/数量/单价/金额**
-     * 按来源单分组回给前端，并对每张来源单做金额对账（{@code matched}）。
-     * 两跳 join 的原因与逐类型口径见 {@link BillProductItemService} 的类注释。</p>
-     *
-     * <p>权限：挂在本控制器前缀 `/api/finance/bill` 下 ⇒ 最长前缀匹配只要求 `finance:bill`，**不新增权限点**。
-     * 纯读、无状态机改动。</p>
-     */
-    @GetMapping("/{id}/product-items")
-    public R<List<Map<String, Object>>> productItems(@PathVariable Long id) {
-        return R.ok(billProductItemService.groups(id));
-    }
 
     @PostMapping("/generate")
     public R<FinanceBill> generate(@RequestBody Map<String, Object> body) {
@@ -134,10 +116,6 @@ public class FinanceBillController {
      * 本方法只负责取数与"往来单位联系人/电话"的兜底：账单类型=应付 ⇒ 查 `supplier`，应收 ⇒ 查 `customer`；
      * 查不到不影响导出（该格留空），**不因主数据缺失而让单据导不出来**。</p>
      *
-     * <p><b>2026-10-02 用户要求「导出里也带明细」</b>：产品明细作为**第二个 sheet「产品明细」**随文件导出
-     * （逐来源单摊开产品/品质/数量/单价/金额 + 逐单核对结果）。主表版式与行数契约**未动**——
-     * 表头行号是冻结窗格、跨页重复打印与合计 SUM 区间的共同锚点，插子行会三样全废且金额双计。</p>
-     *
      * <p><b>不限制单据状态</b>：库里绝大多数账单是**草稿**（只放已审核等于该功能对多数账单不可用）；
      * 草稿/作废由文件内标题后缀「（草稿）/（已作废）」+ 红色警示行**显式标注**，不会被误当生效凭证。</p>
      *
@@ -160,9 +138,7 @@ public class FinanceBillController {
                 if (c != null) { contact = c.getContact(); phone = c.getPhone(); }
             }
         }
-        // 第二个 sheet = 产品明细（每张来源单卖了什么 / 收了什么费）；主表一个字没动 ⇒ 行数与 SUM 契约不变
-        Workbook wb = BillStatementExcelBuilder.build(bill, service.getItems(id),
-                billProductItemService.groups(id), company, contact, phone, LocalDate.now());
+        Workbook wb = BillStatementExcelBuilder.build(bill, service.getItems(id), company, contact, phone, LocalDate.now());
         ExcelExportHelper.write(resp, wb, BillStatementExcelBuilder.fileName(bill));
     }
 }

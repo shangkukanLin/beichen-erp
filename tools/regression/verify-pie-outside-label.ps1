@@ -4,16 +4,10 @@
 #   1) something IS drawn OUTSIDE the pie disc  -> the new outside labels + label lines exist
 #      (assertion: drawn-content extent from the centre > outer radius + 8px)
 #   2) nothing is clipped by the canvas edge    -> labels are fully visible, not cut off
-#
-# 2026-10-02 (3rd fix): assertion 1 says "from the centre" but used to measure the ink bbox HORIZONTALLY
-#   only. With a single-slice pie (measured: this DB has 1 product / 1 customer this month) ECharts puts
-#   the label BELOW the disc => the horizontal extent stayed at disc radius + 5 and the check failed on
-#   the untouched /analysis/sale page while its multi-slice pies passed. 'beyond' is now the max RADIAL
-#   distance of any inked pixel from the canvas centre -- exactly what the rule above claims.
 # The pie disc itself is the only thing that would be drawn without labels (legend is off on
 # every pie in scope), so (1) cannot be satisfied by anything else.
 #
-# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-pie-outside-label.ps1 [-Part 1|2|3|4]
+# Usage: powershell -NoProfile -ExecutionPolicy Bypass -File .\verify-pie-outside-label.ps1 [-Part 1|2|3]
 param([int]$Part = 0)
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 WatchErrors
@@ -21,41 +15,16 @@ function Step($n) { Write-Host ('--- STEP ' + $n) }
 function Skip($m) { Write-Host ('SKIP ' + $m) }
 
 # Probe returns CSV: w,h,n,minX,maxX,minY,maxY,outer,beyond,clipped
-#
-# 2026-10-02 BUGFIX -- why every probe used to fail with "SyntaxError: Unexpected end of input":
-#   agent-browser is a .cmd shim, so PowerShell hands the argument to cmd.exe; a MULTI-LINE argument is
-#   cut at the first newline and the browser then evaluates a truncated script. Measured: all six probes
-#   failed on /analysis/sale AND /analysis/product (i.e. it was never page-specific) while the same
-#   script's other (single-line) evals passed. => keep the readable source below and fold it to ONE line
-#   before eval. The JS has no '//' comments and no multi-line string literals, so collapsing whitespace
-#   is semantics-preserving. (Same root cause as the ui-e2e-lib's Errs() -- see its comment.)
-#   => NEVER put a '//' comment inside $jsProbeSrc: after folding it would comment out the rest of the
-#      script (I did exactly that once and every probe went back to "Unexpected end of input"). The
-#      assertion right after the fold now blocks it.
-#
-# 2026-10-02 (2nd fix): an EMPTY pie must not be a failure. When a pie has no data the page shows its
-#   该区间暂无数据 overlay and ECharts' clear() leaves no <canvas> behind, so the probe used to answer
-#   'no-canvas' (= FAIL) for a perfectly healthy empty card. Measured on /analysis/product: the three
-#   pies whose card shows that overlay were exactly the three reporting no-canvas, while their container
-#   was a normal 457x300. The probe now answers 'empty' when the visible overlay is found in the same
-#   card (same idea as the pre-existing 'blank' skip for a drawn-but-empty canvas); without an overlay
-#   it still reports no-canvas, so a genuinely broken chart is still caught.
-$jsProbeSrc = @'
+$jsProbe = @'
 (function(){
   var id = '__ID__', pct = __PCT__;
   var el = document.getElementById(id);
   if (!el) return 'no-el';
   var cv = el.querySelector('canvas');
-  if (!cv) {
-    var box = el.closest('.pie-card') || el.closest('.el-card') || el.parentElement;
-    var emp = box ? box.querySelector('.pie-empty') : null;
-    if (emp && emp.getClientRects().length > 0) return 'empty';
-    return 'no-canvas';
-  }
+  if (!cv) return 'no-canvas';
   var w = cv.width, h = cv.height;
   var d = cv.getContext('2d').getImageData(0, 0, w, h).data;
-  var minX = 1e9, maxX = -1, minY = 1e9, maxY = -1, n = 0, maxR2 = -1;
-  var cx = w / 2, cy = h / 2;
+  var minX = 1e9, maxX = -1, minY = 1e9, maxY = -1, n = 0;
   for (var y = 0; y < h; y += 2) {
     for (var x = 0; x < w; x += 2) {
       if (d[(y * w + x) * 4 + 3] > 8) {
@@ -64,29 +33,22 @@ $jsProbeSrc = @'
         if (x > maxX) maxX = x;
         if (y < minY) minY = y;
         if (y > maxY) maxY = y;
-        var r2 = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-        if (r2 > maxR2) maxR2 = r2;
       }
     }
   }
   if (maxX < 0) return 'blank';
   var outer = Math.min(w, h) / 2 * pct;
-  var beyond = Math.round(Math.sqrt(maxR2));
+  var beyond = Math.max(w / 2 - minX, maxX - w / 2);
   var clipped = (minX <= 1 || maxX >= w - 2 || minY <= 1 || maxY >= h - 2) ? 1 : 0;
   return [w, h, n, minX, maxX, minY, maxY, Math.round(outer), Math.round(beyond), clipped].join(',');
 })()
 '@
-# fold to a single line (see the note above: a multi-line argument is truncated by cmd.exe)
-$jsProbe = ($jsProbeSrc -replace '\s*\r?\n\s*', ' ').Trim()
-if ($jsProbe -match '\n') { throw 'probe JS still contains a newline -- it would be truncated by cmd.exe' }
-if ($jsProbe -match '//') { throw 'probe JS contains a // comment -- after folding to one line it would comment out the rest' }
 
 function Probe([string]$id, [double]$pct, [string]$label) {
   $js = $jsProbe.Replace('__ID__', $id).Replace('__PCT__', "$pct")
   $r = (EvalJs $js).Trim()
   if ($r -eq 'no-el' -or $r -eq 'no-canvas') { Ok $false ($label + ' element/canvas missing (' + $r + ')'); return }
   if ($r -eq 'blank') { Skip ($label + ' canvas is blank (empty range / no data) -- not a failure'); return }
-  if ($r -eq 'empty') { Skip ($label + ' pie has no data in this range -- the page shows its empty state (not a failure)'); return }
   $p = $r.Split(',')
   if ($p.Count -lt 10) { Ok $false ($label + ' probe parse failed: ' + $r); return }
   $w = [int]$p[0]; $h = [int]$p[1]; $n = [int]$p[2]

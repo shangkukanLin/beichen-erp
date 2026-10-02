@@ -527,31 +527,8 @@ export const SourceBillDetailRoute: Record<string, string> = {
   // 表现为"来源单号"点不动（不是 404）。4 个路由均已在 router/index.ts 核实存在。
   SALE_RETURN_CHARGE: '/sale/return/detail',
   SALE_EXCHANGE_CHARGE: '/sale/exchange/detail',
-  // 2026-10-02：补「采购退货付费」——它一直是缺键的（goSourceDetail 遇 !base 直接 return ⇒ 应付台账里
-  // 这一行的「来源单号」点不动，不是 404 而是毫无反应），与 F7-54 修的是同一类缺陷。路由已核实存在。
-  PURCHASE_RETURN_CHARGE: '/inventory/purchase-return/detail',
   RETURN_SORT_LOSS: '/inventory/return-sort/detail',
   PAYABLE_TRANSFER: '/finance/payable-transfer/detail'
-}
-
-/**
- * 账单产品明细里「收费行」的类型中文（2026-10-02）。
- *
- * ⚠️ **必须按来源类型分侧查表**，不能用一张表兜全部：
- * - 销售**退货**收费 = {@link SaleReturnChargeTypeLabel}（盖板划伤 / 其他）
- * - 销售**换货**收费 = {@link ExchangeChargeTypeLabel}（服务费 / 品质差价 / 全额货值 / 其他）
- * - 采购退货付费 / 采购换货付费 = {@link PurchaseChargeTypeLabel}（同上四项，方向相反）
- *
- * 用错表就会出现"盖板划伤"显示成"服务费"这类静默错标（这两套枚举在 2026-10-02 才拆开，
- * 拆开前退货单确实借用过换货的枚举）。查不到时**原样回显 code**，不留空白。
- */
-export function billChargeTypeLabel(sourceBillType?: string | null, code?: string | null): string {
-  if (!code) return ''
-  const t = String(sourceBillType || '')
-  if (t === 'SALE_RETURN_CHARGE') return SaleReturnChargeTypeLabel[code] || code
-  if (t === 'SALE_EXCHANGE_CHARGE') return ExchangeChargeTypeLabel[code] || code
-  if (t === 'PURCHASE_RETURN_CHARGE' || t === 'PURCHASE_EXCHANGE_CHARGE') return PurchaseChargeTypeLabel[code] || code
-  return code
 }
 
 /** 菜单类型（对应 sys_menu 的 menu_type 字段） */
