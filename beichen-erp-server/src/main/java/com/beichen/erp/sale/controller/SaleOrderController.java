@@ -65,6 +65,12 @@ public class SaleOrderController {
         // 本单发起的退货单 / 换货单（原前端取 pageSize=100，此处同口径）
         m.put("returns", saleReturnService.page(null, null, null, id, 1, 100).getRecords());
         m.put("exchanges", saleExchangeService.page(1, 100, Map.of("saleOrderId", id)).getRecords());
+        // 2026-10-02（用户口径「单据详情明细加已退 / 已换数量」）：逐**销售明细**的已退 / 已换累计。
+        // 口径与来源选单接口 saleExchangeService.saleOrderItems 完全同源（已审核退货单 / 换货单的累计），
+        // 前端按 saleOrderItemId 取 returnedQuantity / exchangedQuantity 两字段即可。
+        // ⚠️ 必须由本页接口返回：2026-09-19 读隔离后「读也按页面码收口」，销售单详情页不能去调
+        // 销售退货 / 销售换货的接口（只被授予 sale:order 的用户会 403）。
+        m.put("itemStats", saleExchangeService.saleOrderItems(id));
         return R.ok(m);
     }
 

@@ -78,6 +78,26 @@ function qualityLabel(qt?: string) {
 }
 
 /**
+ * 2026-10-02（用户口径「单据详情明细加已退 / 已换数量」）：逐采购明细的**已退 / 已换累计**。
+ * 数据由本页详情接口一并返回（`itemStats`，与来源选单接口同源：**只计已审核**的退货单 / 换货单），
+ * 键 = 采购明细 id（itemStats[].purchaseOrderItemId ↔ 明细行 id）。
+ * ⚠️ 之所以由本页接口给出而不是前端去调换货 / 退货接口：2026-09-19 读隔离后「读也按页面码收口」，
+ * 只被授予 purchase:order 的用户直调别的模块接口会 403。
+ */
+const itemStats = computed<Record<string, any>>(() => {
+  const m: Record<string, any> = {}
+  for (const s of (((head.value as any)?.itemStats) || []) as any[]) {
+    if (s?.purchaseOrderItemId != null) m[String(s.purchaseOrderItemId)] = s
+  }
+  return m
+})
+/** 已退 / 已换数量：无记录或为 0 显示 —（避免整列 0 的噪音） */
+function statQty(row: any, field: 'returnedQuantity' | 'exchangedQuantity') {
+  const v = Number(itemStats.value[String(row?.id)]?.[field] ?? 0)
+  return v > 0 ? v : '—'
+}
+
+/**
  * 状态判断（2026-09-24）：后端返回的 order.status 是 **number**，而 PurchaseStatus 常量是**字符串**
  * ⇒ 模板里直接比较会触发 TS2367（类型不重叠）⇒ 统一用 computed + String() 归一化后比较。
  */
@@ -372,6 +392,14 @@ onActivated(async () => { await loadData() })
           <el-table-column prop="quantity" label="数量" width="90" align="right" />
           <el-table-column prop="unitPrice" label="单价" width="90" align="right" />
           <el-table-column prop="amount" label="金额" width="100" align="right" />
+          <!-- 2026-10-02（用户口径）：逐明细的已退 / 已换累计（已审核退货单 / 换货单；无则显示 —）。
+               数据来自本页详情接口的 itemStats —— 读隔离下不能由前端去调换货 / 退货接口。 -->
+          <el-table-column label="已退数量" width="88" align="right">
+            <template #default="{ row }">{{ statQty(row, 'returnedQuantity') }}</template>
+          </el-table-column>
+          <el-table-column label="已换数量" width="88" align="right">
+            <template #default="{ row }">{{ statQty(row, 'exchangedQuantity') }}</template>
+          </el-table-column>
           <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
         </el-table>
       </template>

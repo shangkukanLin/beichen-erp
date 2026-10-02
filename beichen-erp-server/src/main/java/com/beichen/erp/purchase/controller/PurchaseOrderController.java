@@ -56,6 +56,12 @@ public class PurchaseOrderController {
         m.put("returns", purchaseReturnService.byOrder(id));
         // 2026-09-24：本单的换货情况（与销售单详情同款：page 按 purchaseOrderId 过滤后取 records）
         m.put("exchanges", purchaseExchangeService.page(1, 100, Map.of("purchaseOrderId", id)).getRecords());
+        // 2026-10-02（用户口径「单据详情明细加已退 / 已换数量」）：逐**采购明细**的已退 / 已换累计。
+        // 口径与来源选单接口 purchaseExchangeService.purchaseOrderItems 完全同源（已审核退货单 / 换货单的累计），
+        // 前端按 purchaseOrderItemId 取 returnedQuantity / exchangedQuantity 两字段即可。
+        // ⚠️ 必须由本页接口返回：2026-09-19 读隔离后「读也按页面码收口」，采购单详情页不能去调
+        // 采购换货 / 采购退货的接口（只被授予 purchase:order 的用户会 403）。
+        m.put("itemStats", purchaseExchangeService.purchaseOrderItems(id));
         return R.ok(m);
     }
 

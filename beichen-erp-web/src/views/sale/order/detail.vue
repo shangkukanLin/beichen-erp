@@ -167,8 +167,10 @@ const exchanges = ref<any[]>([])
 // （原先跨页读 /sale/return/page 与 /sale/exchange/page）
 
 /** 发起退货 / 换货：带 saleOrderId 跳转，目标页会自动预填来源销售单与明细 */
-function goReturn() { router.push(`/sale/return/add?saleOrderId=${orderId}`) }
-function goExchange() { router.push(`/sale/exchange/add?saleOrderId=${orderId}`) }
+// 2026-10-02（用户口径「统一跳转参数名」）：来源单参数统一为 **fromOrder**（与进货侧一致）；
+// 两个新增页同时兼容旧链接的 saleOrderId。
+function goReturn() { router.push(`/sale/return/add?fromOrder=${orderId}`) }
+function goExchange() { router.push(`/sale/exchange/add?fromOrder=${orderId}`) }
 
 function returnStatusLabel(s: string) { return SaleReturnStatusLabel[String(s)] || s || '-' }
 
@@ -250,6 +252,26 @@ function fmt(v?: number) { return v === undefined || v === null ? '0.00' : Numbe
 function goCustomer(id?: number) { if (id) router.push(`/inventory/customer/detail/${id}`) }
 function goProduct(id?: number) { if (id) router.push(`/product/detail/${id}`) }
 function goWarehouse(id?: number) { if (id) router.push(`/inventory/warehouse/detail/${id}`) }
+
+/**
+ * 2026-10-02（用户口径「单据详情明细加已退 / 已换数量」）：逐销售明细的**已退 / 已换累计**。
+ * 数据由本页详情接口一并返回（`itemStats`，与来源选单接口同源：**只计已审核**的退货单 / 换货单），
+ * 键 = 销售明细 id（itemStats[].saleOrderItemId ↔ 明细行 id）。
+ * ⚠️ 之所以由本页接口给出而不是前端去调退货 / 换货接口：2026-09-19 读隔离后「读也按页面码收口」，
+ * 只被授予 sale:order 的用户直调别的模块接口会 403。
+ */
+const itemStats = computed<Record<string, any>>(() => {
+  const m: Record<string, any> = {}
+  for (const s of (((head.value as any)?.itemStats) || []) as any[]) {
+    if (s?.saleOrderItemId != null) m[String(s.saleOrderItemId)] = s
+  }
+  return m
+})
+/** 已退 / 已换数量：无记录或为 0 显示 —（避免整列 0 的噪音） */
+function statQty(row: any, field: 'returnedQuantity' | 'exchangedQuantity') {
+  const v = Number(itemStats.value[String(row?.id)]?.[field] ?? 0)
+  return v > 0 ? v : '—'
+}
 
 async function loadData() {
   loading.value = true
@@ -605,6 +627,14 @@ onActivated(async () => { await loadData(); takeBaseline() })
           <el-table-column prop="quantity" label="数量" width="90" align="right" />
           <el-table-column prop="unitPrice" label="单价" width="90" align="right" />
           <el-table-column prop="amount" label="金额" width="100" align="right" />
+          <!-- 2026-10-02（用户口径）：逐明细的已退 / 已换累计（已审核退货单 / 换货单；无则显示 —）。
+               数据来自本页详情接口的 itemStats —— 读隔离下不能由前端去调退货 / 换货接口。 -->
+          <el-table-column label="已退数量" width="88" align="right">
+            <template #default="{ row }">{{ statQty(row, 'returnedQuantity') }}</template>
+          </el-table-column>
+          <el-table-column label="已换数量" width="88" align="right">
+            <template #default="{ row }">{{ statQty(row, 'exchangedQuantity') }}</template>
+          </el-table-column>
         </el-table>
       </template>
 
