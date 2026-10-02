@@ -494,17 +494,18 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         // 库存联动：客户退回待整理品（品质默认待整理），入库增加库存
         // 批量取产品，避免循环内逐条查库（N+1）
         Map<Long, Product> pMap = productMap(items);
-        // F7-111（2026-09-20，宽松版）：产品必须"**曾售出**" —— 本公司范围内该产品有销售/换货出库流水即可。
-        // 原因：退货的"不超已售"校验只在**关联销售单**时生效（validateReturnQuantity 首行即 return），
-        // 而现网 11 条退货单**全部未关联销售单** ⇒ 该护栏实际从不生效 ⇒ 需补一道与"是否关联"无关的底线。
-        // 本校验挡掉"从未卖过的产品凭空入库"，**不校验剩余可退量**（允许多次/跨月部分退货，与现状兼容）。
-        // 先做一遍"产品存在"预检（复用已批量查出的 pMap）：否则**不存在**的产品会被下面的
-        // "未销售过"校验先拦下（两者都成立时提示语会误导 —— 实测 productId=999999 报的是"未销售过"）。
+        // 产品存在性预检（**保留**）：不存在的产品必须拒绝，否则会静默入库、库存流水备注退化成空串
+        // （实测 productId=999999 曾报"未销售过"，提示语误导）。
         for (SaleReturnItem it : items) {
             if (it.getProductId() == null || pMap.get(it.getProductId()) == null)
                 throw new BusinessException("产品不存在：ID=" + it.getProductId() + "（明细行ID=" + it.getId() + "）");
         }
-        assertProductsSoldOnce(items.stream().map(SaleReturnItem::getProductId).toList());
+        // 2026-10-01（F8 进货/销售退换货改造 · 第 4 步，用户口径「无来源的退货/换货只做库存/成本校验」）：
+        // **撤销** F7-111（2026-09-20）的"产品必须**曾售出**"护栏 —— 它当初正是为"无来源退货缺少校验"
+        // 补的底线（见该方法 javadoc），与本次"子菜单裸进可独立制单（线下/历史/其他渠道补录）"的口径直接冲突。
+        // ⚠️ 副作用（用户已知悉并确认）：从未销售过的产品也能退货入库 ⇒ 若被误用会造成库存虚增，
+        //    且无来源单没有对应的负应收可冲抵。**恢复方式**：取消下面一行的注释即可（方法体完整保留）。
+        // assertProductsSoldOnce(items.stream().map(SaleReturnItem::getProductId).toList());
         for (SaleReturnItem it : items) {
             if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0) continue;
             Product product = pMap.get(it.getProductId());
@@ -642,8 +643,11 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             m.put("quantity", oi.getQuantity());
             m.put("unitPrice", oi.getUnitPrice());
             m.put("amount", oi.getAmount());
+            // 历史累计仅作参考展示（2026-10-01 起**不参与**可退量计算）
             m.put("returnedQuantity", returned);
-            m.put("canReturn", sold.subtract(returned));
+            // 2026-10-01（用户口径）：回显的"可退数量"必须与 validateReturnQuantity **同口径** ——
+            // = 该明细的销售数量（不再扣历史累计），否则前端显示 0 而提交却能通过。
+            m.put("canReturn", sold);
             res.add(m);
         }
         return res;
@@ -688,7 +692,13 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         }
     }
 
-    /** 关联销售单时校验：本次退货 ≤ 已售 - 已退（仅校验带 saleOrderItemId 的行） */
+    /**
+     * 关联销售单时校验：**本次退货 ≤ 已售**（仅校验带 saleOrderItemId 的行）。
+     *
+     * <p>⚠️ 2026-10-01 口径变更（用户口径「只要有库存就可以一直退/换，每一次不超过销售总数」）：
+     * 原为 {@code 本次 ≤ 已售 − 已退}（累计扣减），现**不扣历史累计**；历史已退量仅用于报错信息参考。
+     * 库存是否够、能否入库由审核环节把关。</p>
+     */
     private void validateReturnQuantity(SaleReturn order, List<Map<String, Object>> itemMaps) {
         if (order.getSaleOrderId() == null || itemMaps == null || itemMaps.isEmpty()) return;
         Map<Long, BigDecimal> qtyMap = new HashMap<>();
@@ -709,12 +719,14 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         for (SaleOrderItem oi : oiList) {
             BigDecimal sold = oi.getQuantity() == null ? BigDecimal.ZERO : oi.getQuantity();
             BigDecimal returned = alreadyReturned(oi.getId());
-            BigDecimal canReturn = sold.subtract(returned);
             BigDecimal thisQty = qtyMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
-            if (thisQty.compareTo(canReturn) > 0) {
+            // 2026-10-01（用户口径：只要有库存就可以一直退/换，**每一次不超过销售总数**）：
+            // 单次退货量 ≤ 该明细的**销售数量**，**不再扣历史累计已退量**（历史量仅用于报错信息参考）。
+            if (thisQty.compareTo(sold) > 0) {
                 String name = nameMap.getOrDefault(oi.getId(), String.valueOf(oi.getProductId()));
-                throw new BusinessException("产品[" + name + "]退货数量超过可退数量（已售" + fmt(sold)
-                        + "，已退" + fmt(returned) + "，可退" + fmt(canReturn) + "）");
+                throw new BusinessException("产品[" + name + "]本次退货数量" + fmt(thisQty)
+                        + "超过该明细的销售数量（销售" + fmt(sold) + "，历史已退" + fmt(returned)
+                        + "，本次" + fmt(thisQty) + "）");
             }
         }
     }
@@ -778,6 +790,11 @@ public class SaleReturnServiceImpl implements SaleReturnService {
 
     /**
      * F7-111（2026-09-20）：产品必须"**曾售出**"（宽松版）。
+     *
+     * <p>⚠️ <b>2026-10-01 起已停用（F8 进货/销售退换货改造 · 第 4 步）</b>：调用点已在
+     * {@code audit} 中注释掉 —— 用户口径改为「无来源（子菜单裸进）的退货/换货只做库存/成本校验」，
+     * 本护栏与之（线下/历史/其他渠道补录）冲突。方法体**完整保留**，需要恢复时取消 audit 里的注释；
+     * 恢复前请评估"库存虚增"风险（无来源单没有对应负应收可冲抵）。</p>
      *
      * <p>判定 = 本公司范围内该产品存在**销售出库或换货出库**流水（{@code warehouse_stock_log.change_type}
      * ∈ {SALE_OUT, EXCHANGE_OUT}）。**不校验剩余可退量** —— 那是"关联销售单"时的口径（见

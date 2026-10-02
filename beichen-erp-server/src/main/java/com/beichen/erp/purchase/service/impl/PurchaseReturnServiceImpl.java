@@ -18,6 +18,7 @@ import com.beichen.erp.inventory.common.StockChangeType;
 import com.beichen.erp.finance.entity.FinancePayable;
 import com.beichen.erp.finance.mapper.FinancePayableMapper;
 import com.beichen.erp.warehouse.service.WarehouseStockService;
+import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.purchase.common.PurchaseChargeType;
@@ -424,14 +425,24 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
             m.put("quantity", oi.getQuantity());
             m.put("unitPrice", oi.getUnitPrice());
             m.put("amount", oi.getAmount());
+            // 历史累计仅作参考展示（2026-10-01 起**不再参与**可退量计算）
             m.put("returnedQuantity", returned);
-            m.put("canReturn", sold.subtract(returned));
+            // 2026-10-01（用户口径）：本字段 = **该采购明细的数量**，前端拿它参与
+            // 「上限 = min(本值, 该退货仓库 + 该产品 + 该品质的库存数量)」的计算（不再扣历史累计）。
+            // 无来源（无单退货）时前端直接以库存为上限，不消费本字段。
+            m.put("canReturn", sold);
             res.add(m);
         }
         return res;
     }
 
-    /** 已退累计数量：关联该采购单明细的已审核退货单数量之和 */
+    /**
+     * 已退累计数量：关联该采购单明细的已审核退货单数量之和。
+     *
+     * <p>⚠️ 2026-10-01 起**不再参与可退量计算**（用户口径改为「单次 ≤ 采购数量、可无限重复」）——
+     * 仅剩两个用途：①前端参考展示（{@code returnedQuantity}）；②报错信息里给出历史量。
+     * 保留实现是为了口径可回滚，需要恢复「已购 − 已退」时改回调用点即可。</p>
+     */
     private BigDecimal alreadyReturned(Long purchaseOrderItemId) {
         return jdbcTemplate.query(
                 "SELECT COALESCE(SUM(ri.quantity), 0) FROM purchase_return_item ri " +
@@ -450,33 +461,70 @@ public class PurchaseReturnServiceImpl implements PurchaseReturnService {
         }
     }
 
-    /** 关联采购单时校验：本次退货 ≤ 已购 - 已退（仅校验带 purchaseOrderItemId 的行） */
+    /**
+     * 数量上限校验（2026-10-01 用户口径）。
+     * <p>上限 = <b>min(来源采购单明细数量, 该退货仓库 + 该产品 + 该品质的库存数量)</b>；
+     * <b>无来源（无单退货）时上限 = 该仓库该品质的库存数量</b>。</p>
+     *
+     * <p>与旧实现的三点差异：①不再扣历史累计已退量（历史量仅出现在报错信息里）；
+     * ②**无来源时也要校验**（旧实现首行 {@code purchaseOrderId == null} 即 return，等于不校验）；
+     * ③库存按 {@code stockForm=MATERIAL} 取（{@code getQuantity} 的缺省重载），与审核出库口径一致。</p>
+     */
     private void validateReturnQuantity(PurchaseReturn order, List<Map<String, Object>> itemMaps) {
-        if (order.getPurchaseOrderId() == null || itemMaps == null || itemMaps.isEmpty()) return;
-        Map<Long, BigDecimal> qtyMap = new HashMap<>();
-        Map<Long, String> nameMap = new HashMap<>();
+        if (itemMaps == null || itemMaps.isEmpty()) return;
+        // 按「采购明细锚点（有来源）」与「产品+品质（无来源）」两个维度聚合本次数量
+        Map<Long, BigDecimal> qtyByPoi = new HashMap<>();
+        Map<String, BigDecimal> qtyByProduct = new HashMap<>();
+        Map<Long, String> nameByProduct = new HashMap<>();
+        Map<Long, String> qualityByPoi = new HashMap<>();
+        Map<String, Long> productByKey = new HashMap<>();
+        Map<String, String> qualityByKey = new HashMap<>();
         for (Map<String, Object> map : itemMaps) {
-            Object poiObj = map.get("purchaseOrderItemId");
-            if (poiObj == null || poiObj.toString().isBlank()) continue;
-            Long poiId = Long.valueOf(poiObj.toString());
+            if (map.get("productId") == null || map.get("productId").toString().isBlank()) continue;
+            Long productId = Long.valueOf(map.get("productId").toString());
             BigDecimal qty = map.get("quantity") != null ? new BigDecimal(map.get("quantity").toString()) : BigDecimal.ZERO;
-            qtyMap.merge(poiId, qty, BigDecimal::add);
-            if (map.get("productId") != null) {
-                Product p = productMapper.selectById(Long.valueOf(map.get("productId").toString()));
-                if (p != null) nameMap.put(poiId, p.getName());
+            String qt = map.get("qualityType") != null && !map.get("qualityType").toString().isBlank()
+                    ? map.get("qualityType").toString() : ProductQualityType.A.getCode();
+            Product p = productMapper.selectById(productId);
+            if (p != null) nameByProduct.put(productId, p.getName());
+            Object poiObj = map.get("purchaseOrderItemId");
+            if (poiObj != null && !poiObj.toString().isBlank()) {
+                Long poiId = Long.valueOf(poiObj.toString());
+                qtyByPoi.merge(poiId, qty, BigDecimal::add);
+                qualityByPoi.putIfAbsent(poiId, qt);
+            } else {
+                String key = productId + "|" + qt;
+                qtyByProduct.merge(key, qty, BigDecimal::add);
+                productByKey.put(key, productId);
+                qualityByKey.put(key, qt);
             }
         }
-        if (qtyMap.isEmpty()) return;
-        List<PurchaseOrderItem> oiList = purchaseOrderItemMapper.selectBatchIds(qtyMap.keySet());
-        for (PurchaseOrderItem oi : oiList) {
-            BigDecimal sold = oi.getQuantity() == null ? BigDecimal.ZERO : oi.getQuantity();
-            BigDecimal returned = alreadyReturned(oi.getId());
-            BigDecimal canReturn = sold.subtract(returned);
-            BigDecimal thisQty = qtyMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
-            if (thisQty.compareTo(canReturn) > 0) {
-                String name = nameMap.getOrDefault(oi.getId(), String.valueOf(oi.getProductId()));
-                throw new BusinessException("产品[" + name + "]退货数量超过可退数量（已购" + fmt(sold)
-                        + "，已退" + fmt(returned) + "，可退" + fmt(canReturn) + "）");
+        // ① 有关联采购单：上限 = min(采购数量, 库存)
+        if (!qtyByPoi.isEmpty()) {
+            List<PurchaseOrderItem> oiList = purchaseOrderItemMapper.selectBatchIds(qtyByPoi.keySet());
+            for (PurchaseOrderItem oi : oiList) {
+                BigDecimal purchased = oi.getQuantity() == null ? BigDecimal.ZERO : oi.getQuantity();
+                BigDecimal thisQty = qtyByPoi.getOrDefault(oi.getId(), BigDecimal.ZERO);
+                String qt = qualityByPoi.getOrDefault(oi.getId(), ProductQualityType.A.getCode());
+                BigDecimal stock = stockService.getQuantity(order.getWarehouseId(), oi.getProductId(), qt);
+                BigDecimal limit = purchased.min(stock);
+                if (thisQty.compareTo(limit) > 0) {
+                    String name = nameByProduct.getOrDefault(oi.getProductId(), String.valueOf(oi.getProductId()));
+                    throw new BusinessException("产品[" + name + "]退货数量" + fmt(thisQty)
+                            + "超过上限" + fmt(limit) + "（采购数量" + fmt(purchased)
+                            + "，该仓库该品质库存" + fmt(stock) + "，取较小值；历史已退"
+                            + fmt(alreadyReturned(oi.getId())) + "）");
+                }
+            }
+        }
+        // ② 无来源（无单退货）：上限 = 该仓库该品质的库存
+        for (Map.Entry<String, BigDecimal> e : qtyByProduct.entrySet()) {
+            Long pid = productByKey.get(e.getKey());
+            BigDecimal stock = stockService.getQuantity(order.getWarehouseId(), pid, qualityByKey.get(e.getKey()));
+            if (e.getValue().compareTo(stock) > 0) {
+                String name = nameByProduct.getOrDefault(pid, String.valueOf(pid));
+                throw new BusinessException("产品[" + name + "]退货数量" + fmt(e.getValue())
+                        + "超过该仓库该品质的库存数量" + fmt(stock) + "（未关联采购单）");
             }
         }
     }

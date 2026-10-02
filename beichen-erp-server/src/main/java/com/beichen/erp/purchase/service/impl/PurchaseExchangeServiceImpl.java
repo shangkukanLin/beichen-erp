@@ -217,8 +217,11 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             BigDecimal purchased = nz(oi.getQuantity());
             BigDecimal returned = returnedMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
             BigDecimal exchanged = exchangedMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
-            BigDecimal canExchange = purchased.subtract(returned).subtract(exchanged);
-            if (canExchange.compareTo(BigDecimal.ZERO) < 0) canExchange = BigDecimal.ZERO;
+            // 2026-10-01（用户口径「已换也可以再换：每一次不超过采购总数」）：**回显的"可换数量"必须与
+            // checkCanExchangeMap 同口径**（= 该明细的采购数量，不再扣历史累计）。否则前端会显示 0
+            // 而提交却能通过 —— 改造前这里正是「已购 − 已退 − 已换」。
+            // returned / exchanged 仍回传给前端作展示参考（returnedQuantity / exchangedQuantity）。
+            BigDecimal canExchange = purchased;
             Map<String, Object> m = new LinkedHashMap<>();
             m.put("purchaseOrderItemId", oi.getId());
             m.put("productId", oi.getProductId());
@@ -570,11 +573,18 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
         assertWarehouseType(e.getWarehouseInId(), "换入入库仓");
         if (itemMaps == null || itemMaps.isEmpty()) throw new BusinessException("换货明细不能为空");
 
+        // 2026-10-01（用户口径）：退回侧数量上限 = min(来源采购明细数量, 退回出库仓 + 产品 + 退回品质的库存)；
+        // **无来源（无单换货）时上限 = 该仓该品质库存**。故这里按「有锚点 / 无锚点」两维度聚合本次退回数量。
         Map<Long, BigDecimal> qtyMap = new LinkedHashMap<>();
         Map<Long, String> nameMap = new HashMap<>();
+        Map<Long, String> qualityMap = new HashMap<>();
+        Map<String, BigDecimal> qtyByProduct = new LinkedHashMap<>();
+        Map<String, Long> productByKey = new HashMap<>();
+        Map<String, String> qualityByKey = new HashMap<>();
         for (Map<String, Object> m : itemMaps) {
             Object pidObj = m.get("productId");
             if (pidObj == null || pidObj.toString().isBlank()) throw new BusinessException("退回产品不能为空");
+            Long productId = Long.valueOf(pidObj.toString());
             BigDecimal qty = toBig(m.get("quantity"));
             if (qty.compareTo(BigDecimal.ZERO) <= 0) throw new BusinessException("退回数量必须大于 0");
             String qt = m.get("qualityType") != null && !m.get("qualityType").toString().isBlank()
@@ -588,49 +598,70 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             if (!ProductQualityType.isValid(inQt)) throw new BusinessException("非法的换入品质等级：" + inQt);
 
             Object poiObj = m.get("purchaseOrderItemId");
-            // 关联采购单时：每行必须带采购单明细锚点，否则可换量校验会被静默跳过（超量换货漏网）；
-            // 无单换货：没有锚点可校验，跳过（退回数量由审核时的库存校验把关）
+            // 关联采购单时：每行必须带采购单明细锚点，否则可换量校验会被静默跳过（超量换货漏网）
             if (poiObj == null || poiObj.toString().isBlank()) {
                 if (e.getPurchaseOrderId() != null)
                     throw new BusinessException("明细缺少关联采购单明细（purchaseOrderItemId），无法校验可换数量");
+                // 无单换货：按「产品 + 退回品质」聚合，稍后与库存比较（原来这里是 continue ⇒ 完全不校验）
+                String key = productId + "|" + qt;
+                qtyByProduct.merge(key, qty, BigDecimal::add);
+                productByKey.put(key, productId);
+                qualityByKey.put(key, qt);
                 continue;
             }
             Long poiId = Long.valueOf(poiObj.toString());
             qtyMap.merge(poiId, qty, BigDecimal::add);
+            qualityMap.putIfAbsent(poiId, qt);
             if (m.get("productName") != null) nameMap.put(poiId, m.get("productName").toString());
         }
         // 付费字段归一化（2026-09-21 第二轮：精确到产品；含"只传单据级"的兼容兜底）
         normalizeCharge(e, itemMaps);
-        // 编辑草稿时以自身 id 作排除项（草稿不计入"已换"，此处仅为口径统一）；
-        // 锚点归属按本单来源采购单校验（F1-2）；无单换货时 qtyMap 为空、直接返回
-        checkCanExchangeMap(qtyMap, nameMap, e.getId(), e.getPurchaseOrderId());
+        // ① 有锚点：上限 = min(采购数量, 退回出库仓该品质库存)；锚点归属按本单来源采购单校验（F1-2）
+        checkCanExchangeMap(qtyMap, nameMap, qualityMap, e.getId(), e.getPurchaseOrderId(), e.getWarehouseOutId());
+        // ② 无锚点（无单换货）：上限 = 退回出库仓该品质库存
+        for (Map.Entry<String, BigDecimal> en : qtyByProduct.entrySet()) {
+            Long pid = productByKey.get(en.getKey());
+            BigDecimal stock = stockService.getQuantity(e.getWarehouseOutId(), pid, qualityByKey.get(en.getKey()));
+            if (en.getValue().compareTo(stock) > 0) {
+                Product p = productMapper.selectById(pid);
+                throw new BusinessException("产品[" + (p != null ? p.getName() : pid) + "]本次退回数量"
+                        + fmt(en.getValue()) + "超过该仓库该品质的库存数量" + fmt(stock) + "（未关联采购单）");
+            }
+        }
     }
 
     /** 审核时复核可换量（用已落库的明细；**排除自身**，见 audit 的 F1-1 说明） */
     private void checkCanExchange(PurchaseExchange e, List<PurchaseExchangeItem> items) {
         Map<Long, BigDecimal> qtyMap = new LinkedHashMap<>();
         Map<Long, String> nameMap = new HashMap<>();
+        Map<Long, String> qualityMap = new HashMap<>();
         for (PurchaseExchangeItem it : items) {
             if (it.getPurchaseOrderItemId() == null) continue;
             qtyMap.merge(it.getPurchaseOrderItemId(), outQtyOf(it), BigDecimal::add);
+            qualityMap.putIfAbsent(it.getPurchaseOrderItemId(), outQualityOf(it));
             if (it.getProductName() != null && !it.getProductName().isBlank())
                 nameMap.put(it.getPurchaseOrderItemId(), it.getProductName());
         }
-        checkCanExchangeMap(qtyMap, nameMap, e.getId(), e.getPurchaseOrderId());
+        checkCanExchangeMap(qtyMap, nameMap, qualityMap, e.getId(), e.getPurchaseOrderId(), e.getWarehouseOutId());
     }
 
     /**
-     * 可换量 = 已购 − 已退(TH-) − 已换(CH-)（只约束退回数量，换入属正常入库不受限）。
+     * 退回侧数量上限校验（只约束**退回数量**，换入属正常入库不受限）。
+     *
+     * <p><b>2026-10-01 口径变更（用户口径）</b>：上限 = <b>min(该采购明细的采购数量,
+     * 退回出库仓 + 该产品 + 该退回品质的库存数量)</b>；**不再扣历史累计**（已退/已换）。
+     * 用户口径是「已换也可以再换：只要有库存就可以一直换，但每一次不能超过采购总数」。</p>
      *
      * <p>F1-2（2026-09-18 审核修复）：锚点 `purchaseOrderItemId` 必须**真实存在且属于本单的来源采购单**。
      * 原实现用 `selectBatchIds` 取锚点后直接遍历结果，取不到的锚点被静默跳过 ⇒ 传伪造/他单据 id 即可
      * 绕过数量校验（实测：锚点 999999 + 退回 100 能创建成功，审核只停在库存检查）。</p>
      *
-     * <p>F1-1：`excludeExchangeId` 为审核中的本单 id（创建/编辑时为当前草稿 id，无则 null），
-     * 统计"已换量"时必须排除，否则审核时会把本单算进"已换"。</p>
+     * @param qualityMap     锚点 → 退回品质（取库存用；缺省按 DEFECT）
+     * @param warehouseOutId 退回出库仓（取库存用）
      */
     private void checkCanExchangeMap(Map<Long, BigDecimal> qtyMap, Map<Long, String> nameMap,
-                                     Long excludeExchangeId, Long expectPurchaseOrderId) {
+                                     Map<Long, String> qualityMap,
+                                     Long excludeExchangeId, Long expectPurchaseOrderId, Long warehouseOutId) {
         if (qtyMap.isEmpty()) return;
         List<PurchaseOrderItem> oiList = purchaseOrderItemMapper.selectBatchIds(qtyMap.keySet());
         Map<Long, PurchaseOrderItem> oiMap = new HashMap<>();
@@ -655,12 +686,18 @@ public class PurchaseExchangeServiceImpl implements PurchaseExchangeService {
             BigDecimal purchased = nz(oi.getQuantity());
             BigDecimal returned = returnedMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
             BigDecimal exchanged = exchangedMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
-            BigDecimal canExchange = purchased.subtract(returned).subtract(exchanged);
             BigDecimal thisQty = qtyMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
-            if (thisQty.compareTo(canExchange) > 0) {
+            // 2026-10-01（用户口径）：上限 = min(采购数量, 退回出库仓 + 该产品 + 该退回品质的库存数量)；
+            // 库存按 stockForm=MATERIAL 取（getQuantity 的缺省重载），与审核退回出库口径一致。
+            String qt = qualityMap.getOrDefault(oi.getId(), ProductQualityType.DEFECT.getCode());
+            BigDecimal stock = stockService.getQuantity(warehouseOutId, oi.getProductId(), qt);
+            BigDecimal limit = purchased.min(stock);
+            if (thisQty.compareTo(limit) > 0) {
                 String name = nameMap.getOrDefault(oi.getId(), String.valueOf(oi.getProductId()));
-                throw new BusinessException("产品[" + name + "]退回数量超过可换数量（已购" + fmt(purchased)
-                        + "，已退" + fmt(returned) + "，已换" + fmt(exchanged) + "，可换" + fmt(canExchange) + "）");
+                throw new BusinessException("产品[" + name + "]退回数量" + fmt(thisQty)
+                        + "超过上限" + fmt(limit) + "（采购数量" + fmt(purchased)
+                        + "，退回出库仓该品质库存" + fmt(stock) + "，取较小值；历史已退" + fmt(returned)
+                        + "、已换" + fmt(exchanged) + "）");
             }
         }
     }

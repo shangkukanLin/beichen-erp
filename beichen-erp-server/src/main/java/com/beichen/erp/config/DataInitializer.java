@@ -908,6 +908,14 @@ public class DataInitializer {
                 {9132L, 603L, "反审核", "sale:return:unaudit"},
                 {9133L, 603L, "作废", "sale:return:cancel"},
                 {9134L, 603L, "删除", "sale:return:delete"},
+                // 2026-10-01（F8 进货/销售退换货改造·第 1 步）：605「销售换货单」此前**只有页级码**
+                // （sale:exchange），没有任何按钮级码 —— 而 601 销售单 / 603 销售退货单都有，
+                // 属同批遗漏的安全缺口（换货单的审核/反审核/作废无从按动作管控）。
+                // 与 504 采购换货单的 9101~9103 对称；id 取 9141+ 避开已用的 9101-9103 / 9111-9114 /
+                // 9121-9123 / 9131-9134 / 9151-9153。
+                {9141L, 605L, "审核", "sale:exchange:audit"},
+                {9142L, 605L, "反审核", "sale:exchange:unaudit"},
+                {9143L, 605L, "作废", "sale:exchange:cancel"},
         };
         int processed = 0;
         for (Object[] b : buttons) {
