@@ -274,13 +274,22 @@ const chargeTotal = computed(() =>
   items.value.reduce((s: number, it: any) => s + (Number(it.chargeAmount) || 0), 0))
 // ===== 下拉 =====
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 200, name: kw } })
+/**
+ * 来源销售单下拉。换货必须关联销售单：按客户过滤，未选客户时返回空，避免跨客户挂单。
+ *
+ * 2026-10-02（用户报「带入后显示原始 id 339 而不是单号」）：本函数原返回 `{ data: { records } }`，
+ * 但 `request` 的响应拦截器**已剥离** ApiResult 外层（`request.get` 直接返回 data ⇒ 这里拿到的
+ * 本来就是数组），而 `RemoteSelect.load()` 只认 `res?.records || res` ⇒ 取到的是那个 `{data:...}` 对象，
+ * `options` 不是数组。后果有两层：① el-select 匹配不到选项，**回落到显示原始值**（单号显示成 339）；
+ * ② 该下拉的选项被当成"对象的 1 个值"渲染 ⇒ **只有一个空选项、根本选不中**（裸进流程实测 opts=[[""]]）。
+ * 口径与 `sale/return/add.vue` 的同名下拉、以及进货侧 `purchase/exchange/add.vue` 完全一致：**返回裸数组**
+ * （组件也接受 `{records}`；但绝不能是 `{data:...}`）。
+ */
 const fetchSaleOrders = async (kw: string) => {
-  // 换货必须关联销售单：按客户过滤，未选客户时返回空，避免跨客户挂单
-  if (!form.customerId) return { data: { records: [] } }
+  if (!form.customerId) return []
   // 期 3（2026-09-19 读隔离）：来源销售单下拉改走换货页自身前缀（原读退货页的 /sale/return/sale-orders 需 sale:return）
   const rows: any[] = await getSaleExchangeSaleOrders(form.customerId)
-  const list = (rows || []).filter((r: any) => !kw || (r.code || '').includes(kw))
-  return { data: { records: list } }
+  return (rows || []).filter((r: any) => !kw || (r.code || '').includes(kw))
 }
 // 2026-09-16 方案 A：换入仓(退回品) 与 换出仓(良品) **都只能是自有成品仓**，同仓内按品质分行 → 允许两者相同
 const fetchAfterSaleWarehouses = (kw: string) => request.get('/warehouse/page',
