@@ -29,10 +29,12 @@ function handleCurrentChange(v: number) { pagination.pageNum = v; loadData() }
 
 onMounted(async () => {
   loadData()
-  // 兼容旧链接：从销售单详情「换货」带 ?saleOrderId= 跳转 → 转发到独立新增页
-  const soId = route.query.saleOrderId
+  // 兼容旧链接：从销售单详情「换货」带来源单参数跳转 → 转发到独立新增页
+  // 2026-10-02（用户口径「统一跳转参数名」）：统一用 fromOrder（与进货侧一致）；
+  // 旧的 saleOrderId 仍接受，并**改写**成 fromOrder 后再转发（新增页两者都认，这里只做归一）。
+  const soId = route.query.fromOrder ?? route.query.saleOrderId
   if (soId !== undefined && soId !== '') {
-    router.replace(`/sale/exchange/add?saleOrderId=${soId}`)
+    router.replace(`/sale/exchange/add?fromOrder=${soId}`)
   }
 })
 useDomainRefresh('saleExchange', () => {

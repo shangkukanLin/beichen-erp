@@ -58,7 +58,10 @@ $detail = @(
   ('/outsource/order/detail/' + $oid), ('/outsource/order/delivery/' + $oid), ('/outsource/material-order/detail/' + $moid),
   ('/outsource/return-order/detail/' + $roR), ('/outsource/defect-return/detail/' + $dr),
   ('/outsource/material-return/detail/' + $mrL), ('/outsource/material-return/detail/' + $mrN), ('/outsource/material-return/detail/' + $mrR),
-  ('/outsource/order/delivery/record/' + $del), ('/sale/order/detail/' + $so), ('/sale/return/detail/' + $sr), ('/dev/project/edit/' + $prj),
+  # 2026-10-02 修正两处**错路径**（原来会跳到兜底 /403 页 ⇒ 被静默当"已扫描且无命中"，等于这两页从未被覆盖）：
+  #   ① 销售单详情真路由是 inventory/sale/detail/:id（不是 sale/order/detail/:id —— 那是 API 前缀的形状）
+  #   ② 加工收退详情真路由是 outsource/order/delivery/:id（原写法多了一段 /record/）
+  ('/outsource/order/delivery/' + $del), ('/inventory/sale/detail/' + $so), ('/sale/return/detail/' + $sr), ('/dev/project/edit/' + $prj),
   ('/sale/exchange/detail/' + $sx), ('/inventory/purchase-exchange/detail/' + $px), ('/inventory/purchase-return/detail/' + $pr)
 ) | Where-Object { $_ -notmatch '/$' }
 $entry = @(

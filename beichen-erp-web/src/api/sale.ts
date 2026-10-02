@@ -235,7 +235,7 @@ export function getSaleReturnSaleOrders(customerId: number) {
   return request.get<any[]>('/sale/return/sale-orders', { params: { customerId } })
 }
 /**
- * 来源销售单头（退货页带 ?saleOrderId= 跳转时反查客户/单号）。
+ * 来源销售单头（退货页带 ?fromOrder= 跳转时反查客户/单号；2026-10-02 统一参数名，旧的 saleOrderId 仍兼容）。
  * 期 3（2026-09-19 读隔离）：走退货页自身前缀（原直读 `/inventory/sale/{id}` 需 sale:order）。
  */
 export function getSaleReturnSourceOrder(saleOrderId: number) {
@@ -280,7 +280,7 @@ export function getSaleExchangeSaleOrders(customerId: number) {
   return request.get<any[]>('/sale/exchange/sale-orders', { params: { customerId } })
 }
 /**
- * 来源销售单头（换货页带 ?saleOrderId= 跳转时反查客户/单号/出库仓）。
+ * 来源销售单头（换货页带 ?fromOrder= 跳转时反查客户/单号/出库仓；2026-10-02 统一参数名，旧的 saleOrderId 仍兼容）。
  * 期 3（2026-09-19 读隔离）：走换货页自身前缀（原直读 `/inventory/sale/{id}` 需 sale:order）。
  */
 export function getSaleExchangeSourceOrder(saleOrderId: number) {

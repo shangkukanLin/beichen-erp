@@ -26,8 +26,9 @@
               <RemoteSelect v-model="form.saleOrderId" :fetch="fetchSaleOrders" label-key="code"
                 :placeholder="sourceLocked ? '' : '选填，可追溯原销售单'" style="width: 100%"
                 :disabled="!form.customerId || sourceLocked" domain="saleOrder" />
-              <!-- 2026-10-01（第 3 步，用户口径「销售单里面的退换货和销售单强关联」）：带 ?saleOrderId= 进入时
-                   来源锁死，不允许清空退化成无来源退货；只有从子菜单裸进时才可自选/不选。 -->
+              <!-- 2026-10-01（第 3 步，用户口径「销售单里面的退换货和销售单强关联」）：带 ?fromOrder= 进入时
+                   来源锁死，不允许清空退化成无来源退货；只有从子菜单裸进时才可自选/不选。
+                   （2026-10-02 统一参数名：进货侧原本就是 fromOrder，这里同步；旧的 saleOrderId 仍兼容。） -->
               <span v-if="sourceLocked" style="font-size: var(--app-font-xs); color: #909399">
                 由来源销售单发起，不可更改
               </span>
@@ -176,10 +177,17 @@ const saving = ref(false)
 const isEdit = ref(false)
 
 /**
- * 由来源销售单发起（`?saleOrderId=` 进入）⇒ 来源锁定不可改（2026-10-01 第 3 步，用户口径
+ * 由来源销售单发起（`?fromOrder=` 进入）⇒ 来源锁定不可改（2026-10-01 第 3 步，用户口径
  * 「销售单里面的退换货和销售单强关联」）。从子菜单裸进时才允许自选/不选。
+ *
+ * 2026-10-02（用户口径「统一跳转参数名」）：来源单参数统一为 **fromOrder**（与进货侧一致）；
+ * 旧链接/旧书签仍可能带 `saleOrderId` ⇒ 两者都认，故这里读 fromOrderQuery 而不是直接读 route.query。
  */
-const sourceLocked = computed(() => !!route.query.saleOrderId)
+const fromOrderQuery = computed<string | undefined>(() => {
+  const v = route.query.fromOrder ?? route.query.saleOrderId
+  return v == null ? undefined : String(v)
+})
+const sourceLocked = computed(() => !!fromOrderQuery.value)
 
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
@@ -332,7 +340,7 @@ async function onProductChange(row: any, id: number) {
 watch(() => form.warehouseId, () => { form.items.forEach((it: any) => refreshStock(it)) })
 
 /**
- * 从销售单详情「退货」按钮跳转过来时（?saleOrderId=xxx）：
+ * 从销售单详情「退货」按钮跳转过来时（?fromOrder=xxx；旧的 ?saleOrderId= 仍兼容）：
  * 反查销售单带出客户与单号，并自动载入可退明细，省去手工选择与录入。
  */
 async function initFromSaleOrder(saleOrderId: number) {
@@ -494,7 +502,8 @@ onMounted(async () => {
   }
   form.returnDate = localDate()
   // 从销售单详情页「退货」跳转：预填来源销售单并自动带入可退明细
-  const soId = route.query.saleOrderId
+  // 2026-10-02（统一跳转参数名）：来源单统一 fromOrder，兼容旧链接的 saleOrderId
+  const soId = fromOrderQuery.value
   if (soId !== undefined && soId !== '') {
     await initFromSaleOrder(Number(soId))
   }

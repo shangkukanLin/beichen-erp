@@ -97,8 +97,10 @@ function goAdd() { router.push('/inventory/sale/add') }
  * 也只返回已审核单据）②按钮必须 .stop —— 本列表有 @row-click=goDetail，不阻止冒泡会被行点击抢去详情页
  * （同类问题在采购换货列表踩过，修法是给操作列按钮补 .stop）。</p>
  */
-function goReturn(row: SaleOrder) { router.push(`/sale/return/add?saleOrderId=${row.id}`) }
-function goExchange(row: SaleOrder) { router.push(`/sale/exchange/add?saleOrderId=${row.id}`) }
+// 2026-10-02（用户口径「统一跳转参数名」）：来源单参数统一为 **fromOrder**（与进货侧一致）；
+// 两个新增页同时兼容旧链接的 saleOrderId。
+function goReturn(row: SaleOrder) { router.push(`/sale/return/add?fromOrder=${row.id}`) }
+function goExchange(row: SaleOrder) { router.push(`/sale/exchange/add?fromOrder=${row.id}`) }
 
 onMounted(() => { loadCustomers(); loadWarehouses(); loadData() })
 // 数据变动（新增/编辑页、详情页编辑/审核/反审核/作废）后返回列表时按需刷新，保留查询条件与分页现场

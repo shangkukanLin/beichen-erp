@@ -28,8 +28,9 @@
                 :disabled="isEdit || sourceLocked" style="width:100%"
                 @update:model-value="(v:any)=>{ form.saleOrderId = v }"
                 @pick="(opts:any[])=>{ onSaleOrderChange(form.saleOrderId, opts?.[0]) }" domain="saleOrder" />
-              <!-- 2026-10-01（第 3 步，用户口径「销售单里的退换货与销售单强关联」）：带 ?saleOrderId= 进入时
-                   来源锁死，不能清空退化成无单换货；只有从子菜单裸进时才可自选/不选。 -->
+              <!-- 2026-10-01（第 3 步，用户口径「销售单里的退换货与销售单强关联」）：带 ?fromOrder= 进入时
+                   来源锁死，不能清空退化成无单换货；只有从子菜单裸进时才可自选/不选。
+                   （2026-10-02 统一参数名：进货侧原本就是 fromOrder，这里同步；旧的 saleOrderId 仍兼容。） -->
               <span v-if="sourceLocked" style="margin-left:6px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
                 由来源销售单发起，不可更改
               </span>
@@ -218,10 +219,17 @@ const saving = ref(false)
 const isEdit = ref(false)
 
 /**
- * 由来源销售单发起（`?saleOrderId=` 进入）⇒ 来源锁定不可改（2026-10-01 第 3 步，用户口径
+ * 由来源销售单发起（`?fromOrder=` 进入）⇒ 来源锁定不可改（2026-10-01 第 3 步，用户口径
  * 「销售单里面的退换货和销售单强关联」）。从子菜单裸进时才允许自选/不选。
+ *
+ * 2026-10-02（用户口径「统一跳转参数名」）：来源单参数统一为 **fromOrder**（与进货侧一致）；
+ * 旧链接/旧书签仍可能带 `saleOrderId` ⇒ 两者都认，故这里读 fromOrderQuery 而不是直接读 route.query。
  */
-const sourceLocked = computed(() => !!route.query.saleOrderId)
+const fromOrderQuery = computed<string | undefined>(() => {
+  const v = route.query.fromOrder ?? route.query.saleOrderId
+  return v == null ? undefined : String(v)
+})
+const sourceLocked = computed(() => !!fromOrderQuery.value)
 
 const form = reactive({
   id: null as number | null,
@@ -320,7 +328,7 @@ async function onSaleOrderChange(saleOrderId: number | null, opt: any) {
 }
 
 /**
- * 从销售单详情「换货」按钮跳转过来时（?saleOrderId=xxx）：
+ * 从销售单详情「换货」按钮跳转过来时（?fromOrder=xxx；旧的 ?saleOrderId= 仍兼容）：
  * 反查销售单带出客户与单号，自动载入可换明细；换出仓默认取原销售出库仓（成品仓）。
  */
 async function initFromSaleOrder(saleOrderId: number) {
@@ -548,7 +556,8 @@ onMounted(async () => {
     return
   }
   // 从销售单详情页「换货」跳转：预填来源销售单并自动带入可换明细
-  const soId = route.query.saleOrderId
+  // 2026-10-02（统一跳转参数名）：来源单统一 fromOrder，兼容旧链接的 saleOrderId
+  const soId = fromOrderQuery.value
   if (soId !== undefined && soId !== '') {
     await initFromSaleOrder(Number(soId))
   }
