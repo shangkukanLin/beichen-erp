@@ -104,6 +104,13 @@
           background @size-change="onSizeChange" @current-change="load" />
       </div>
     </el-card>
+
+    <!-- 滞销分析：独立卡片（2026-10-02 用户要求；两个页面共用 components/StagnantPanel.vue）。
+         为什么不做成主表加列：主表 12 列实测 colSum 971 = avail 971（margin 0），再加 4 列必然横向滚动 ✗
+         —— 详见 tools/regression/scan-table-overflow.ps1 与该组件的说明。 -->
+    <StagnantPanel ref="stagnantRef"
+      :brand-id="applied.brandId" :warehouse-ids="applied.warehouseIds" :product-name="applied.productName"
+      @row-click="goDetail" @product-click="goProduct" />
   </div>
 </template>
 
@@ -117,6 +124,7 @@ import { WarehouseCategory, WarehouseType } from '@/api/enums'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
+import StagnantPanel from '@/components/StagnantPanel.vue'
 
 const router = useRouter()
 
@@ -215,13 +223,17 @@ async function load() {
   } finally { loading.value = false }
 }
 
-function doQuery() { page.pageNum = 1; load() }
+// 查询/重置同时刷滞销块：两者共用同一套筛选（产品/品牌/仓库），只刷一半会让两块对不上
+// 注：重置只清**查询条**里的条件（含「仅看低于安全库存」），滞销块自己的阈值/窗口/勾选保留 ——
+//     它们是块内状态，不属于查询条，被"重置"顺手清掉会让用户以为设置丢失。
+function doQuery() { page.pageNum = 1; syncApplied(); load() }
 function resetQuery() {
   query.productName = ''
   query.brandId = undefined
   query.warehouseIds = []
   query.onlyLowStock = false
   page.pageNum = 1
+  syncApplied()
   load()
 }
 function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }
@@ -229,7 +241,20 @@ function goDetail(row: any) { router.push(`/inventory/product-stock/detail/${row
 /** 产品名称 → 产品主数据详情（2026-09-26 B5a：本页「产品名称」列由纯文本改为可点） */
 function goProduct(row: any) { if (row.productId) router.push(`/product/detail/${row.productId}`) }
 
-useDomainRefresh('productStock', load)
+/**
+ * 滞销块的筛选：只把**已确认应用**的条件传给它（输入框里正在敲的字不该触发组件重查 ——
+ * 本页原口径就是"点查询才生效"）。`applied` 只在 doQuery / resetQuery 里更新，
+ * 组件内部 watch 这三个值，变化后自动回第一页重查。
+ */
+const stagnantRef = ref<any>(null)
+const applied = reactive({ brandId: undefined as number | undefined, warehouseIds: '', productName: '' })
+function syncApplied() {
+  applied.brandId = query.brandId
+  applied.warehouseIds = (query.warehouseIds || []).join(',')
+  applied.productName = query.productName
+}
+
+useDomainRefresh('productStock', () => { load(); stagnantRef.value?.reload() })
 </script>
 
 <style scoped>
@@ -255,4 +280,5 @@ useDomainRefresh('productStock', load)
 .qty-pending { color: #909399; font-weight: 600; }
 .qty-zero { color: #c0c4cc; }
 /* 列宽全部交给 min-width 按比例分配，不设 nowrap：nowrap 会让超宽表头溢出到相邻列，反而造成「对不齐」 */
+
 </style>

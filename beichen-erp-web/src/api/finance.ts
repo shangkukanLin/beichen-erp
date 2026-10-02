@@ -41,6 +41,43 @@ export interface FinanceBill { id?: number; billNo?: string; billType?: string; 
   createByName?: string; auditorName?: string }
 export interface FinanceBillItem { id?: number; sourceBillType?: string; sourceBillNo?: string; amount?: number; paidAmount?: number; unpaidAmount?: number; dueDate?: string }
 
+/**
+ * 账单「产品明细」：按来源单分组 —— 回答"每一张单卖了什么"（2026-10-02 用户要求）。
+ * <p>口径：只展开有产品明细的四类来源（销售单/销售退货/采购单/采购退货），其余类型回 `noDetailReason`
+ * 且**不伪造明细**；`matched` 是**逐单金额对账**（带符号的明细合计 == 单金额），false 时前端要显式标红。</p>
+ */
+export interface BillProductLine {
+  productId?: number; sku?: string; productName?: string; unit?: string; qualityType?: string
+  quantity?: number; unitPrice?: number
+  /** 明细行原始金额（收费行 = chargeAmount） */
+  amount?: number
+  /** 带符号金额（销售/采购单取正、退货取负；与台账方向一致）——展示与合计都用它，避免"退货明细是正的"这种别扭 */
+  signedAmount?: number
+  /** 本行是收费行（金额是逐产品收费额，不是货值） */
+  charge?: boolean
+  /** 收费行专用：收费类型 code（分侧！销售退货=COVER_SCRATCH/OTHER，其余=SERVICE/DIFF/FULL/OTHER）
+   *  → 中文用 enums.billChargeTypeLabel(sourceBillType, code) 查，别用单一映射表 */
+  chargeType?: string | null
+  /** 收费行专用：收费说明（用户在单据上填的说明文本） */
+  chargeReason?: string | null
+}
+export interface BillProductGroup {
+  billItemId?: number; sourceBillType?: string; sourceBillNo?: string
+  /** **业务单 id**（不是台账行 id）——「来源单号」可点跳转靠它 + SourceBillDetailRoute */
+  sourceId?: number
+  itemAmount?: number; linesAmount?: number; signedLinesAmount?: number
+  /** 明细类别：GOODS=货值（产品/数量/单价/金额）、CHARGE=收费（金额=逐产品收费额） */
+  lineKind?: 'GOODS' | 'CHARGE' | null
+  /** 该来源类型能否对账（无产品明细的类型为 false） */
+  reconcilable?: boolean
+  /** 逐单对账结果：true=一致 / false=不符 / null=该类型无法对账 */
+  matched?: boolean | null
+  /** 无明细时给用户的原因说明（不同类型原因不同，不要只显示"无明细"） */
+  noDetailReason?: string
+  dueDate?: string
+  lines?: BillProductLine[]
+}
+
 export function getAccountPage(params?: any) { return request.get<PageResult<FinanceAccount>>('/finance/account/page', { params }) }
 export function createAccount(data: any) { return request.post<void>('/finance/account', data) }
 export function updateAccount(data: any) { return request.put<void>('/finance/account', data) }
@@ -152,6 +189,12 @@ export function unAuditPayment(id: number) { return request.put<void>(`/finance/
 export function getBillPage(params: any) { return request.get<PageResult<FinanceBill>>('/finance/bill/page', { params }) }
 export function getBill(id: number) { return request.get<FinanceBill>(`/finance/bill/${id}`) }
 export function getBillItems(id: number) { return request.get<FinanceBillItem[]>(`/finance/bill/${id}/items`) }
+/**
+ * 账单「产品明细」（按来源单分组）—— 回答"每一张来源单卖了什么"（2026-10-02 用户要求）。
+ * <p>与 {@link getBillItems} 的区别：那个回的是**台账行**（来源单号 + 金额，账单由哪些应收/应付构成），
+ * 这个回的是**业务明细行**（产品/品质/数量/单价/金额），并带逐单金额对账结果 `matched`。</p>
+ */
+export function getBillProductItems(id: number) { return request.get<BillProductGroup[]>(`/finance/bill/${id}/product-items`) }
 export function generateBill(data: any) { return request.post<FinanceBill>('/finance/bill/generate', data) }
 export function auditBill(id: number) { return request.put<void>(`/finance/bill/${id}/audit`) }
 export function unAuditBill(id: number) { return request.put<void>(`/finance/bill/${id}/un-audit`) }

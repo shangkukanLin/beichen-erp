@@ -60,6 +60,10 @@ public class FinanceReceivableController {
             m.put("subjectType", r.getSubjectType());
             m.put("supplierId", r.getSupplierId()); m.put("supplierName", r.getSupplierName());
             m.put("sourceBillType", r.getSourceBillType()); m.put("sourceBillNo", r.getSourceBillNo());
+            // 业务单 id（2026-10-02 用户要求「来源单号下钻」）：**必须显式带上** —— 本接口是手写 Map 投影，
+            // 不 put 就永远为空（与上面 createByName 同一类坑，2026-09-23 已踩过一次）。
+            // 前端 `SourceBillDetailRoute[type] + '/' + sourceId` 靠它才能跳到业务单详情。
+            m.put("sourceId", r.getSourceId());
             m.put("amount", r.getAmount()); m.put("paidAmount", r.getPaidAmount());
             m.put("unpaidAmount", r.getUnpaidAmount()); m.put("dueDate", r.getDueDate());
             m.put("status", r.getStatus()); m.put("remark", r.getRemark());

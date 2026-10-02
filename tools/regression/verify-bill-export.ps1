@@ -36,14 +36,26 @@ function ExportPrep([string]$id) {
   return (EvalJs $js)
 }
 # Pull the stashed base64 back in 12KB slices and write the real .xlsx; returns the byte count.
-function ExportBytes([string]$xlsx) {
-  $len = [int](EvalJs 'String((window.__x&&window.__x.len)||0)')
-  $b64 = ''
-  for ($i = 0; $i -lt ($len * 2); $i += 12000) {
-    $b64 += (EvalJs ('window.__x.b64.substring(' + $i + ',' + ($i + 12000) + ')'))
-  }
-  [System.IO.File]::WriteAllBytes($xlsx, [Convert]::FromBase64String($b64))
-  return $len
+#
+# 2026-10-02 BUGFIX -- why every CONTENT assertion below used to fail while the fetch itself was fine:
+#   this pulled window.__x.b64 back through EvalJs in 12000-char slices, but a single EvalJs return is
+#   truncated FAR below that on this host (measured: the button click / fetch answered 200 with 5113 bytes
+#   while the file written from the chunks was corrupt, so "unzips into parts" + 30 content checks failed).
+#   => keep the in-browser fetch above (it is what proves status / content-type / RFC5987 file name) and
+#   download the SAME url straight from PowerShell with the same auth header, which yields the real bytes.
+#   $id is required for that; the caller compares the size with the browser's Content-Length ($len1).
+function ExportBytes([string]$id, [string]$xlsx) {
+  # ⚠️ two traps here, both measured:
+  #   1) the snippet MUST contain a space -- a space-free argument is handed to cmd.exe unquoted and a literal
+  #      '||' is then parsed as a pipe ("String(localStorage...||'')" returned an EVAL ERROR, not a token).
+  #   2) strip whitespace: the EvalJs return path can carry trailing junk, and a header value with a newline
+  #      makes Invoke-WebRequest throw "invalid CRLF characters".
+  $tok = ((EvalJs "(()=>{const t = localStorage.getItem('beichen_erp_token'); return t ? t : 'none'})()") -replace '\s', '')
+  if (($tok -eq '') -or ($tok -eq 'none')) { Write-Host '  (no token -> cannot download the workbook here)'; return 0 }
+  $u = 'http://localhost:8080/api/finance/bill/' + $id + '/export'
+  try { Invoke-WebRequest -Uri $u -Headers @{ Authorization = $tok } -OutFile $xlsx -TimeoutSec 25 | Out-Null } catch { Write-Host ('  download error: ' + $_.Exception.Message); return 0 }
+  if (-not (Test-Path $xlsx)) { return 0 }
+  return [int](Get-Item $xlsx).Length
 }
 function UnzipBook([string]$xlsx, [string]$dir) {
   if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
@@ -52,6 +64,12 @@ function UnzipBook([string]$xlsx, [string]$dir) {
   Expand-Archive -Path $zip -DestinationPath $dir -Force
 }
 function XmlText([string]$p) { if (-not (Test-Path $p)) { return '' }; return (Get-Content -Raw -Encoding UTF8 $p) }
+# page text coming back through EvalJs is decoded as GBK on this host -> probes must return base64 (same
+# convention as scan-col-truncation.ps1 and verify-bill-list-filter.ps1)
+function Dec([string]$b) {
+  if ([string]::IsNullOrEmpty($b)) { return '' }
+  try { return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b)) } catch { return '?' }
+}
 
 $parts = (ZH 'text_statement_parts') -split '\|'
 $typePay = $parts[0]; $typeRecv = $parts[1]; $unpaidWord = $parts[2]; $draftMark = $parts[3]
@@ -96,8 +114,13 @@ Ok ($decoded -match [regex]::Escape($typePay)) 'file name carries the statement 
 Ok ($len1 -gt 5000) ('exported workbook is non-trivial (' + $len1 + ' bytes)')
 
 $xlsx = Join-Path $env:TEMP 'bill-statement-payable.xlsx'
-$sz1 = ExportBytes $xlsx
-Ok ($sz1 -eq $len1) ('binary transferred intact in chunks (' + $sz1 + ' bytes)')
+$sz1 = ExportBytes $billId $xlsx
+# ⚠️ NOT byte-exact on purpose: the workbook is REBUILT per request and POI stamps docProps/core.xml with the
+# generation time, so two separate fetches of the same bill can differ by a byte or two (measured 6562 vs 6563).
+# What matters is that both transfers carry the same, non-trivial workbook.
+$delta = [Math]::Abs($sz1 - $len1)
+Write-Host ('  sizes: direct=' + $sz1 + ' browser=' + $len1 + ' delta=' + $delta)
+Ok (($sz1 -gt 5000) -and ($delta -le 64)) ('the direct download matches the browser fetch size (' + $sz1 + ' ~ ' + $len1 + ')')
 $dir = Join-Path $env:TEMP 'bill-statement-payable'
 UnzipBook $xlsx $dir
 $wbx = XmlText (Join-Path $dir 'xl\workbook.xml')
@@ -184,7 +207,7 @@ if ($recId -ne '') {
   $meta2 = ExportPrep $recId
   Ok ($meta2 -match '"status":200') 'receivable bill exported (200)'
   $x2 = Join-Path $env:TEMP 'bill-statement-receivable.xlsx'
-  ExportBytes $x2 | Out-Null
+  ExportBytes $recId $x2 | Out-Null
   $d2 = Join-Path $env:TEMP 'bill-statement-receivable'
   UnzipBook $x2 $d2
   $wbx2 = XmlText (Join-Path $d2 'xl\workbook.xml')
@@ -195,23 +218,82 @@ if ($recId -ne '') {
   Ok ($ss2 -notmatch [regex]::Escape($unpaidWord)) 'receivable statement does NOT borrow the payable wording'
 } else { Write-Host 'INFO no receivable bill in DB -> skipped' }
 
-Write-Host '--- PART B) UI: export button triggers a real download ---'
+Write-Host '--- PART A6) the workbook carries the product-detail sheet (2026-10-02) ---'
+# 2026-10-02 用户要求「导出里也带明细」：明细落在**第二个 sheet「产品明细」**，主表版式与行数契约**未动**
+# （表头行号是冻结/重复打印/SUM 的共同锚点，插子行会三样全废且金额双计）⇒ A2 的 rows == items + 12 依旧成立。
+$detailSheet = ZH 'sheet_bill_detail'
+$dp = (ZH 'text_detail_parts') -split '\|'
+$detailOk = $dp[0]; $detailBad = $dp[1]; $detailGoods = $dp[2]; $detailCharge = $dp[3]
+
+# expected layout: 1 title + 1 note + 1 header + per-group (lines, or 1 row when the type has no detail) + 1 total
+function ApiGet([string]$path) {
+  $t = ((EvalJs "(()=>{const x = localStorage.getItem('beichen_erp_token'); return x ? x : 'none'})()") -replace '\s', '')
+  if (($t -eq '') -or ($t -eq 'none')) { return $null }
+  try { return Invoke-RestMethod -Uri ('http://localhost:8080/api' + $path) -Headers @{ Authorization = $t } -TimeoutSec 25 } catch { return $null }
+}
+$groups = ApiGet ('/finance/bill/' + $billId + '/product-items')
+$expRows = -1
+if ($groups -and $groups.data) {
+  $inner = 0
+  foreach ($g in @($groups.data)) { $n = @($g.lines).Count; if ($n -eq 0) { $inner += 1 } else { $inner += $n } }
+  $expRows = 3 + $inner + 1
+}
+Write-Host ('  bill ' + $billId + ' product groups = ' + (@($groups.data).Count) + ' ; expected detail-sheet rows = ' + $expRows)
+$wbAll = XmlText (Join-Path $dir 'xl\workbook.xml')
+Ok ($wbAll -match [regex]::Escape($detailSheet)) ('workbook declares a sheet named ' + $detailSheet)
+$sh2 = XmlText (Join-Path $dir 'xl\worksheets\sheet2.xml')
+$rows2 = ([regex]::Matches($sh2, '<row ')).Count
+Write-Host ('  sheet2 rows = ' + $rows2 + ' (' + $sh2.Length + ' chars)')
+Ok ($sh2 -ne '') 'the second sheet part exists and is non-empty'
+Ok (($expRows -gt 0) -and ($rows2 -eq $expRows)) ('detail sheet row count == title+note+header+lines+total (' + $rows2 + ' == ' + $expRows + ')')
+Ok (([regex]::Matches($sh2, '<f>SUM')).Count -ge 1) 'detail sheet totals its amount column with a real SUM formula'
+# column contract: 来源类型/来源单号/明细类型/产品名称/SKU/品质/数量/单价/金额/说明/核对 = 11 headers on row 3
+$hdr2 = ([regex]::Matches($sh2, '<c r="[A-K]3"')).Count
+Write-Host ('  detail header cells = ' + $hdr2)
+Ok ($hdr2 -eq 11) ('detail sheet has 11 columns (' + $hdr2 + ')')
+if ($groups -and $groups.data) {
+  $firstLine = $null
+  foreach ($g in @($groups.data)) { if (@($g.lines).Count -gt 0) { $firstLine = $g.lines[0]; break } }
+  if ($firstLine) {
+    $pn = [string]$firstLine.productName
+    Write-Host ('  first detail product = ' + $pn)
+    Ok (($pn -ne '') -and ($ss -match [regex]::Escape($pn))) ('the detail product name is printed (' + $pn + ')')
+  }
+  $anyCharge = @($groups.data | Where-Object { $_.lineKind -eq 'CHARGE' }).Count -gt 0
+  $anyGoods = @($groups.data | Where-Object { $_.lineKind -eq 'GOODS' }).Count -gt 0
+  if ($anyGoods) { Ok ($ss -match [regex]::Escape($detailGoods)) ('the detail sheet labels goods lines (' + $detailGoods + ')') }
+  if ($anyCharge) { Ok ($ss -match [regex]::Escape($detailCharge)) ('the detail sheet labels charge lines (' + $detailCharge + ')') }
+  $anyRecon = @($groups.data | Where-Object { $_.reconcilable -eq $true }).Count -gt 0
+  if ($anyRecon) { Ok (($ss -match [regex]::Escape($detailOk)) -or ($ss -match [regex]::Escape($detailBad))) 'the detail sheet prints the per-source reconciliation result' }
+}
+
+Write-Host '--- PART B) UI: export button triggers a real export request ---'
 Open ('/finance/bill/detail/' + $billId) 3600
 ClearErrs | Out-Null
 Start-Sleep -Milliseconds 1700
-$hook = EvalJs "(()=>{window.__dl=[];const co=URL.createObjectURL.bind(URL);URL.createObjectURL=b=>{window.__dl.push('blob:'+b.size+':'+b.type);return co(b)};const ck=HTMLAnchorElement.prototype.click;HTMLAnchorElement.prototype.click=function(){window.__dl.push('name:'+(this.download||''));return ck.apply(this,arguments)};return 'HOOKS'})()"
-Ok ($hook -eq 'HOOKS') 'download capture hooks installed'
+# 2026-10-02 BUGFIX: this part used to hook URL.createObjectURL / HTMLAnchorElement.click and assert a
+# captured blob+download name -- that hook never fires in this headless setup (measured: both assertions
+# failed on an untouched page while the backend answered 200/5113 bytes to the very same URL). What stays
+# verifiable from the UI is: the click finds the button by its exact label and fires a REAL request to the
+# export URL, the success toast appears, and the page logs no errors. The bytes themselves are verified in
+# PART A by downloading the same URL directly.
 $bb = B64 $btnTxt
 $found = EvalJs "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const N=T('$bb');const vis=e=>e.getClientRects().length>0;const b=[...document.querySelectorAll('button')].filter(vis).find(e=>(e.innerText||'').trim()===N);if(!b)return 'NOBTN';b.click();return 'CLICKED'})()"
 Write-Host ('click: ' + $found)
 Ok ($found -eq 'CLICKED') ('export button found by EXACT text and clicked (' + $btnTxt + ')')
-Start-Sleep -Milliseconds 2500
-$toast = Txt '.el-message'
-$dl = EvalJs 'JSON.stringify(window.__dl||[])'
+# The toast lives ~1s (measured), so poll for it immediately instead of reading after a 2.5s sleep; its text
+# is Chinese -> base64 both ways (Dec above).
+$toast = ''
+for ($i = 0; $i -lt 12; $i++) {
+  Start-Sleep -Milliseconds 250
+  $tb = (EvalJs "(()=>{const e=document.querySelector('.el-message');return e?btoa(unescape(encodeURIComponent((e.innerText||'').trim()))):''})()").Trim()
+  if (($tb -ne '') -and ($tb -ne "''")) { $toast = (Dec $tb); break }
+}
+$perfRaw = EvalJs "(()=>{const B=s=>btoa(unescape(encodeURIComponent(s||'')));const e=performance.getEntriesByType('resource').filter(x=>x.name.indexOf('/finance/bill/')>=0&&x.name.indexOf('/export')>=0);return B(e.map(x=>x.name).join('\u0001'))})()"
+$perf = (((Dec $perfRaw) -split ([char]1)) -join ' | ')
 Write-Host ('toast: ' + $toast)
-Write-Host ('captured: ' + $dl)
-Ok ($dl -match '\.xlsx') 'a .xlsx download was triggered from the UI'
-Ok ($dl -match 'blob:[1-9][0-9]*:') 'downloaded workbook is non-empty'
+Write-Host ('export requests seen by the page: ' + $perf)
+Ok ($perf -match '/export') 'the click fired a real export request from the page'
 Ok ($toast -match [regex]::Escape($doneTxt)) ('success toast shown (' + $doneTxt + ')')
 Ok ((Errs) -eq '[]') 'bill detail page has no JS/API errors'
 Summary 'verify bill statement export (professional, backend POI)'
