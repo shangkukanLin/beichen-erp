@@ -249,6 +249,13 @@ public class ApiPermGuard {
         rule("/api/customer/analysis", "analysis:customer");
         // ===== 销售分析（F7-106 原登记在 EXEMPT；F7-255 改为按码收口，含 /records 明细下钻）=====
         rule("/api/sale/analysis", "analysis:sale");
+        // ===== 产品分析（2026-10-02 新增页，页面码 analysis:product 与菜单 1008 同源）=====
+        // 独立前缀 `/api/product/analysis`（含 /records 明细下钻）：产品分析页**不得**去读
+        // /sale/analysis、/customer/analysis、/finance/analysis（`audit-frontend-api-crosspage.ps1 -Strict`
+        // 会把跨页读标红），故这些聚合在本页自己的前缀下重写一遍 —— 登记在这里正是为了放行**本页**的调用。
+        // 注意：`/api/product`（基础数据-产品管理）是 WRITE_RULES 的"读共享 + 写收口"，与本次缀不冲突
+        // （最长前缀优先：/api/product/analysis 先命中本行）。
+        rule("/api/product/analysis", "analysis:product");
 
         // ===== 基础数据写保护（GET 共享读取；写需对应页面码）=====
         writeRule("/api/product", "base:product");
@@ -366,7 +373,19 @@ public class ApiPermGuard {
                 }
             }
             if (longest(WRITE_RULES, uri) != null) {
-                return;
+                // 2026-10-02（新增「产品分析」时发现的**结构性漏洞**）：原先只要**任何** WRITE_RULES 前缀命中
+                // 就读放行 ⇒ 落在基础数据前缀（/api/product、/api/brand、/api/customer、/api/warehouse…）
+                // 之下的**读**端点**永远无法收口**（RULES 里登记再长也没用，因为这里提前 return 了）。
+                // 实测证据：低权账号（只有 sale:* + base:*）`GET /api/product/analysis` → **200**（能读全公司
+                // 产品的净销售额/毛利），而同类的 `/api/sale/analysis`、`/api/customer/analysis` 都是 403 ——
+                // 即"产品分析"页刚上线就是越权可读的。
+                // 修法按本类声明的「前缀**最长匹配**优先」补齐：**RULES 里存在更长前缀时以 RULES 收口**；
+                // 长度相同或更短仍走 WRITE_RULES 读共享 ⇒ 既有基础数据读取（如 /api/product/page）行为不变。
+                String wpr = longest(WRITE_RULES, uri);
+                String rpr = longest(RULES, uri);
+                if (rpr == null || wpr.length() >= rpr.length()) {
+                    return;
+                }
             }
         }
         // F7-226：**改类写**优先于模块规则 —— PUT/PATCH/DELETE 走专属码（POST 仍走 WRITE_RULES）

@@ -83,14 +83,17 @@
         </el-card>
         <!-- 快捷入口（2026-09-27 用户口径「每个 TAB 的快捷方式与子菜单对齐」时补齐）：
              本 TAB 此前是**唯一没有快捷入口的模块 TAB**（只有 KPI + 待办）。现与本 TAB 对应的
-             「经营分析」目录的 6 个子页**逐项同序**（经营概览 → 销售分析 → 客户分析 → 进货分析 → 税务分析 → 资金往来）。
-             ⚠️ 其中 5 个 route_name（AnalysisSale/Customer/Purchase/Tax/Cash）必须同时进下方 menuNames 白名单，
-             否则 hasMenu 恒为 false、按钮永不渲染（历史上采购换货单就踩过这个坑）。 -->
+             「经营分析」目录的 **7** 个子页**逐项同序**（经营概览 → 销售分析 → 客户分析 → **产品分析** →
+             进货分析 → 税务分析 → 资金往来；产品分析为 2026-10-02 新增，按用户口径排在客户分析之后）。
+             ⚠️ 6 个 route_name（AnalysisSale/Customer/**Product**/Purchase/Tax/Cash）必须同时进下方 menuNames
+             白名单，否则 hasMenu 恒为 false、按钮永不渲染（历史上采购换货单就踩过这个坑）；
+             守卫 verify-dashboard-tab-menu.ps1 会断言「面板按钮 == 该目录子菜单、逐项同序」。 -->
         <div class="quick-links">
           <span class="links-label">快捷入口：</span>
           <el-button v-if="hasMenu['AnalysisOverview']" type="primary" size="small" text @click="$router.push('/analysis/overview')">经营概览</el-button>
           <el-button v-if="hasMenu['AnalysisSale']" type="primary" size="small" text @click="$router.push('/analysis/sale')">销售分析</el-button>
           <el-button v-if="hasMenu['AnalysisCustomer']" type="primary" size="small" text @click="$router.push('/analysis/customer')">客户分析</el-button>
+          <el-button v-if="hasMenu['AnalysisProduct']" type="primary" size="small" text @click="$router.push('/analysis/product')">产品分析</el-button>
           <el-button v-if="hasMenu['AnalysisPurchase']" type="primary" size="small" text @click="$router.push('/analysis/purchase')">进货分析</el-button>
           <el-button v-if="hasMenu['AnalysisTax']" type="primary" size="small" text @click="$router.push('/analysis/tax')">税务分析</el-button>
           <el-button v-if="hasMenu['AnalysisCash']" type="primary" size="small" text @click="$router.push('/analysis/cash')">资金往来</el-button>
@@ -993,8 +996,8 @@ function checkUserMenus() {
   // SystemSettings/SystemDataManage/SystemRole/SystemMenu/SystemClearData）。
   // 注：`FinanceAnalysis` 只在注释里作为"历史死键"出现（见 loadOverview），不在名单内。
   const menuNames = [
-    // 经营分析（目录 10）
-    'AnalysisOverview', 'AnalysisSale', 'AnalysisCustomer', 'AnalysisPurchase', 'AnalysisTax', 'AnalysisCash',
+    // 经营分析（目录 10）；2026-10-02 新增 'AnalysisProduct'（产品分析）
+    'AnalysisOverview', 'AnalysisSale', 'AnalysisCustomer', 'AnalysisProduct', 'AnalysisPurchase', 'AnalysisTax', 'AnalysisCash',
     // 研发管理（目录 3）
     'DevProject', 'DevMaterial', 'DevScreenModel',
     // 委外加工（目录 4）

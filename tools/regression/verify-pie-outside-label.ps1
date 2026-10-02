@@ -115,3 +115,20 @@ if ($Part -eq 0 -or $Part -eq 3) {
   )
   Summary 'pie outside label - customer profile'
 }
+
+# 2026-10-02: the new PRODUCT analysis page (经营分析 -> 产品分析) carries 6 pies
+# (sales / net sales / net qty / gross profit + product return rate + product exchange rate).
+# Same two-per-row layout as the other analysis pages => it needs the same clipping + layout
+# assertions (radius/labelLine must stay small enough for a ~460px card, otherwise the two-line
+# outside labels get clipped by the canvas). The two rate pies can be EMPTY (no returns/exchanges
+# in the range) -- CheckPage reports 'blank' for those, which is the honest outcome: an empty pie
+# draws nothing, so there is nothing to clip.
+if ($Part -eq 0 -or $Part -eq 4) {
+  EnsureLogin | Out-Null
+  CheckPage '/analysis/product' 'product analysis (6 pies)' @(
+    @('pieSaleAmount', 0.50), @('pieNetAmount', 0.50), @('pieNetQty', 0.50),
+    @('pieProfit', 0.50), @('pieReturnRate', 0.50), @('pieExchangeRate', 0.50)
+  )
+  CheckTwoPerRow '/analysis/product' 'product analysis'
+  Summary 'pie outside label - product'
+}

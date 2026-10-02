@@ -2,7 +2,11 @@
 # Pure API + SQL (no browser). This file must stay pure ASCII.
 #
 # Asserts:
-#   1) data: sys_menu.perms exists; page menus carry codes; catalogs are NULL; code count = 62
+#   1) data: sys_menu.perms exists; page menus carry codes; catalogs are NULL; code count = 71
+#      2026-10-02: 62 -> 71. 两个原因一起修正：
+#        a) 本条期望值**长期过期**（种子库自 2026-09-09 起就有 70 个带码菜单，期间新增的菜单一直没同步
+#           这个常量）⇒ 本守卫在本次改动前就是红的（"page menus with perms = 70 (expected 62)"）；
+#        b) 本次新增「产品分析」1008 / analysis:product ⇒ 70 -> 71。
 #   2) admin (owns menu 504) can call the pilot module -> 200 (no over-blocking)
 #   3) restricted user (sales role, no 504) -> 403 on the pilot module: list + detail + write endpoint
 #   4) same restricted user keeps 200 on its own module (sale order) and on shared base data (product)
@@ -42,7 +46,7 @@ Write-Output '--- 1) data: sys_menu.perms + code inventory'
 $col = SqlOne "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='sys_menu' AND column_name='perms'"
 if ($col -eq '1') { Ok 'sys_menu.perms column exists' } else { Bad 'sys_menu.perms column missing' }
 $codes = SqlOne "SELECT COUNT(*) FROM sys_menu WHERE menu_type='menu' AND perms IS NOT NULL AND perms<>''"
-if ($codes -eq '62') { Ok '62 page menus carry an interface permission code' } else { Bad ("page menus with perms = $codes (expected 62)") }
+if ($codes -eq '71') { Ok '71 page menus carry an interface permission code' } else { Bad ("page menus with perms = $codes (expected 71)") }
 $dup = SqlOne "SELECT IFNULL(GROUP_CONCAT(p),'-') FROM (SELECT perms p FROM sys_menu WHERE menu_type='menu' AND perms IS NOT NULL AND perms<>'' GROUP BY perms HAVING COUNT(*)>1) t"
 if ($dup -eq '-') { Ok 'permission codes are unique' } else { Bad ("duplicated permission codes: $dup") }
 $cat = SqlOne "SELECT COUNT(*) FROM sys_menu WHERE menu_type NOT IN ('menu','button') AND perms IS NOT NULL"

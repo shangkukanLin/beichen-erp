@@ -402,6 +402,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'analysis/customer/:id', name: 'AnalysisCustomerProfile', component: () => import('@/views/analysis/customer/profile.vue'), meta: { title: '单客户分析', requiresAuth: true, operate: true } },
       // 客户分析钻取：某客户在区间的销售单明细
       { path: 'analysis/customer/detail', name: 'AnalysisCustomerDetail', component: () => import('@/views/analysis/customer/detail.vue'), meta: { title: '客户销售单明细', requiresAuth: true, operate: true } },
+      // 产品分析（2026-10-02 用户要求新增，菜单位于「客户分析」之后）：产品维度**净额**表现
+      // （净销量/净销售额/毛利 = 销售 − 退货）+ 4 张产品饼图 + 排行下钻
+      { path: 'analysis/product', name: 'AnalysisProduct', component: () => import('@/views/analysis/product.vue'), meta: { title: '产品分析', requiresAuth: true } },
+      // 产品分析钻取：某产品在区间内的销售明细行 + 退货明细行（operate 页，不入菜单）
+      { path: 'analysis/product/detail', name: 'AnalysisProductDetail', component: () => import('@/views/analysis/product/detail.vue'), meta: { title: '产品销售/退货明细', requiresAuth: true, operate: true } },
       // 财务管理
       { path: 'finance/receivable', name: 'FinanceReceivable', component: () => import('@/views/finance/receivable.vue'), meta: { title: '应收管理', requiresAuth: true } },
       { path: 'finance/payable', name: 'FinancePayable', component: () => import('@/views/finance/payable.vue'), meta: { title: '应付管理', requiresAuth: true } },

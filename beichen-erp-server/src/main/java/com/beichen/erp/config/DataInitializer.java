@@ -586,19 +586,29 @@ public class DataInitializer {
             // 菜单码 system:clear-data 因 /api/system 整段在 ApiPermGuard 的 EXEMPT 里而**不用于接口收口**，
             // 授权口径是角色（ClearController 类级 admin|super_admin；全库清空仅 super_admin）。
             {908L, 9L, "清空本公司数据", "menu", "/system/clear-data", "SystemClearData", "Delete", 8},
-            // ==================== 经营分析（目录 10）：原「财务分析」5 个 Tab 拆分 + 新增销售/客户分析 ====================
-            // 顺序（2026-09-15 用户定稿「方案X」）：经营概览 → 销售分析 → 客户分析 → [进货分析(1007 待建)] → 税务分析 → 资金往来
+            // ==================== 经营分析（目录 10）：原「财务分析」5 个 Tab 拆分 + 新增销售/客户/产品分析 ====================
+            // 顺序（2026-09-15 用户定稿「方案X」，2026-10-02 插入「产品分析」后为）：
+            //   经营概览 → 销售分析 → 客户分析 → 产品分析 → 进货分析 → 税务分析 → 资金往来
+            //   （产品分析的位置按 2026-10-02 用户口径「放在客户分析之后」；首页「经营分析」面板的快捷入口与守卫
+            //    verify-dashboard-tab-menu.ps1 要求「面板按钮 == 本目录子菜单、逐项同序」⇒ 前端必须同步加第 7 颗按钮）
             {1001L, 10L, "经营概览", "menu", "/analysis/overview", "AnalysisOverview", "DataLine", 1},
             // 2026-09-15：原 1002「利润表」(/analysis/profit) 已按用户要求整体下线（页面/路由/接口/菜单均已删除）
             // 销售分析：销售额趋势 + 产品/仓库排行，行可下钻到销售单明细
             {1005L, 10L, "销售分析", "menu", "/analysis/sale", "AnalysisSale", "Sell", 2},
             // 客户分析：客户销售额排行 + 欠款/账期，行可下钻到该客户的销售单
             {1006L, 10L, "客户分析", "menu", "/analysis/customer", "AnalysisCustomer", "UserFilled", 3},
+            // 产品分析（2026-10-02 用户要求新增；位置按用户口径「客户分析之后」= 第 4 位）：
+            //   **净额口径**（净销量 / 净销售额 / 毛利 = 销售 − 退货，销售与退货各按自己的建单日归期）
+            //   + 4 张产品饼图 + 排行表可下钻到该产品的销售单 / 退货单明细。
+            //   页面码 analysis:product 同时是接口码（ApiPermGuard.RULES 的 /api/product/analysis 段）。
+            //   路由 /analysis/product → views/analysis/product.vue；下钻 /analysis/product/detail（operate 页，不入菜单）。
+            {1008L, 10L, "产品分析", "menu", "/analysis/product", "AnalysisProduct", "PieChart", 4},
             // 进货分析（2026-09-15 新增）：区间采购 KPI（采购金额/采购退货/净采购额/采购单数）+ 趋势 + 单据明细下钻
-            {1007L, 10L, "进货分析", "menu", "/analysis/purchase", "AnalysisPurchase", "ShoppingCart", 4},
-            {1004L, 10L, "税务分析", "menu", "/analysis/tax", "AnalysisTax", "Stamp", 5},
+            // 2026-10-02：因「产品分析」插在第 4 位 ⇒ 本项及其后各项 sort_order 顺延 1 位（菜单顺序＝侧栏顺序）
+            {1007L, 10L, "进货分析", "menu", "/analysis/purchase", "AnalysisPurchase", "ShoppingCart", 5},
+            {1004L, 10L, "税务分析", "menu", "/analysis/tax", "AnalysisTax", "Stamp", 6},
             // 资金往来（2026-09-15 由「资金与往来」改名）：资金趋势 + 应收应付账龄 + 主体往来统计
-            {1003L, 10L, "资金往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 6},
+            {1003L, 10L, "资金往来", "menu", "/analysis/cash", "AnalysisCash", "Wallet", 7},
         };
         // P1（2026-09-30 未上线清理）：此处原来会"确保 customized 列存在"（F8-21 的存量库补列）——
         // 该列已由 db/migration/V1__base.sql 声明，启动期不再做 DDL（缺列由 assertSchemaReady() 直接报错）。
@@ -844,6 +854,8 @@ public class DataInitializer {
                 {1005L, "analysis:sale"},
                 {1006L, "analysis:customer"},
                 {1007L, "analysis:purchase"},
+                // 产品分析（2026-10-02 新增）：接口码 = 页面码，二者同源（改一处必须同步改另一处）
+                {1008L, "analysis:product"},
                 // ===== 物料仓库（目录 11）=====
                 {406L, "outsource:delivery"},
                 {407L, "outsource:other-io"},
@@ -964,7 +976,7 @@ public class DataInitializer {
                 702L, 703L, 704L, 705L, 706L, 711L, 712L, 713L,
                 418L,
                 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L,
-                1001L, 1003L, 1004L, 1005L, 1006L, 1007L,
+                1001L, 1003L, 1004L, 1005L, 1006L, 1007L, 1008L,
                 901L, 902L, 903L, 904L, 905L, 906L, 907L, 908L));
         // 研发工程师：项目研发 + BOM + 基础产品（2 基础数据 = 101 产品管理 / 108 模版管理 的父目录）
         // 108 模版管理（内含阶段模板）：阶段模板本是研发在用，2026-09-15 随两页合并一并补授
@@ -1000,6 +1012,23 @@ public class DataInitializer {
         // 注：经营分析自 2026-09-15 起**仅管理者可见**，故不再授予 finance
         assignRoleMenus("finance", Arrays.asList(
                 1L, 2L, 8L, 801L, 802L, 803L, 804L, 805L, 806L, 807L, 809L, 810L, 811L, 101L));
+
+        // 存量库幂等补授（2026-10-02）：1008「产品分析」是新增菜单 —— assignRoleMenus 只在角色
+        // 「尚无任何菜单」时才写入 ⇒ 存量库必须单独补授，否则已有角色看不到它（同 108 / 11 / 418 的做法）。
+        // 授权范围：经营分析整组自 2026-09-15 起**仅管理员可见**（sales / dev_engineer / finance 均被显式排除）
+        // ⇒ 本次只补授 admin；父目录 10 已在 admin 的 assignRoleMenus 列表里，不会出现"父目录未授权整组丢弃"。
+        try {
+            int granted = jdbcTemplate.update(
+                    "INSERT IGNORE INTO sys_role_menu (role_id, menu_id) " +
+                    "SELECT r.id, 1008 FROM sys_role r WHERE r.role_code = 'admin'");
+            if (granted > 0) log.info("已补授 1008「产品分析」菜单给 {} 个角色", granted);
+            // 同时写进「角色→菜单计划」表（F8-22 的**唯一声明处**）：新公司克隆出来的角色靠它的差集重放自动补齐。
+            // 计划表只在**表空**时灌一次快照 ⇒ 之后新增的菜单必须显式登记（实测：418「物料移仓」在计划表里有行，
+            // 本次同样补 1008，避免"新公司的 admin 看不到产品分析"）。
+            jdbcTemplate.update("INSERT IGNORE INTO sys_role_menu_plan (role_code, menu_id) VALUES ('admin', 1008)");
+        } catch (Exception e) {
+            log.warn("补授产品分析菜单异常: {}", e.getMessage());
+        }
 
         // 存量库幂等补授：上面的 assignRoleMenus **只在角色「尚无任何菜单」时才写入**，
         // 因此新增菜单不会自动补进已有角色 → 这里单独把 108「模版管理」补授给

@@ -57,7 +57,9 @@ if ($tokens -match '--el-font-size-extra-small:\s*var\(--app-font-base\)') { Ok 
 $pages = @(
   '/outsource/order', '/outsource/material-order', '/outsource/order/delivery', '/outsource/material-order/delivery',
   '/inventory/sale', '/system/user', '/outsource/order/detail/23', '/outsource/order/close/23',
-  '/dashboard', '/analysis/cash', '/analysis/overview'
+  '/dashboard', '/analysis/cash', '/analysis/overview',
+  # 2026-10-02 新增「产品分析」（经营分析目录第 4 项）：本页同时有 表格 + 折线图 + 饼图 + stat-value.sm 卡
+  '/analysis/product'
 )
 foreach ($p in $pages) {
   OpenFresh ($base + $p)

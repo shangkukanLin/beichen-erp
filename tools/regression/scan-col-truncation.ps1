@@ -99,6 +99,7 @@ $routes = @(
   '/analysis/tax',
   '/analysis/sale',
   '/analysis/customer',
+  '/analysis/product',
   '/analysis/purchase'
 )
 if ($Only -ne '') { $routes = @($routes | Where-Object { $_ -match $Only }) }
