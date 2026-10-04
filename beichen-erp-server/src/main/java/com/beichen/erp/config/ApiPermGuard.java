@@ -193,7 +193,10 @@ public class ApiPermGuard {
         rule("/api/inventory/material-move", "stock:material-move");
         // ===== 委外加工 =====
         // 401 加工订单页的「交货」页签会写交货记录 ⇒ 与 412 成品收货页共用同一控制器，两码任一即可
-        rule("/api/outsource/order-delivery", "outsource:order-delivery", "outsource:order");
+        // 2026-10-03（三级菜单合并成一页两个 TAB）：419「加工售后」合并页**同时**读本前缀（工厂售后台账）
+        // 与 /api/outsource/return-order（客户售后维修单）⇒ 两前缀**互列对方的码**（any-of，与 196/199/207
+        // 的"一控制器多页"同范式）；否则合并页会被 audit-frontend-api-crosspage 判跨页读。
+        rule("/api/outsource/order-delivery", "outsource:order-delivery", "outsource:order", "outsource:return-order");
         // 物料订单控制器被**两个页面**合法共用：401 物料订单（列表/详情）+ 415 物料收货
         // （待收货物料订单列表页 `outsource/material-order/delivery`）⇒ 两码任一即可。
         // 2026-09-19 期 3：这是"一控制器多页"的显式登记（不再靠共享只读白名单兜底）。

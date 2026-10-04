@@ -237,12 +237,17 @@
           <el-button v-if="hasMenu['OutsourceOrder']" type="primary" size="small" text @click="$router.push('/outsource/order')">加工订单</el-button>
           <!-- 加工收退 / 物料收退：2026-09-16 由订单详情页签移出成独立菜单页（顺序与左侧栏一致）；
                2026-09-28 用户口径：「成品收货」文案改「加工收货」；**2026-09-29 再改「加工收退」/「物料收退」**
-               （该页既收货也退货 ⇒ 名字带上"退"；只改文案，功能不变） -->
-          <el-button v-if="hasMenu['OutsourceOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/order/delivery')">加工收退</el-button>
-          <el-button v-if="hasMenu['OutsourceReturnOrder']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工退货</el-button>
+               （该页既收货也退货 ⇒ 名字带上"退"；只改文案，功能不变）；
+               **2026-10-03 用户口径改回「加工收货」/「物料收货」**（按钮中文是**写死**的，改名必须同步这里 ——
+               菜单名走 DB 是被动生效的，首页快捷入口不读 DB 的名字） -->
+          <el-button v-if="hasMenu['OutsourceOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/order/delivery')">加工收货</el-button>
+          <!-- 加工售后 / 物料售后（2026-10-03 三级菜单合并）：gate 从**已下线**菜单 408/411 的 route_name
+               （OutsourceReturnOrder / OutsourceMaterialReturn —— 它们 visible=0，按钮很可能一直没渲染）
+               换到新的合并页 route_name；文案与左侧栏菜单名逐字对齐（guard 要求"按钮 == 目录可见子节点"）。 -->
+          <el-button v-if="hasMenu['OutsourceAfterSale']" type="primary" size="small" text @click="$router.push('/outsource/return-order')">加工售后</el-button>
           <el-button v-if="hasMenu['OutsourceMaterialOrder']" type="primary" size="small" text @click="$router.push('/outsource/material-order')">物料订单</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/material-order/delivery')">物料收退</el-button>
-          <el-button v-if="hasMenu['OutsourceMaterialReturn']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料退货</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialOrderDelivery']" type="primary" size="small" text @click="$router.push('/outsource/material-order/delivery')">物料收货</el-button>
+          <el-button v-if="hasMenu['OutsourceMaterialAfterSale']" type="primary" size="small" text @click="$router.push('/outsource/material-return')">物料售后</el-button>
         </div>
       </el-tab-pane>
 
@@ -1001,8 +1006,8 @@ function checkUserMenus() {
     // 研发管理（目录 3）
     'DevProject', 'DevMaterial', 'DevScreenModel',
     // 委外加工（目录 4）
-    'OutsourceOrder', 'OutsourceOrderDelivery', 'OutsourceReturnOrder',
-    'OutsourceMaterialOrder', 'OutsourceMaterialOrderDelivery', 'OutsourceMaterialReturn',
+    'OutsourceOrder', 'OutsourceOrderDelivery', 'OutsourceAfterSale',
+    'OutsourceMaterialOrder', 'OutsourceMaterialOrderDelivery', 'OutsourceMaterialAfterSale',
     // 物料仓库（目录 11）
     'InventoryMaterialMove', 'OutsourceMaterialStock', 'OutsourceMaterialStockLog',
     'OutsourceMaterialStockTake', 'OutsourceStockLoss', 'OutsourceOtherIo',

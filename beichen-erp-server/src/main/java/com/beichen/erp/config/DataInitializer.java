@@ -395,10 +395,12 @@ public class DataInitializer {
             // 加工收退（2026-09-16 立，原名「成品收货」；2026-09-28 文案改「加工收货」；
             // **2026-09-29 用户口径再改「加工收退」** —— 该页既有**收货**也有**退货**（行内「退货」= 加工退货红冲，
             // 关联退货叶子下线后这里是唯一入口），故名字带上"退"；**只改文案，页面与功能不变**）：
+            // **2026-10-03 用户口径改回「加工收货」**（原话「委外加工加工收退…改为加工收货」，只改文案，
+            // 与物料侧 415 一并改；仍只动展示名 ⇒ id/perms/路由/组件全不变）。
             // 原「加工订单详情 → 交货管理」页签**移出**独立成菜单页 —— 页面按「生产中｜已结单」两个页签列加工单，
             // 点「收货」一步收货 / 行内「退货」发起加工退货 / 点单号进详细页。
             // id 412 复用 2026-09-16 下线的「交货信息」总览页旧行（**必须同时从下方 visible=0 名单移除**）
-            {412L, 4L, "加工收退", "menu", "/outsource/order/delivery", "OutsourceOrderDelivery", "Van", 2},
+            {412L, 4L, "加工收货", "menu", "/outsource/order/delivery", "OutsourceOrderDelivery", "Van", 2},
             // 加工售后（2026-09-17 立，原名「加工退货」目录；**2026-09-29 用户口径改名「加工售后」** ——
             // 目录下恰好是"工厂责任/我方责任"两种售后，与"收退"里的加工退货（有单红冲）不是一回事）。
             // 2026-09-27 用户口径：二级改**目录** 419，把原「一个页面 3 页签」拆成 3 个三级叶子；
@@ -420,12 +422,20 @@ public class DataInitializer {
             //    客户售后单在 /api/outsource/return-order 前缀下（421）—— 见 ApiPermGuard.RULES。
             //  ⚠️ 411 是**改父级**（4 → 423）而非新增行：syncMenus 的 upsert 会更新 parent_id，
             //    存量库的角色授权因此不丢（新叶子用下方"从旧叶子继承"的幂等补授覆盖）。
-            {419L, 4L, "加工售后", "catalog", "", "", "CircleClose", 3},
-            {420L, 419L, "工厂售后", "menu", "/outsource/return-order/unlinked", "OutsourceReturnOrderUnlinked", "Files", 2},
+            // **2026-10-03 用户口径（本次）**：三级菜单不要了 ⇒ 419 由 **catalog 变 menu**（自身可点，
+            // 指向合并页 `/outsource/return-order`），原两个叶子 420/421 置 visible=0 保号（见下方下线名单）。
+            // 只改"组织形态"：id / perms(outsource:order-delivery) / sort 3 不变；前端把"按 path 判叶子"
+            // 改成"页内两个 TAB（工厂售后｜客户售后）"。
+            {419L, 4L, "加工售后", "menu", "/outsource/return-order", "OutsourceAfterSale", "CircleClose", 3},
+            // 420「工厂售后」/ 421「客户售后」已于 **2026-10-03** 按用户口径（"三级菜单不要了，合并成一页两个 TAB"）
+            //   整体下线：与 408/411/422 同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），改为在下方统一置
+            //   visible=0，**保留行与角色授权**便于回滚。两叶子的 path 在前端保留为**重定向**（带 ?tab= 预选），
+            //   老书签不吃 403；其 perms 由 419 承担（接口前缀的读隔离见 ApiPermGuard 的互列说明）。
+            // {420L, 419L, "工厂售后", "menu", "/outsource/return-order/unlinked", "OutsourceReturnOrderUnlinked", "Files", 2},
             // 2026-09-27（由 ui-e2e-1-nav 的"标签栏不得同名"不变量抓出）：加工侧与物料侧都有维修退货 ⇒
             // 两处同名会让顶部**标签栏出现两个「维修退货」**（用户无从区分）⇒ 各自带对象前缀去重；
             // 2026-09-29 用户口径：加工侧叶子改「客户售后」（物料侧那条仍是物料维修返回，不受影响）。
-            {421L, 419L, "客户售后", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
+            // {421L, 419L, "客户售后", "menu", "/outsource/return-order/repair", "OutsourceReturnOrderRepair", "Tools", 3},
             // 422「加工返回单」已于 2026-09-27 按用户要求下线（「多余了，改在详情里登记返回」）：
             //   与 104/302/303/405/406/409/503/602/701 同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），
             //   改为在下方统一置 visible=0，**保留行与角色授权**便于回滚；
@@ -435,12 +445,14 @@ public class DataInitializer {
             // 与加工侧 412「加工收退」同范式：该页与详细页既有**收货**也有**退货**
             // （详细页工具栏「物料退货」+ 收货记录行内「新增退货」，均为 RECEIVE_RETURN 草稿），故名字带上"退"；
             // **只改文案，id/path/perms/组件均不变**，角色授权与旧书签都不受影响）：
+            // **2026-10-03 用户口径改回「物料收货」**（原话「物料收退改为物料收退收货」，经确认为「物料收货」——
+            // 与加工侧「加工收货」对称；同样只动展示名）。
             // 原「物料订单详情 → 交货管理」页签**移出**独立成菜单页 —— 页面按「生产中｜已结单」两个页签列物料订单，
             // 点「收货」进详细页（带 ?add=1 自动弹收货弹窗）；
             // 详细页工具栏 = 新增收货 ｜ 物料退货 ｜ 结单（已结单时显示 反结单）。
             // 注意：**收货/退货业务本身未改**（OrderDeliveryController / OutsourceOrderDeliveryService /
             // MaterialOrderController 的收货、退货、库存、应付、BOM还料逻辑均未动）
-            {415L, 4L, "物料收退", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
+            {415L, 4L, "物料收货", "menu", "/outsource/material-order/delivery", "OutsourceMaterialOrderDelivery", "Van", 5},
             // 物料售后（**2026-09-29 用户口径**「委外加工子菜单『物料退货』改名『物料售后』；关联退料不需要了，
             //   以后关联退料在物料收退做；下面的子菜单改为 工厂维修 + 退货退款」）—— 与加工侧 419「加工售后」同范式：
             //   目录 423 改名「物料售后」（id/type/sort 不变），两个叶子**按类型**分（不再是 关联/无单）：
@@ -454,9 +466,15 @@ public class DataInitializer {
             //     「关联退料需要冲减应付，然后减少该订单的收货数量」）⇒ 411 叶子下线。
             //   两个叶子同 API 前缀 /api/outsource/material-return ⇒ perms 同码；列表口径写死
             //   linked=WITHOUT_ORDER（关联单不再进本模块列表 —— 与加工侧一致，历史关联单仍可从库存流水/应收点进详情）。
-            {423L, 4L, "物料售后", "catalog", "", "", "Refrigerator", 6},
-            {424L, 423L, "工厂维修", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 1},
-            {425L, 423L, "退货退款", "menu", "/outsource/material-return/unlinked", "OutsourceMaterialReturnUnlinked", "Files", 2},
+            // **2026-10-03 用户口径（本次）**：三级菜单不要了 ⇒ 423 由 **catalog 变 menu**（指向合并页
+            // `/outsource/material-return`），原两个叶子 424/425 置 visible=0 保号（见下方下线名单）。
+            // 与加工侧 419 完全同范式的改造。sort 6 不变 ⇒ 侧栏「委外加工」6 项顺序不变。
+            {423L, 4L, "物料售后", "menu", "/outsource/material-return", "OutsourceMaterialAfterSale", "Refrigerator", 6},
+            // 424「工厂维修」/ 425「退货退款」已于 **2026-10-03** 按用户口径（"三级菜单不要了，合并成一页两个 TAB"）
+            //   整体下线：不再 upsert（upsert 会把 visible 刷回 1），改为在下方统一置 visible=0，保留行与授权
+            //   便于回滚；两 path 在前端保留为重定向（带 ?tab= 预选）。与加工侧 420/421 同范式。
+            // {424L, 423L, "工厂维修", "menu", "/outsource/material-return/repair", "OutsourceMaterialReturnRepair", "Tools", 1},
+            // {425L, 423L, "退货退款", "menu", "/outsource/material-return/unlinked", "OutsourceMaterialReturnUnlinked", "Files", 2},
             // 411「关联退料」已于 2026-09-29 下线（用户口径「关联退料不需要了，以后关联退料在物料收退做就行」）：
             //   与加工侧 408「关联退货」同范式 —— 不再 upsert（upsert 会把 visible 刷回 1），
             //   改在下方统一置 visible=0，**保留行与角色授权**便于回滚；
@@ -661,7 +679,7 @@ public class DataInitializer {
         try {
             // 注意：412 不在此列表 —— 2026-09-16 该 id 已被复用为「成品收货」菜单，
             // 若仍置 visible=0，会在上面的 upsert 之后把新菜单立刻隐藏（upsert 在前、置 0 在后）
-            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 408, 411, 422) AND visible = 1");
+            int hidden = jdbcTemplate.update("UPDATE sys_menu SET visible = 0 WHERE id IN (104, 405, 302, 303, 409, 602, 503, 701, 406, 408, 411, 422, 420, 421, 424, 425) AND visible = 1");
             if (hidden > 0) log.info("已下线历史菜单 {} 条（104 阶段模板管理 / 405 加工合同模板 / 302 BOM管理 / 303 图纸文档 / 409 委外加工-供应商管理 / 602 销售业务-客户管理 / 503 进货业务-供货商管理 / 701 成品库存查询 / 406 物料收发单 / 408 关联退货叶子 / 411 关联退料叶子 / 422 加工返回单）", hidden);
         } catch (Exception e) {
             log.warn("下线老菜单异常: {}", e.getMessage());
@@ -748,6 +766,23 @@ public class DataInitializer {
             log.warn("重命名菜单 404/410 异常: {}", e.getMessage());
         }
 
+        // 2026-10-03（用户口径「委外加工 → 加工收退 改为『加工收货』、物料收退 改为『物料收货』」）：
+        // 与上面 603/706/712/705/404 同范式 —— **只改展示名**，id / perms(outsource:order-delivery、
+        // outsource:material-delivery) / route_path / route_name / 组件 **一律不动** ⇒ 不迁权限、不动前端
+        // 菜单白名单（白名单按 path 判定）、不动任何收货/退货业务。
+        // 幂等：仅当值仍是旧名时才更新，重复启动零写入；新库由上面的种子 upsert（同一 id 已写新名）覆盖，
+        // 这里兜住"库里还是旧名"的存量库（含用户在菜单管理页改过名、customized=1 导致 upsert 跳过的情况）。
+        try {
+            int renamedOutRecv = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '加工收货' WHERE id = 412 AND menu_name = '加工收退'");
+            if (renamedOutRecv > 0) log.info("已重命名菜单 412：加工收退 -> 加工收货");
+            int renamedMatRecv = jdbcTemplate.update(
+                    "UPDATE sys_menu SET menu_name = '物料收货' WHERE id = 415 AND menu_name = '物料收退'");
+            if (renamedMatRecv > 0) log.info("已重命名菜单 415：物料收退 -> 物料收货");
+        } catch (Exception e) {
+            log.warn("重命名菜单 412/415 异常: {}", e.getMessage());
+        }
+
         // F3-3（2026-09-18 接口级权限专项）：写页面级接口权限码（幂等）
         initMenuPerms();
     }
@@ -800,10 +835,14 @@ public class DataInitializer {
                 // 2026-09-29：411「关联退料」已下线（visible=0）⇒ 不再写 perms（它的码与 424/425 相同，
                 //   由那两个叶子承担；存量库该行 perms 残留但**不可见即不生效**）；
                 //   424「工厂维修」本次按新口径**恢复为真叶子** ⇒ 重新写 perms。
-                {424L, "outsource:material-return"},
-                {425L, "outsource:material-return"},
-                {420L, "outsource:order-delivery"},
-                {421L, "outsource:return-order"},
+                // 2026-10-03：420/421/424/425 四个叶子已下线（visible=0）⇒ 不再写 perms（不可见即不生效；
+                //   有效权限 = 可见菜单的 perms 集合）。合并页 419 / 423 各自承担一个**主码**：
+                //   419 → **outsource:return-order**（原 421 客户售后的码 —— 选它而不是 412 的
+                //   outsource:order-delivery，是为了守住"可见菜单的权限码唯一"这条守卫：412 仍占着后者。
+                //   合并页同时读两个前缀 ⇒ 跨前缀授权登记在 ApiPermGuard.RULES，不在菜单上写多个码）；
+                //   423 → outsource:material-return（与它吸收的 424/425 同码，物料侧只读本前缀，无需跨前缀登记）。
+                {419L, "outsource:return-order"},
+                {423L, "outsource:material-return"},
                 // 422 已下线（visible=0）：不再写 perms —— 它原先的码与 421 相同，由 421 承担；
                 // 存量库该行的 perms 会残留但**不可见即不生效**（有效权限 = 可见菜单的 perms 集合）。
                 // 424（物料维修退货叶子）已于 2026-09-28 下线（visible=0）：不再写 perms ——

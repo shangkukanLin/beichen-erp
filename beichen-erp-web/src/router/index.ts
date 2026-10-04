@@ -196,15 +196,18 @@ const routes: RouteRecordRaw[] = [
       // 2026-09-29（用户口径「三级菜单关联退货不要了，以后关联退货在加工收货里面退就行」）：
       // 「关联退货」叶子整体下线（菜单行置 visible=0 保号）⇒ 旧地址保留为**重定向**，老书签/外部直链不吃 403
       // （与下方 outsource/return-back 同范式）。有单的加工退货改在「加工收退」发起：列表行内「退货」/收货详细页按钮。
-      { path: 'outsource/return-order', redirect: '/outsource/return-order/unlinked' },
-      { path: 'outsource/return-order/unlinked', name: 'OutsourceReturnOrderUnlinked', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '工厂售后', requiresAuth: true } },
+      // **2026-10-03 用户口径（本次）**：三级菜单不要了 ⇒ 两个叶子合并成一页两个 TAB（工厂售后｜客户售后）；
+      //   父路由 `outsource/return-order` 由"重定向"变成**真页面**（吃菜单 419），两个叶子 path 保留为**重定向**
+      //   并带 `?tab=` 预选（老书签 / 外部直链不吃 403，与下方 outsource/return-back 同范式）。
+      { path: 'outsource/return-order', name: 'OutsourceAfterSale', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '加工售后', requiresAuth: true } },
+      { path: 'outsource/return-order/unlinked', redirect: { path: '/outsource/return-order', query: { tab: 'unlinked' } } },
       // 2026-09-27（用户口径）：新增无单加工退货**由弹窗改独立页面**（含 BOM 快照自动解析/可换版本）
       // 2026-09-28（用户口径「加工退货子菜单的详情/新增标题对齐」）：标题与叶子名逐字对齐
       // 2026-09-29（用户口径改文案）：原「新增无单退货」⇒ **「新增工厂售后」**
       { path: 'outsource/return-order/unlinked/add', name: 'OutsourceReturnOrderUnlinkedAdd', component: () => import('@/views/outsource/return-order/unlinked-add.vue'), meta: { title: '新增工厂售后', requiresAuth: true, operate: true } },
       // 叶子名带对象前缀：加工侧/物料侧都有维修退货，同名会让顶部标签栏出现两个「维修退货」（不可区分）；
       // 2026-09-29 用户口径：加工侧叶子改「客户售后」（物料侧那条仍是物料维修返回，不受影响）
-      { path: 'outsource/return-order/repair', name: 'OutsourceReturnOrderRepair', component: () => import('@/views/outsource/return-order/index.vue'), meta: { title: '客户售后', requiresAuth: true } },
+      { path: 'outsource/return-order/repair', redirect: { path: '/outsource/return-order', query: { tab: 'repair' } } },
       // 2026-09-27（用户口径「加工返回单多余了，和成品维修退货一样在详细里面登记返回就行」）：
       // 该叶子已下线 —— 工厂把货修好送回改在**工厂售后的记录详情页**点「登记返回」办。
       // 旧地址保留为**重定向**（老书签/外部直链不会吃 403），与 dev/bom、outsource/delivery 同范式。
@@ -224,11 +227,14 @@ const routes: RouteRecordRaw[] = [
       //   两叶子共用工作台组件、按 path 判叶子（与加工侧 `/outsource/return-order` 同范式）；
       //   列表口径写死 `linked=WITHOUT_ORDER`（关联单不再进本模块列表 —— 与加工侧一致，
       //   历史关联单仍可从库存流水 / 应收台账点进详情）。菜单在 sys_menu 423 下）
-      { path: 'outsource/material-return', redirect: '/outsource/material-return/unlinked' },
-      { path: 'outsource/material-return/unlinked', name: 'OutsourceMaterialReturnUnlinked', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '退货退款', requiresAuth: true } },
+      // **2026-10-03 用户口径（本次）**：两个叶子合并成一页两个 TAB（工厂维修｜退货退款）；父路由
+      //   `outsource/material-return` 由"重定向"变成**真页面**（吃菜单 423），两个叶子 path 保留为重定向
+      //   （带 ?tab= 预选）。默认 TAB = 工厂维修（= 424 的顺序），`?tab=refund` 即原「退货退款」入口。
+      { path: 'outsource/material-return', name: 'OutsourceMaterialAfterSale', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '物料售后', requiresAuth: true } },
+      { path: 'outsource/material-return/unlinked', redirect: { path: '/outsource/material-return', query: { tab: 'refund' } } },
       // 424 于 2026-09-28 曾下线（当时口径「维修返回只是一种类型」）⇒ **2026-09-29 恢复为真叶子「工厂维修」**
       //   （菜单行 424 同步：从 visible=0 列表移除 + 重新 upsert + 补 perms；旧 redirect 一并去掉）。
-      { path: 'outsource/material-return/repair', name: 'OutsourceMaterialReturnRepair', component: () => import('@/views/outsource/material-return/index.vue'), meta: { title: '工厂维修', requiresAuth: true } },
+      { path: 'outsource/material-return/repair', redirect: { path: '/outsource/material-return', query: { tab: 'repair' } } },
       // 新增/编辑/详情：单据本身（父级）也随目录改名 —— 「委外物料退货」⇒「物料售后」（页内 title 会按类型覆盖）
       { path: 'outsource/material-return/add', name: 'OutsourceMaterialReturnAdd', component: () => import('@/views/outsource/material-return/add.vue'), meta: { title: '新增物料售后', requiresAuth: true, operate: true } },
       { path: 'outsource/material-return/detail/:id', name: 'OutsourceMaterialReturnDetail', component: () => import('@/views/outsource/material-return/detail.vue'), meta: { title: '物料售后详情', requiresAuth: true, operate: true } },
@@ -264,10 +270,11 @@ const routes: RouteRecordRaw[] = [
       // 加工收退（2026-09-16 立，原名「成品收货」；2026-09-28 改「加工收货」；**2026-09-29 用户口径改「加工收退」**
       // —— 该页既收货也退货（行内「退货」= 加工退货红冲））：原「加工订单详情 → 交货管理」页签移出独立成菜单页；
       // 列表按「生产中｜已结单」两个页签列加工单，:id 页是该单的收货详细
-      { path: 'outsource/order/delivery', name: 'OutsourceOrderDelivery', component: () => import('@/views/outsource/order/delivery-list.vue'), meta: { title: '加工收退', requiresAuth: true } },
+      // **2026-10-03 用户口径改回「加工收货」**（纯文案，功能不动；meta.title 同时决定 页头 / 页签 / 浏览器标题）
+      { path: 'outsource/order/delivery', name: 'OutsourceOrderDelivery', component: () => import('@/views/outsource/order/delivery-list.vue'), meta: { title: '加工收货', requiresAuth: true } },
       // 2026-09-24（用户口径）：:id 页标题与列表页**区分开**（原与列表页同名，两个页签分不清）；
       //   详情页 PageShell 不传 title ⇒ 直接吃 meta.title，改这里会一并改掉 页头标题 / 页签 label / 浏览器标题。
-      { path: 'outsource/order/delivery/:id', name: 'OutsourceOrderDeliveryDetail', component: () => import('@/views/outsource/order/delivery.vue'), meta: { title: '加工收退详情', requiresAuth: true, operate: true } },
+      { path: 'outsource/order/delivery/:id', name: 'OutsourceOrderDeliveryDetail', component: () => import('@/views/outsource/order/delivery.vue'), meta: { title: '加工收货详情', requiresAuth: true, operate: true } },
       { path: 'outsource/order/close/:id', name: 'OutsourceOrderClose', component: () => import('@/views/outsource/order/close.vue'), meta: { title: '结单报表', requiresAuth: true, operate: true } },
       { path: 'outsource/material-order', name: 'OutsourceMaterialOrder', component: () => import('@/views/outsource/material-order/index.vue'), meta: { title: '委外物料订单', requiresAuth: true } },
       { path: 'outsource/material-order/add', name: 'OutsourceMaterialOrderAdd', component: () => import('@/views/outsource/material-order/add.vue'), meta: { title: '新增物料订单', requiresAuth: true, operate: true } },
@@ -275,9 +282,10 @@ const routes: RouteRecordRaw[] = [
       { path: 'outsource/material-order/detail/:id', name: 'OutsourceMaterialOrderDetail', component: () => import('@/views/outsource/material-order/detail.vue'), meta: { title: '物料订单详情', requiresAuth: true, operate: true } },
       // 物料收退（2026-09-16 立，原名「物料收货」；**2026-09-29 用户口径改「物料收退」**，与 412「加工收退」同范式）：原「物料订单详情 → 交货管理」页签移出独立成菜单页；
       // 列表按「生产中｜已结单」两页签列物料订单；:id 页是该单的收退详细（收货 / 物料退货 / 结单）
-      { path: 'outsource/material-order/delivery', name: 'OutsourceMaterialOrderDelivery', component: () => import('@/views/outsource/material-order/delivery-list.vue'), meta: { title: '物料收退', requiresAuth: true } },
-      // 2026-09-24（用户口径）：同成品收货侧，:id 页标题改为「物料收退详情」（原先与列表页同名）
-      { path: 'outsource/material-order/delivery/:id', name: 'OutsourceMaterialOrderDeliveryDetail', component: () => import('@/views/outsource/material-order/delivery.vue'), meta: { title: '物料收退详情', requiresAuth: true, operate: true } },
+      // **2026-10-03 用户口径改回「物料收货」**（与加工侧同一口径：纯文案，功能不动）
+      { path: 'outsource/material-order/delivery', name: 'OutsourceMaterialOrderDelivery', component: () => import('@/views/outsource/material-order/delivery-list.vue'), meta: { title: '物料收货', requiresAuth: true } },
+      // 2026-09-24（用户口径）：同成品收货侧，:id 页标题改为「物料收货详情」（原先与列表页同名）
+      { path: 'outsource/material-order/delivery/:id', name: 'OutsourceMaterialOrderDeliveryDetail', component: () => import('@/views/outsource/material-order/delivery.vue'), meta: { title: '物料收货详情', requiresAuth: true, operate: true } },
       // 收货记录详情（2026-09-29 用户口径「物料收退详情的收货记录列表需要有详细，参考加工收退的收货记录详情来做」）：
       // 与加工侧 `/outsource/order/delivery/record/:id` 同构的**只读独立页**（收货记录行内「详细」进入）。
       // ⚠️ 不能写成 `outsource/material-order/delivery/detail/:id` —— 该前缀已被「物料收退详情」的动态 `:id` 占用，

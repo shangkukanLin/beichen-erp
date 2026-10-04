@@ -1,7 +1,11 @@
-﻿# Guard (2026-09-29, user rule): 「物料收退」= 收货 + 物料退货 + 结单/反结单（原名「物料收货」）
+﻿# Guard (2026-09-29, user rule): 「物料收货」= 收货 + 物料退货 + 结单/反结单
+#   沿革：2026-09-16 立名「物料收货」→ 2026-09-29 客户口径改名「物料收退」→
+#         **2026-10-03 用户口径改回「物料收货」**（原话「物料收退改为物料收货」；纯文案）
+#   ⚠️ 本守卫是**精确文案断言**：新名恰好等于它原来的"旧名" ⇒ 下面 jump/oldJump/oldTitle 三个词的角色
+#      全部对调（改名前它会拿新名当旧名，页面明明对了也报 FAIL）。
 #   用户口径：
-#     ① 委外加工子菜单「物料收货」**改名「物料收退」**（只改文案：id 415 / path / perms / 组件全不变）；
-#     ② 「物料收退详情」（/outsource/material-order/delivery/:id）工具栏要有**「物料退货」与「结单」**；
+#     ① 委外加工子菜单**只改展示名**（id 415 / path / perms / 组件全不变 ⇒ 不迁权限、不动前端白名单）；
+#     ② 「物料收货详情」（/outsource/material-order/delivery/:id）工具栏要有**「物料退货」与「结单」**；
 #     ③ 结单 / 反结单**统一收到本页** ⇒ 「物料订单详情」不再有这两个按钮、收货列表「已结单」页签行内也不再「反结单」。
 #   工具栏形态（与后端状态机 + material-order/delivery.vue 的 can* 同口径）：
 #     生产中（不论有无已收量）-> 新增收货 · **物料退货** · 结单
@@ -48,7 +52,15 @@ function SqlExec([string]$q) {
   & $script:MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e $q 2>$null | Out-Null
 }
 function ReadJson($js, $want) {
-  $raw = (EvalJs $js).Replace('\"', '"')
+  # 2026-10-03: `agent-browser eval` 回传的中文在本机被按 GBK 解码（同一坑见 verify-bill-export.ps1:67）
+  # ⇒ 与 zh.json/DB 期望值比较的断言会恒红（实测「物料退货」弹窗标题那条：标题读回来是乱码 ⇒
+  #   `-match '退货'` 永假，而同一弹窗里 ASCII 的「可退 = 20」那条却通过 —— 正是这个根因）。
+  # 修法：JS 先把结果转 base64，本地按 UTF-8 解码。ASCII only.
+  $b64 = ((EvalJs ("btoa(unescape(encodeURIComponent(" + $js + ")))")) -replace '[^A-Za-z0-9+/=]', '')
+  $raw = ''
+  try { $raw = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b64)) }
+  catch { $raw = (EvalJs $js).Replace('\"', '"') }
+  $raw = $raw.Replace('\"', '"')
   $m = [regex]::Match($raw, '\{.*\}')
   if (-not $m.Success) { Bad ("未读到 " + $want + "：" + $raw); return $null }
   return ($m.Value | ConvertFrom-Json)
@@ -56,7 +68,7 @@ function ReadJson($js, $want) {
 # 详情页工具栏形态：一次读全（含跳转按钮文案），避免多次导航
 function Buttons([string]$url, [string]$want) {
   OpenFresh $url
-  return (ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({recv:b.includes('新增收货'),ret:b.includes('物料退货'),fin:b.includes('结单'),reopen:b.includes('反结单'),jump:b.includes('物料收退'),newRet:b.includes('新增退货')});})()" $want)
+  return (ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({recv:b.includes('新增收货'),ret:b.includes('物料退货'),fin:b.includes('结单'),reopen:b.includes('反结单'),jump:b.includes('物料收货'),newRet:b.includes('新增退货')});})()" $want)
 }
 function Confirm() {
   EvalJs "(()=>{const bs=[...document.querySelectorAll('.el-message-box__btns button')];const t=bs.find(x=>(x.innerText||'').indexOf('确定')>=0);if(!t)return 'noconfirm';t.click();return 'confirmed'})()" | Out-Null
@@ -155,19 +167,19 @@ if ($bC) {
   if ($bC.reopen -and -not $bC.fin -and -not $bC.recv) { Ok 'C 已结单：有「反结单」、无「结单」/「新增收货」' } else { Bad ('C 已结单形态不符：' + ($bC | ConvertTo-Json -Compress)) }
 }
 
-# ⑥ 物料订单详情：结单/反结单已统一收到收退详情 ⇒ 本页不得再有；跳转按钮文案 = 「物料收退」
+# ⑥ 物料订单详情：结单/反结单已统一收到收退详情 ⇒ 本页不得再有；跳转按钮文案 = 「物料收货」（2026-10-03 新名）
 OpenFresh ("$base/outsource/material-order/detail/" + $oidA)
-$d6 = ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());const t=document.body.innerText||'';return JSON.stringify({fin:b.includes('结单'),reopen:b.includes('反结单'),jump:b.includes('物料收退'),oldJump:b.includes('物料收货'),oldTitle:(t.indexOf('物料收货')>=0)});})()" '物料订单详情'
+$d6 = ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());const t=document.body.innerText||'';return JSON.stringify({fin:b.includes('结单'),reopen:b.includes('反结单'),jump:b.includes('物料收货'),oldJump:b.includes('物料收退'),oldTitle:(t.indexOf('物料收退')>=0)});})()" '物料订单详情'
 if ($d6) {
   if (-not $d6.fin -and -not $d6.reopen) { Ok '物料订单详情已无「结单」「反结单」（统一收到收退详情）' } else { Bad '物料订单详情仍有「结单」/「反结单」' }
-  if ($d6.jump -and -not $d6.oldJump) { Ok '物料订单详情跳转按钮已改名「物料收退」' } else { Bad ('跳转按钮文案不符：' + ($d6 | ConvertTo-Json -Compress)) }
+  if ($d6.jump -and -not $d6.oldJump) { Ok '物料订单详情跳转按钮已改名「物料收货」' } else { Bad ('跳转按钮文案不符：' + ($d6 | ConvertTo-Json -Compress)) }
 }
 
 # ⑦ 收货列表「已结单」页签：行内不再有「反结单」（改到收退详情办），仍有 收货详细 + 退货
 OpenFresh "$base/outsource/material-order/delivery"
 EvalJs "(()=>{const ts=[...document.querySelectorAll('.page-list .el-tabs__item')];const t=ts.find(x=>(x.innerText||'').indexOf('已结单')>=0);if(t)t.click();return 'ok'})()" | Out-Null
 Start-Sleep -Milliseconds 1900
-$d7 = ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({reopen:b.includes('反结单'),detail:b.includes('收货详细'),ret:b.includes('退货'),rows:document.querySelectorAll('.el-table__body tbody tr').length});})()" '物料收退列表（已结单）'
+$d7 = ReadJson "(()=>{const b=[...document.querySelectorAll('button')].map(x=>x.innerText.trim());return JSON.stringify({reopen:b.includes('反结单'),detail:b.includes('收货详细'),ret:b.includes('退货'),rows:document.querySelectorAll('.el-table__body tbody tr').length});})()" '物料收货列表（已结单）'
 if ($d7) {
   if (-not $d7.reopen) { Ok '收货列表 已结单页签行内已无「反结单」' } else { Bad '收货列表 已结单页签行内仍有「反结单」' }
   if ([int]$d7.rows -ge 1) {
@@ -183,4 +195,4 @@ foreach ($oid in @($oidA, $oidB, $oidC)) {
 $left = SqlOne ("SELECT COUNT(*) FROM outsource_material_order WHERE code LIKE 'MWO-MRR-%-" + $ts + "'")
 if ($left -eq '0') { Ok '夹具已清理干净' } else { Bad ('夹具残留 ' + $left + ' 单') }
 
-if ($global:fail -eq 0) { Write-Output 'RESULT PASS 物料收退：改名 + 详情页 物料退货/结单（订单详情与列表行内已统一收到本页）' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }
+if ($global:fail -eq 0) { Write-Output 'RESULT PASS 物料收货：改名 + 详情页 物料退货/结单（订单详情与列表行内已统一收到本页）' } else { Write-Output ('RESULT FAIL 项数 ' + $global:fail); exit 1 }

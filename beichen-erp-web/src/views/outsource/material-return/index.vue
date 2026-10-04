@@ -38,7 +38,8 @@ import { DocStatus, DocStatusLabel, DocStatusTag, OUTSOURCE_MATERIAL_RETURN_DIRT
 import EntityLinks from '@/components/EntityLinks.vue'
 import { useDomainRefresh } from '@/utils/dataFreshness'
 
-defineOptions({ name: 'OutsourceMaterialReturn' })
+// keep-alive 按组件名匹配 ⇒ 必须与新路由名一致（2026-10-03 三级菜单合并：OutsourceMaterialReturn → OutsourceMaterialAfterSale）
+defineOptions({ name: 'OutsourceMaterialAfterSale' })
 
 const route = useRoute()
 const router = useRouter()
@@ -48,23 +49,32 @@ const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 const query = reactive({ code: '', supplierId: undefined as any })
 
 /**
- * 三级菜单叶子（**2026-09-29 用户口径**：目录改名「物料售后」，「关联退料」下线、其业务改在「物料收退」做，
- * 下面两个子菜单改为 **工厂维修 + 退货退款**，顺序 = 工厂维修在前）—— 与加工侧 `/outsource/return-order`
- * 同范式：本组件被两个叶子共用，按**路由路径**判叶子：
- *  REPAIR 工厂维修 `/outsource/material-return/repair`   （单据类型 REPAIR：送修 → 回厂登记 → 全返回可结案）
- *  REFUND 退货退款 `/outsource/material-return/unlinked` （单据类型 REFUND：物料退回 + 生成对供应商的应收）
+ * 外层 TAB（**2026-10-03 用户口径（本次）：三级菜单不要了** ⇒ 423「物料售后」由目录变**可点菜单页**，
+ * 原两个叶子合并成本页的**两个 TAB**（工厂维修｜退货退款，`?tab=` 可直达）；原**状态页签 + 数量角标**
+ * 改为**下拉筛选 + 列表上方显示合计条数**）—— 与加工侧 `/outsource/return-order` 完全同范式：
+ *  REPAIR 工厂维修 ?tab=repair（默认）单据类型 REPAIR：送修 → 回厂登记 → 全返回可结案
+ *  REFUND 退货退款 ?tab=refund         单据类型 REFUND：物料退回 + 生成对供应商的应收
  *
  * <p>🔖 类型（`returnType`，见 `MaterialReturnType`）：`REPAIR` 工厂维修 / `REFUND` 退货退款 /
  * `ORDER` 订单退料（**2026-09-29 起不再新建**，历史单不在本模块列表 —— 仅能从库存流水/应收台账点进详情）。</p>
  *
- * <p>⚠️ **叶子 = 类型**（不再是 2026-09-27~28 的"关联/无单"）：类型由叶子表达 ⇒ 页面**不再有「类型」页签**；
+ * <p>⚠️ **TAB = 类型**（不再是 2026-09-27~28 的"关联/无单"）：类型由外层 TAB 表达 ⇒ 页面**没有「类型」筛选**；
  * 列表口径写死 `linked=WITHOUT_ORDER`（关联单不进本模块列表，与加工侧一致）。</p>
  */
 type Leaf = 'REFUND' | 'REPAIR'
-const leaf = computed<Leaf>(() => {
-  const p = route.path.replace(/\/$/, '')
-  if (p.endsWith('/repair')) return 'REPAIR'
-  return 'REFUND'
+const LEAF_TABS: Array<{ key: Leaf; label: string }> = [
+  { key: 'REPAIR', label: '工厂维修' },
+  { key: 'REFUND', label: '退货退款' }
+]
+const leafTab = ref<Leaf>(route.query.tab === 'refund' ? 'REFUND' : 'REPAIR')
+const leaf = computed(() => leafTab.value)
+/** 当前 TAB 写回 URL（刷新/分享/前进后退都稳） */
+function syncQuery() {
+  router.replace({ path: '/outsource/material-return', query: { ...route.query, tab: leafTab.value === 'REFUND' ? 'refund' : 'repair' } })
+}
+watch(() => route.query.tab, (t) => {
+  const next: Leaf = t === 'refund' ? 'REFUND' : 'REPAIR'
+  if (next !== leafTab.value) leafTab.value = next
 })
 /** 叶子 → 单据类型（后端 returnType 落参） */
 const leafReturnType = computed(() => (leaf.value === 'REPAIR' ? MaterialReturnType.REPAIR : MaterialReturnType.REFUND))
@@ -79,23 +89,21 @@ const isRepairLeaf = computed(() => leaf.value === 'REPAIR')
  *   两者走后端既有的 `progress=OPEN|RETURNED`（`OutsourceMaterialReturnServiceImpl` 早已实现）⇒ **零后端改动**。
  */
 type TabKey = 'ACTIVE' | 'PENDING' | 'DONE' | 'CANCELLED'
-const TABS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
+/** 状态下拉选项（**按 TAB 各自一套**；「全部」= 清空，2026-10-03 用户口径沿用原页签的选项集） */
+const STATUS_OPTIONS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
   REFUND: [{ key: 'ACTIVE', label: '草稿和已审核' }, { key: 'CANCELLED', label: '已作废' }],
   REPAIR: [{ key: 'PENDING', label: '待返回' }, { key: 'DONE', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }]
 }
-const tabs = computed(() => TABS[leaf.value])
-const activeTab = ref<TabKey>('ACTIVE')
-/** 页签角标：各页签条数（pageSize=1 取 total，零后端改动）；key = 叶子:页签 */
-const tabCounts = reactive<Record<string, number>>({})
-function countKey(tab: TabKey) { return leaf.value + ':' + tab }
-function countOf(tab: TabKey) { return tabCounts[countKey(tab)] }
+const statusOptions = computed(() => STATUS_OPTIONS[leaf.value])
+/** 状态筛选值（原状态页签；`undefined` = 全部） */
+const activeTab = ref<TabKey | undefined>(STATUS_OPTIONS[leafTab.value][0].key)
 /**
  * 列表查询参数（2026-09-29 叶子=类型）：
  * · `returnType` 由**叶子**决定；`linked` 写死 `WITHOUT_ORDER`（关联单不进本模块列表）；
  * · 页签落参：`已作废` ⇒ 状态 CANCELLED；`待返回` ⇒ `progress=OPEN`（**含草稿**）；
  *   `已返回完` ⇒ `progress=RETURNED`（已审核且全部送回，含已结案）；退货退款叶子 ⇒ 状态 DRAFT,AUDITED。
  */
-function listParams(tab: TabKey, pageNum: number, pageSize: number) {
+function listParams(tab: TabKey | undefined, pageNum: number, pageSize: number) {
   const p: any = {
     pageNum, pageSize,
     linked: 'WITHOUT_ORDER',
@@ -105,7 +113,8 @@ function listParams(tab: TabKey, pageNum: number, pageSize: number) {
   if (tab === 'CANCELLED') p.statuses = DocStatus.CANCELLED
   else if (tab === 'PENDING') p.progress = 'OPEN'
   else if (tab === 'DONE') p.progress = 'RETURNED'
-  else p.statuses = [DocStatus.DRAFT, DocStatus.AUDITED].join(',')
+  else if (tab === 'ACTIVE') p.statuses = [DocStatus.DRAFT, DocStatus.AUDITED].join(',')
+  // tab === undefined（下拉清空 = 全部）⇒ 不加状态/进度条件（原 else 兜底会把"全部"错当成"草稿和已审核"）
   return p
 }
 
@@ -144,18 +153,8 @@ async function loadData() {
 function handleTabChange() { pagination.pageNum = 1; loadData() }
 function handleSearch() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.supplierId = undefined; handleSearch() }
-/**
- * 页签角标：各页签条数 —— 每页取 1 条只读 total（零后端改动）。
- * 2026-09-29：叶子=类型 ⇒ 只有「页签」一个维度（退货退款 2 个 / 工厂维修 3 个）。
- */
-async function loadCounts() {
-  for (const t of tabs.value) {
-    try {
-      const r = await request.get<any, any>('/outsource/material-return/page', { params: listParams(t.key, 1, 1) })
-      tabCounts[countKey(t.key)] = Number(r?.total || 0)
-    } catch { tabCounts[countKey(t.key)] = 0 }
-  }
-}
+// 2026-10-03（用户口径）：原页签角标（每状态各发一次 pageSize=1 请求取 total）**已移除** ——
+// 状态下拉选项里带数字会随筛选变化、容易误导；改为列表上方显示当前筛选的合计条数（见模板）。
 
 /** 结案（仅维修退货）：全部送修数量已返回（未返回=0）后确认收尾 */
 async function handleClose(row: any) {
@@ -211,23 +210,26 @@ function handleAdd() {
    新增仍走 /outsource/material-return/add（可带 fromDelivery 等预填）。 */
 function goDetail(row: any) { router.push(`/outsource/material-return/detail/${row.id}`) }
 
-// 叶子切换（点左侧菜单 / 直达 URL）：页签回到**该叶子的第一个**（退货退款=草稿和已审核 / 工厂维修=待返回）
-// ⚠️ 两个叶子的页签集**不同**（工厂维修多「待返回 / 已返回完」）⇒ 必须先重置 activeTab，
-//    否则会停在另一个叶子的 key 上（无对应页签 ⇒ 不高亮 + 查询参数错位）
-watch(leaf, () => {
-  activeTab.value = tabs.value[0].key
+// TAB 切换（页内点 TAB / 直达 URL 带 ?tab=）：状态回到该 TAB 的第一个，并把 TAB 写回地址栏
+// ⚠️ 两个 TAB 的下拉选项集**不同**（工厂维修多「待返回 / 已返回完」）⇒ 必须重置 activeTab，
+//    否则会停在另一个 TAB 的 key 上（下拉里没有该值 ⇒ 显示空白 + 查询参数错位）
+watch(leafTab, (lv) => {
+  syncQuery()
+  activeTab.value = STATUS_OPTIONS[lv][0].key
   pagination.pageNum = 1
-  loadData(); loadCounts()
+  loadData()
 })
 
 // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
 useDomainRefresh('outsourceMaterialReturn', () => {
-    loadData(); loadCounts()
+    loadData()
 }, OUTSOURCE_MATERIAL_RETURN_DIRTY_KEY)
 onMounted(() => {
-  // 页签默认 = 该叶子的第一个（与 watch(leaf) 同口径；不设会出现"高亮与查询参数不匹配"的错位）
-  activeTab.value = tabs.value[0].key
-  loadData(); loadCounts()
+  // 状态默认 = 该 TAB 的第一个（枚举第一条：「工厂维修」=待返回 / 「退货退款」=草稿和已审核）
+  activeTab.value = STATUS_OPTIONS[leafTab.value][0].key
+  // 首次进入即把 TAB 写进地址栏（与"老地址重定向过来的 URL"形态一致）
+  syncQuery()
+  loadData()
 })
 
 </script>
@@ -236,20 +238,18 @@ onMounted(() => {
   <!-- 一页一张卡片（家规）：页签 → 筛选行 → 表格 → 分页 -->
   <div class="page-list">
     <el-card shadow="never">
-      <!-- 页签（**按叶子不同**；2026-09-29 用户口径「工厂维修需要补返回进度页签」）：
-           退货退款 = 草稿和已审核 | 已作废；工厂维修 = **待返回 | 已返回完 | 已作废**
-           （「待返回」含草稿 —— 未审核的单不能在任何页签里消失）。本页无「类型」页签：类型已由叶子表达；
-           挂物料订单的关联退料改在「物料收退」做。标签后带**数量角标**。 -->
-      <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
-        <el-tab-pane v-for="t in tabs" :key="t.key" :name="t.key">
-          <template #label>
-            <span>{{ t.label }}<span v-if="countOf(t.key)" style="margin-left:4px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ countOf(t.key) }}</span></span>
-          </template>
-        </el-tab-pane>
+      <!-- 外层 TAB（2026-10-03 用户口径：三级菜单不要了 ⇒ 工厂维修/退货退款合并到本页做两个 TAB）；
+           原**状态页签 + 数量角标**改为下方筛选行的**状态下拉** + 列表上方显示合计条数 -->
+      <el-tabs v-model="leafTab" style="margin-bottom:8px">
+        <el-tab-pane v-for="t in LEAF_TABS" :key="t.key" :name="t.key" :label="t.label" />
       </el-tabs>
 
-      <!-- 筛选行：叶子 → 类型 + linked；页签 → 状态/返回进度 ⇒ 这里只留单号 + 供应商 -->
+      <!-- 筛选行：TAB → 类型 + linked；状态下拉 → 状态/返回进度 ⇒ 这里留 状态 + 单号 + 供应商 -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <!-- 状态筛选（2026-10-03 用户口径：原状态页签改下拉；清空 = 全部） -->
+        <el-select v-model="activeTab" placeholder="状态（全部）" clearable style="width:158px" @change="handleTabChange">
+          <el-option v-for="o in statusOptions" :key="o.key" :label="o.label" :value="o.key" />
+        </el-select>
         <span v-if="leaf === 'REPAIR'" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">工厂维修单（MRW-）：送供应商维修 → 回厂登记 → 全部返回后结案</span>
         <span v-else style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">退货退款单（MRW-）：物料退回供应商 + 生成对供应商的应收</span>
         <el-input v-model="query.code" placeholder="退货单号" clearable style="width:180px" @keyup.enter="handleSearch" />
@@ -263,7 +263,12 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 业务提示（按叶子）：说清这一页在干什么、后续在哪办、另一类去哪做 -->
+      <!-- 合计条数（2026-10-03 用户口径：替代原页签角标） -->
+      <div style="margin-bottom:8px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">
+        共 {{ pagination.total }} 条
+      </div>
+
+      <!-- 业务提示（按 TAB）：说清这一页在干什么、后续在哪办、另一类去哪做 -->
       <el-alert v-if="leaf === 'REPAIR'" type="info" :closable="false" show-icon style="margin-bottom:8px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">

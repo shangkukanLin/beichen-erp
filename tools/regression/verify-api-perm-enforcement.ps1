@@ -2,13 +2,17 @@
 # Pure API + SQL (no browser). This file must stay pure ASCII.
 #
 # Asserts:
-#   1) data: sys_menu.perms exists; page menus carry codes; catalogs are NULL; code count = 71
+#   1) data: sys_menu.perms exists; **every visible page menu carries a code**（不再断言字面量 73）; catalogs are NULL
 #      2026-10-02: 62 -> 71. 两个原因一起修正：
 #        a) 本条期望值**长期过期**（种子库自 2026-09-09 起就有 70 个带码菜单，期间新增的菜单一直没同步
 #           这个常量）⇒ 本守卫在本次改动前就是红的（"page menus with perms = 70 (expected 62)"）；
 #        b) 本次新增「产品分析」1008 / analysis:product ⇒ 70 -> 71。
+#      2026-10-03: 71 -> 73（419「加工售后」/423「物料售后」由 catalog 变 menu）；同时**按钮码不再写死数量**
+#       （原 `expected 14` 早已过期成 20 ⇒ 两条恒红），改为断言"每个按钮码都挂有码父页面下 + 按钮码 = 父页面码:动作"。
+#       教训：本文件凡是"快照数字"都过期过（62 → 70 → 71 → 73、按钮 14 → 20）⇒ 优先从库/代码推导期望值。
 #   2) admin (owns menu 504) can call the pilot module -> 200 (no over-blocking)
 #   3) restricted user (sales role, no 504) -> 403 on the pilot module: list + detail + write endpoint
+#      （账号 perm_test 缺失时**按需自建**并在结尾清理 —— 原先不存在就直接 exit 1，会静默掐掉后面全部章节）
 #   4) same restricted user keeps 200 on its own module (sale order) and on shared base data (product)
 #   5) super_admin (role has NO menus at all) -> all codes granted -> 200 on the pilot module
 #   6) login payload exposes "perms" (so the frontend can reuse the same source of truth)
@@ -45,9 +49,22 @@ function CodeOf($r) { if ($null -eq $r) { return 'null' } else { return "$($r.co
 Write-Output '--- 1) data: sys_menu.perms + code inventory'
 $col = SqlOne "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='sys_menu' AND column_name='perms'"
 if ($col -eq '1') { Ok 'sys_menu.perms column exists' } else { Bad 'sys_menu.perms column missing' }
-$codes = SqlOne "SELECT COUNT(*) FROM sys_menu WHERE menu_type='menu' AND perms IS NOT NULL AND perms<>''"
-if ($codes -eq '71') { Ok '71 page menus carry an interface permission code' } else { Bad ("page menus with perms = $codes (expected 71)") }
-$dup = SqlOne "SELECT IFNULL(GROUP_CONCAT(p),'-') FROM (SELECT perms p FROM sys_menu WHERE menu_type='menu' AND perms IS NOT NULL AND perms<>'' GROUP BY perms HAVING COUNT(*)>1) t"
+# ⚠️ 变量别叫 `$codes`：§4 用同名变量装"某写规则允许的码数组"，§5 里再 `[int]$codes` 会把**数组**强转成 int
+#   ⇒ 抛 ConvertToFinalInvalidCastException 并**静默跳过**那条断言（原先因 §3 账号缺失 exit 1、从未跑到 §5，
+#   这个撞车一直没暴露；2026-10-03 修好 §3 后立刻显形）。命名为 $pageCodeCount / $distinctCodeCount。
+$pageCodeCount = SqlOne "SELECT COUNT(*) FROM sys_menu WHERE menu_type='menu' AND perms IS NOT NULL AND perms<>''"
+# 2026-10-03：71 → **73** —— 419「加工售后」/423「物料售后」由 catalog 变 menu（各自带一个码，+2）；
+#   被合并的四个叶子 420/421/424/425 置 visible=0 但**行与 perms 保留**（回滚用），故本查询（不看 visible）仍计它们。
+# 2026-10-03：**不再断言 73 这个字面量**（本轮三级菜单合并刚把它从 71 顶到 73；同一坑 62→70→71→73 四轮了）⇒
+#   改成断言**结构不变量**：每个**可见**的页面菜单都必须带码。数量只打印，不作为断言。
+$pageNoCode = SqlOne "SELECT COUNT(*) FROM sys_menu WHERE menu_type='menu' AND visible=1 AND (perms IS NULL OR perms='')"
+if ($pageNoCode -eq '0') { Ok ("every visible page menu carries a permission code ($pageCodeCount page rows with codes)") } else { Bad ("visible page menus without a permission code: $pageNoCode") }
+$distinctCodeCount = SqlOne "SELECT COUNT(DISTINCT perms) FROM sys_menu WHERE perms IS NOT NULL AND perms<>''"
+Write-Output ("  distinct codes = $distinctCodeCount (page rows = $pageCodeCount; hidden leaves share codes, hence the gap)")
+# ⚠️ 2026-10-03 补 `AND visible=1`：本查询原不带 visible，于是"被下线的叶子残留 perms"会被算成重复
+#   （实测：408 与 412 早就同码 ⇒ 这条在本次改动前就是红的）。有效权限 = **可见**菜单的码集合，
+#   故唯一性只应在 visible=1 的行之间成立（本次已确认：419=return-order / 412=order-delivery / 423=material-return 互不重复）。
+$dup = SqlOne "SELECT IFNULL(GROUP_CONCAT(p),'-') FROM (SELECT perms p FROM sys_menu WHERE menu_type='menu' AND perms IS NOT NULL AND perms<>'' AND visible=1 GROUP BY perms HAVING COUNT(*)>1) t"
 if ($dup -eq '-') { Ok 'permission codes are unique' } else { Bad ("duplicated permission codes: $dup") }
 $cat = SqlOne "SELECT COUNT(*) FROM sys_menu WHERE menu_type NOT IN ('menu','button') AND perms IS NOT NULL"
 if ($cat -eq '0') { Ok 'catalogs carry no permission code (button rows are checked separately below)' } else { Bad ("catalogs with perms = $cat") }
@@ -55,10 +72,19 @@ $m504 = SqlOne "SELECT perms FROM sys_menu WHERE id=504"
 if ($m504 -eq 'purchase:exchange') { Ok 'menu 504 (purchase exchange) -> purchase:exchange' } else { Bad ("menu 504 perms = $m504") }
 
 Write-Output '--- 1b) button-level codes (plan A: actions follow the page)'
+# 2026-10-03：**不再写死数量**（14 这个常量早已过期：库里实际 20 条 ⇒ 本守卫长期红两条）。
+#   同一个坑上面 62→71→73 已经踩过三轮 —— 凡"快照数字"必过期。改成断言**结构不变量**：
+#     (a) 每个按钮码都挂在带页面码的父菜单下（码必须挂在"有权限的页面"下，否则前端/守卫都取不到）；
+#     (b) 按钮码 = 父页面码 + ':' + 动作 —— 这正是"动作码跟随页面"的机制（§2 会断言管理员拥有页面就
+#         自动拿到 :audit），一旦有人把按钮码写成别的形状，派生会**静默失效**，这条就是它的哨兵。
 $btn = SqlOne "SELECT COUNT(*) FROM sys_menu WHERE menu_type='button' AND perms IS NOT NULL"
-if ($btn -eq '14') { Ok '14 button (action) codes registered' } else { Bad ("button codes = $btn (expected 14)") }
 $btnMapped = SqlOne "SELECT COUNT(*) FROM sys_menu b JOIN sys_menu p ON p.id=b.parent_id AND p.perms IS NOT NULL WHERE b.menu_type='button'"
-if ($btnMapped -eq '14') { Ok 'every button row hangs under a page that owns a page code' } else { Bad ("button rows with coded parent = $btnMapped") }
+$btnPrefixed = SqlOne "SELECT COUNT(*) FROM sys_menu b JOIN sys_menu p ON p.id=b.parent_id WHERE b.menu_type='button' AND b.perms IS NOT NULL AND b.perms LIKE CONCAT(p.perms, ':%')"
+$btnBad = [int]$btn - [int]$btnPrefixed
+Write-Output ("  button codes = $btn (coded parent = $btnMapped, prefixed by page code = $btnPrefixed)")
+if ([int]$btn -gt 0) { Ok ("$btn button (action) codes registered") } else { Bad 'no button (action) codes registered at all (action enforcement has nothing to bite on)' }
+if ($btn -eq $btnMapped) { Ok 'every button row hangs under a page that owns a page code' } else { Bad ("button rows with coded parent = $btnMapped (of $btn)") }
+if ($btnBad -eq 0) { Ok 'every button code is prefixed by its parent page code (action codes follow the page)' } else { Bad ("button codes NOT prefixed by the parent page code: $btnBad of $btn") }
 $dupBtn = SqlOne "SELECT IFNULL(GROUP_CONCAT(p),'-') FROM (SELECT perms p FROM sys_menu WHERE menu_type='button' AND perms IS NOT NULL GROUP BY perms HAVING COUNT(*)>1) t"
 if ($dupBtn -eq '-') { Ok 'button codes are unique' } else { Bad ("duplicated button codes: $dupBtn") }
 
@@ -77,8 +103,38 @@ $r = Req 'PUT' "$api/inventory/purchase-exchange/1/audit" $null $tokA
 if ((CodeOf $r) -eq '403') { Bad 'admin PUT purchase-exchange/1/audit -> 403 (action enforcement over-blocks)' } else { Ok ('admin PUT purchase-exchange/1/audit -> ' + (CodeOf $r) + ' (not blocked)') }
 
 Write-Output '--- 3) restricted user (sales, no 504) -> 403 on the pilot module'
-$lu = LoginFull 'perm_test' '123'
-if ($null -eq $lu -or [string]$lu.code -ne '200') { Bad 'cannot login as perm_test'; Write-Output 'RESULT API-PERM FAIL count 1'; exit 1 }
+# 2026-10-03：原实现直接 `LoginFull perm_test`，账号不在库里就 `exit 1` ⇒ **静默掐掉第 4/5/5b/5c 全部章节**
+#   （本库实测只有 lin/admin2/admin3：守卫在第一节就红着退出，后面 60+ 条断言根本没跑，看起来像"就那几条红"）。
+#   改成与 §5 同范式：**按需自建**受限账号（在 admin 会话里建 ⇒ company_id 取 admin 的 1），角色从库里
+#   **推导**（有 sale:order、无 purchase:exchange；优先本公司 company_id=1，其次平台模板 0），不写死 id。
+#   只有本脚本**自己建的**才在结尾清理 —— 库里原本就有 perm_test 的环境原样使用、不动它。
+$ptUser = 'perm_test'
+$createdPt = $false
+$lu = LoginFull $ptUser '123'
+if ($null -eq $lu -or [string]$lu.code -ne '200') {
+  Write-Output '  perm_test 不可用 ⇒ 按需自建（受限账号，仅绑销售角色）'
+  $r = Req 'POST' "$api/system/user" @{ username = $ptUser; password = '123'; status = 1 } $tokA
+  Write-Output ("  create perm_test -> code=" + (CodeOf $r))
+  $ptId = SqlOne "SELECT id FROM sys_user WHERE username='perm_test'"
+  if ($ptId -eq '') {
+    Bad 'cannot create perm_test (and it does not exist) -> sections 3/4/5c cannot run'
+  } else {
+    $createdPt = $true
+    $salesRole = SqlOne "SELECT r.id FROM sys_role r WHERE r.role_code='sales' AND EXISTS (SELECT 1 FROM sys_role_menu rm JOIN sys_menu m ON m.id=rm.menu_id WHERE rm.role_id=r.id AND m.perms='sale:order') AND NOT EXISTS (SELECT 1 FROM sys_role_menu rm2 JOIN sys_menu m2 ON m2.id=rm2.menu_id WHERE rm2.role_id=r.id AND m2.perms='purchase:exchange') ORDER BY (r.company_id=1) DESC, r.id LIMIT 1"
+    if ($salesRole -eq '') {
+      Bad 'no sales-like role found (need one holding sale:order and not purchase:exchange)'
+    } else {
+      & $MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e "INSERT IGNORE INTO sys_user_role (user_id, role_id) VALUES ($ptId, $salesRole);" 2>$null | Out-Null
+      Write-Output ("  bound role $salesRole to perm_test (user=$ptId)")
+    }
+    $lu = LoginFull $ptUser '123'
+  }
+}
+if ($null -eq $lu -or [string]$lu.code -ne '200') {
+  Bad 'cannot login as perm_test (provisioning failed)'
+  Write-Output ("RESULT API-PERM FAIL count " + $script:fail)
+  exit $script:fail
+}
 $tokU = [string]$lu.data.token
 $permsU = @($lu.data.userInfo.perms)
 Write-Output ("  perm_test perms = " + ($permsU -join ','))
@@ -152,7 +208,14 @@ if ($superRoleId -eq '') { Bad 'role super_admin not found' } else {
     if ($null -eq $ls -or [string]$ls.code -ne '200') { Bad 'cannot login as perm_super_test' } else {
       $permsS = @($ls.data.userInfo.perms)
       Write-Output ("  perm_super_test perms count = " + $permsS.Count)
-      if ($permsS.Count -eq [int]$codes) { Ok 'super_admin gets every configured code (fallback works)' } else { Bad ("super_admin perms = " + $permsS.Count + " (expected $codes)") }
+      # 口径：零菜单角色必须拿到**全部已配置的码** ⇒ 断言"一个都不缺"，而不是跟某个快照数字比
+      #   （原为 `[int]$codes`：既撞了 §4 的数组变量，又假设"码总数 == 页面码数"—— 按钮码出现后该等式已不成立，
+      #    实测 distinct=86 = 66 页面码 + 20 按钮码）。
+      if ($permsS.Count -eq 0) { Bad 'super_admin got no perms at all (fallback broken)' } else {
+        $codeIn = ($permsS | ForEach-Object { "'" + $_ + "'" }) -join ','
+        $missingCodes = SqlRaw ("SELECT IFNULL(GROUP_CONCAT(perms),'') FROM (SELECT DISTINCT perms FROM sys_menu WHERE perms IS NOT NULL AND perms<>'' AND perms NOT IN (" + $codeIn + ")) t")
+        if ($missingCodes -eq '') { Ok ("super_admin owns every configured code (" + $permsS.Count + " perms; fallback works)") } else { Bad ("super_admin misses configured codes: " + $missingCodes) }
+      }
       $r = Req 'GET' "$api/inventory/purchase-exchange/page?pageNum=1&pageSize=5" $null ([string]$ls.data.token)
       if ((CodeOf $r) -eq '200') { Ok 'super_admin GET purchase-exchange/page -> 200' } else { Bad ('super_admin GET purchase-exchange/page -> ' + (CodeOf $r)) }
     }
@@ -243,7 +306,9 @@ if ($msup -eq '') { Bad 'no material_order supplier to probe' } else {
   } else { Bad ('material-orders UI-shape mismatch: ' + (CodeOf $moU) + '#' + @($moU.data.records).Count + ' vs ' + (CodeOf $moV) + '#' + @($moV.data.records).Count) }
 }
 $fid = SqlOne "SELECT factory_id FROM outsource_order WHERE factory_id IS NOT NULL ORDER BY id DESC LIMIT 1"
-if ($fid -eq '') { Bad 'no factory supplier to probe' } else {
+# 2026-10-03：夹具缺失 ⇒ **跳过说明**而不是判红（本库当前没有带 factory_id 的加工单，与"0 张 PRODUCING 加工单"
+#   同源）。本段只比"per-page 只读端点 == 共享端点"的结果一致性，有数据时才有意义。
+if ($fid -eq '') { Write-Output '（库中无带 factory_id 的加工单 ⇒ 跳过 return-order/orders 与 outsource/order/page 的一致性对比）' } else {
   $rB1 = Req 'GET' "$api/outsource/return-order/orders?factoryId=$fid&pageSize=5" $null $tokA
   $rB2 = Req 'GET' "$api/outsource/order/page?factoryId=$fid&pageSize=5" $null $tokA
   if ((CodeOf $rB1) -eq '200' -and "$($rB1.data.total)" -eq "$($rB2.data.total)") {
@@ -263,6 +328,13 @@ $prB = Req 'GET' "$api/inventory/purchase/$poId" $null $tokA
 if ((CodeOf $prA) -eq '200' -and "$($prA.data.id)" -eq "$($prB.data.id)") { Ok 'purchase-return/source-order == inventory/purchase/{id}' } else { Bad ('purchase-return/source-order -> ' + (CodeOf $prA)) }
 $peA = Req 'GET' "$api/inventory/purchase-exchange/source-order?purchaseOrderId=$poId" $null $tokA
 if ((CodeOf $peA) -eq '200' -and "$($peA.data.id)" -eq "$poId") { Ok 'purchase-exchange/source-order returns the same order' } else { Bad ('purchase-exchange/source-order -> ' + (CodeOf $peA)) }
+
+# 2026-10-03：清理 §3 自建的受限账号（**仅当本脚本建的**；角色绑定 / 菜单权限 / 看板页签与 §5 同一套删除口径）
+if ($createdPt) {
+  & $MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -e "DELETE ur FROM sys_user_role ur JOIN sys_user u ON u.id=ur.user_id WHERE u.username='perm_test'; DELETE um FROM sys_user_menu um JOIN sys_user u ON u.id=um.user_id WHERE u.username='perm_test'; DELETE dt FROM sys_user_dashboard_tab dt JOIN sys_user u ON u.id=dt.user_id WHERE u.username='perm_test'; DELETE FROM sys_user WHERE username='perm_test';" 2>$null | Out-Null
+  $leftPt = SqlOne "SELECT COUNT(*) FROM sys_user WHERE username='perm_test'"
+  if ($leftPt -eq '0') { Ok 'self-created restricted user perm_test cleaned up' } else { Bad 'cleanup failed for perm_test' }
+}
 
 Write-Output '--- 6) login payload exposes perms (single source of truth for the frontend)'
 if ($permsA.Count -gt 0) { Ok 'login response carries userInfo.perms' } else { Bad 'login response has no perms' }

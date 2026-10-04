@@ -66,7 +66,14 @@ $script:locBad = 0
 # tables read "No Data" and the date panel read English months. Checked on every page of this sweep.
 # NOTE: this file is ASCII-only on purpose (PS 5.1 mangles UTF-8 without BOM) => expectations are built with [char].
 $CH_GONG = [string][char]0x5171                                            # "gong" (total label)
-$locJs = "(()=>{const p=document.querySelector('.el-pagination');const t=p?(p.innerText||'').replace(/\s+/g,' ').trim():'';const e=[...document.querySelectorAll('.el-table__empty-text')].map(x=>(x.innerText||'').trim()).filter(x=>x);return JSON.stringify({pg:t,empty:e.slice(0,3)});})()"
+# 2026-10-03: EvalJs 取回的中文在本机被按 GBK 解码（同一坑已记录在 verify-bill-export.ps1:67）⇒ 探针必须回 base64。
+# 原实现拿返回值直接比 $CH_GONG，永远不相等 ⇒ localeBad 恒等于页面数，这个检查既刷不出"真中文"，
+# 也就永远抓不到它本该守的回归（语言包丢失 => 分页/空态变英文）。ASCII only.
+function Dec([string]$b) {
+  if ([string]::IsNullOrEmpty($b)) { return '' }
+  try { return [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($b)) } catch { return '?' }
+}
+$locJs = "(()=>{const B=s=>btoa(unescape(encodeURIComponent(s||'')));const p=document.querySelector('.el-pagination');const t=p?(p.innerText||'').replace(/\s+/g,' ').trim():'';const e=[...document.querySelectorAll('.el-table__empty-text')].map(x=>B((x.innerText||'').trim())).filter(x=>x);return JSON.stringify({pg:B(t),empty:e.slice(0,3)});})()"
 
 # breadcrumb items + tab labels of the layout top bar
 $navJs = "(()=>{const vis=e=>e.getClientRects().length>0;const bc=document.querySelector('.el-breadcrumb');const parts=bc?[...bc.querySelectorAll('.el-breadcrumb__item')].map(e=>(e.innerText||'').trim()):[];const tb=[...document.querySelectorAll('.tab-bar .tab-item .tab-label')].filter(vis).map(e=>(e.innerText||'').trim());return JSON.stringify({bc:parts,tabs:tb})})()"
@@ -95,9 +102,10 @@ foreach ($r in $routes) {
   $locRaw = EvalJs $locJs
   $loc = $null; try { $loc = $locRaw | ConvertFrom-Json } catch { }
   if ($loc) {
-    if ($loc.pg -and ($loc.pg -notmatch [regex]::Escape($CH_GONG))) { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: pagination is not Chinese -> ' + $loc.pg) }
-    if ($loc.pg -match 'Total') { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: pagination still shows Total -> ' + $loc.pg) }
-    foreach ($etxt in @($loc.empty)) { if ($etxt -eq 'No Data' -or $etxt -eq 'No data') { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: table empty state is still English') } }
+    $locPg = Dec $loc.pg
+    if ($locPg -and ($locPg -notmatch [regex]::Escape($CH_GONG))) { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: pagination is not Chinese -> ' + $locPg) }
+    if ($locPg -match 'Total') { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: pagination still shows Total -> ' + $locPg) }
+    foreach ($etxt in @($loc.empty)) { $ev = Dec $etxt; if ($ev -eq 'No Data' -or $ev -eq 'No data') { $script:locBad++; Write-Host ('BAD ' + $r + ' locale: table empty state is still English') } }
   }
 
   # regression class: the same page with a query string must keep the identical breadcrumb
@@ -146,7 +154,7 @@ $zSort = B64 (ZH 'menu_sale_sort')
 $clickRes = EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const K=T('$zSort');const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.tab-bar .tab-item')].filter(e=>vis(e)&&(((e.querySelector('.tab-label')||{}).innerText)||'').trim()===K)[0];if(!it)return 'NOTAB';it.click();return 'OK'})()"
 Start-Sleep -Milliseconds 2300
 $urlBack = EvalJs 'String(location.pathname + location.search)'
-$inner = EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(e=>vis(e)&&e.classList.contains('is-active'))[0];return it?(it.innerText||'').trim():'NONE'})()"
+$inner = Dec (EvalJs "(()=>{const B=s=>btoa(unescape(encodeURIComponent(s||'')));const vis=e=>e.getClientRects().length>0;const it=[...document.querySelectorAll('.el-tabs__item')].filter(e=>vis(e)&&e.classList.contains('is-active'))[0];return it?B((it.innerText||'').trim()):''})()")
 $snapT = NavSnap
 $cntAfter = [int](EvalJs $tabCountJs)
 $bcT = @($snapT.bc).Count

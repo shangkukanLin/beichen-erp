@@ -1,6 +1,8 @@
 <script setup lang="ts">
 /**
- * 委外加工售后（2026-09-29 用户口径：目录「加工售后」＝下辖 **2 个三级叶子**，按路由路径判定叶子）：
+ * 委外加工售后（**2026-10-03 用户口径（本次）：三级菜单不要了** ⇒ 419「加工售后」由目录变**可点菜单页**，
+ * 原两个叶子合并成本页的**两个 TAB**（工厂售后｜客户售后，`?tab=` 可直达）；原**状态页签**
+ * （待返回/已返回完/已作废）改为**下拉筛选**（可清空 = 全部），页签角标一并改为列表上方显示总数）：
  *  **工厂售后**（原「无单退货」，GTW-）= **工厂责任** —— 工厂发来的货、结单后才发现的问题 ⇒ 工厂负责维修，
  *  修好送回时按实际用料 FIFO 生成**对工厂的赔料应收**（source_bill_type=OUTSOURCE_RETURN_BACK），我方不付钱；
  *  **客户售后**（原「成品维修退货」，REPAIR）= **我方责任** —— 客户退回给我们的售后品 ⇒ 工厂帮我们修，
@@ -54,32 +56,43 @@ const route = useRoute()
 const router = useRouter()
 
 /**
- * 三级菜单叶子：本工作台组件被 **2 个叶子**共用，按路由路径判定当前叶子 —— 避免把 ~700 行已验证的
- * 列表/动作复制 2 份。
- *  UNLINKED 工厂售后     /outsource/return-order/unlinked 页签：待返回 | 已返回完 | 已作废
- *  REPAIR   客户售后     /outsource/return-order/repair   页签：待返回 | 已返回完 | 已作废
- * ⚠️ 2026-09-29 用户口径「关联退货不要了，以后在加工收货（收退）里面退」：**LINKED 关联退货叶子已下线**
- *    （菜单 408 置 visible=0，旧地址 `/outsource/return-order` 在前端路由重定向到「工厂售后」）。
- * ⚠️ 2026-09-27 用户口径「加工返回单多余了」：「加工返回单」叶子已**下线** —— 工厂把货修好送回不再单独开单，
- *    改在**工厂售后的记录详情页**点「登记返回」（`views/outsource/defect-return/detail.vue`），
- *    与「客户售后」详情页的「登记维修返回」同范式（登记即生效 + 逐条撤销）。
- *    旧地址 `/outsource/return-back` 在前端路由里重定向到「工厂售后」，老书签不吃 403。
+ * 外层 TAB（2026-10-03 三级菜单合并）：本工作台组件服务**两个 TAB**，按 `?tab=` + 页内 TAB 驱动 ——
+ * 避免把 ~700 行已验证的列表/动作复制 2 份。
+ *  UNLINKED 工厂售后   ?tab=unlinked（默认）取数：`/outsource/order-delivery/return-defect/page`（台账）
+ *  REPAIR   客户售后   ?tab=repair            取数：`/outsource/return-order/page`（维修退货单）
+ * ⚠️ 原实现按 `route.path.endsWith('/repair')` 判叶子；合并后父路由 `/outsource/return-order` 就是本页
+ *    ⇒ 改由 `?tab=` 驱动；老地址 `/unlinked`、`/repair` 在前端路由里**重定向过来并带上 query**（老书签不断）。
+ * ⚠️ 2026-09-29「关联退货」叶子、2026-09-27「加工返回单」叶子此前已下线（前者业务移到「加工收货」，
+ *    后者改为在工厂售后记录详情页点「登记返回」）—— 与本次合并无关。
  */
 type Leaf = 'UNLINKED' | 'REPAIR'
-const leaf = computed<Leaf>(() => {
-  const p = route.path.replace(/\/$/, '')
-  if (p.endsWith('/repair')) return 'REPAIR'
-  return 'UNLINKED'
+const LEAF_TABS: Array<{ key: Leaf; label: string }> = [
+  { key: 'UNLINKED', label: '工厂售后' },
+  { key: 'REPAIR', label: '客户售后' }
+]
+const leafTab = ref<Leaf>(route.query.tab === 'repair' ? 'REPAIR' : 'UNLINKED')
+const leaf = computed(() => leafTab.value)
+/** 当前 TAB 写回 URL（刷新/分享/前进后退都稳） */
+function syncQuery() {
+  router.replace({ path: '/outsource/return-order', query: { ...route.query, tab: leafTab.value === 'REPAIR' ? 'repair' : 'unlinked' } })
+}
+// 地址栏/前进后退 → TAB 跟随（只在不一致时改，避免与 syncQuery 打转）
+watch(() => route.query.tab, (t) => {
+  const next: Leaf = t === 'repair' ? 'REPAIR' : 'UNLINKED'
+  if (next !== leafTab.value) leafTab.value = next
 })
 
-/** 页签 key：CANCELLED=已作废 PENDING=待返回 DONE=已返回完（原 LINKED 叶子的 ACTIVE「有效单据」已随叶子下线） */
+/**
+ * 状态下拉选项（**按 TAB 各自一套**，2026-10-03 用户口径：原状态页签改下拉，「全部」= 清空）。
+ * key：CANCELLED=已作废 PENDING=待返回 DONE=已返回完（原 LINKED 叶子的 ACTIVE 已随叶子下线）。
+ * 「待返回」含**草稿**（还没送修/还没审核的单不能在任何筛选里消失）；「已返回完」= 已审核且全部送回。
+ */
 type TabKey = 'CANCELLED' | 'PENDING' | 'DONE'
-const TABS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
-  // 「待返回」含**草稿**（还没送修/还没审核的单不能在任何页签里消失）；「已返回完」= 已审核且全部送回
+const STATUS_OPTIONS: Record<Leaf, Array<{ key: TabKey; label: string }>> = {
   UNLINKED: [{ key: 'PENDING', label: '待返回' }, { key: 'DONE', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }],
   REPAIR: [{ key: 'PENDING', label: '待返回' }, { key: 'DONE', label: '已返回完' }, { key: 'CANCELLED', label: '已作废' }]
 }
-const tabs = computed(() => TABS[leaf.value])
+const statusOptions = computed(() => STATUS_OPTIONS[leaf.value])
 /**
  * D-25 ②（2026-09-30）：本文件同时服务两个叶子（`UNLINKED`=工厂售后、`REPAIR`=客户售后），
  * 两叶子的菜单码不同（`outsource:order-delivery` / `outsource:return-order`）⇒ 行内按钮的 `v-perm`
@@ -89,11 +102,9 @@ const tabs = computed(() => TABS[leaf.value])
  * `leaf` 收窄成字面量，三元里的另一分支被判为"无重叠比较"（`TS2367`）。放在 `<script setup>` 里比较
  * `ComputedRef.value` 则没有收窄问题。</p>
  */
-const actionPerm = computed(() => (leaf.value === 'REPAIR' ? 'outsource:return-order' : 'outsource:order-delivery'))
-const activeTab = ref<TabKey>('PENDING')
-/** 页签角标：各页签条数（用 pageSize=1 的轻量请求取 total —— 零后端改动） */
-const tabCounts = reactive<Record<string, number>>({})
-function countOf(key: TabKey) { return tabCounts[leaf.value + ':' + key] }
+const actionPerm = computed(() => 'outsource:return-order')
+/** 状态筛选值（原状态页签；`undefined` = 全部，由下拉的 clearable 产生） */
+const activeTab = ref<TabKey | undefined>(STATUS_OPTIONS[leafTab.value][0].key)
 
 /**
  * 筛选行条件（2026-09-28 用户口径）：三个叶子共用「单号 + 加工厂」两个条件。
@@ -109,8 +120,8 @@ const codePlaceholder = computed(() => {
   return '退货单号（OR-）'
 })
 
-/** 台账（**只有无单**，2026-09-29 关联叶子下线）查询参数：页签决定 status / returnProgress，筛选行决定 code / factoryId */
-function ledgerParams(tab: TabKey, pageNum: number, pageSize: number) {
+/** 台账（**只有无单**，2026-09-29 关联叶子下线）查询参数：状态下拉决定 status / returnProgress，筛选行决定 code / factoryId */
+function ledgerParams(tab: TabKey | undefined, pageNum: number, pageSize: number) {
   const active = [DocStatus.DRAFT, DocStatus.AUDITED].join(',')
   const p: any = {
     page: pageNum, size: pageSize, linked: 'WITHOUT_ORDER',
@@ -119,6 +130,7 @@ function ledgerParams(tab: TabKey, pageNum: number, pageSize: number) {
   if (tab === 'CANCELLED') p.status = DocStatus.CANCELLED
   else if (tab === 'PENDING') { p.status = active; p.returnProgress = 'PENDING' }
   else if (tab === 'DONE') p.returnProgress = 'DONE'
+  // tab === undefined（下拉清空 = 全部）⇒ 不加状态/进度条件，四种状态都列出来
   return p
 }
 
@@ -165,7 +177,7 @@ async function cancelLedger(row: any) {
   try {
     await request.put(`/outsource/order-delivery/${row.id}/cancel`)
     ElMessage.success('已作废')
-    await loadLedger(); await loadCounts()
+    await loadLedger()
   } catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
@@ -220,9 +232,9 @@ const loading = ref(false)
 const list = ref<any[]>([])
 const pagination = reactive({ pageNum: 1, pageSize: 10, total: 0 })
 
-/** 维修退货查询参数：页签 → 进度（OPEN=待返回含草稿 / RETURNED=已返回完 / CANCELLED=已作废） */
-function repairParams(tab: TabKey, pageNum: number, pageSize: number) {
-  // 筛选行条件（单号 / 加工厂）对维修退货叶子同样生效；后端 /outsource/return-order/page 本就有 code / factoryId
+/** 维修退货查询参数：状态下拉 → 进度（OPEN=待返回含草稿 / RETURNED=已返回完 / CANCELLED=已作废） */
+function repairParams(tab: TabKey | undefined, pageNum: number, pageSize: number) {
+  // 筛选行条件（单号 / 加工厂）对维修退货 TAB 同样生效；后端 /outsource/return-order/page 本就有 code / factoryId
   const p: any = {
     pageNum, pageSize, returnType: OutsourceReturnType.REPAIR,
     code: filters.code || undefined, factoryId: filters.factoryId ?? undefined
@@ -230,7 +242,7 @@ function repairParams(tab: TabKey, pageNum: number, pageSize: number) {
   if (tab === 'PENDING') p.progress = 'OPEN'
   else if (tab === 'DONE') p.progress = 'RETURNED'
   else if (tab === 'CANCELLED') p.statuses = DocStatus.CANCELLED
-  else p.statuses = [DocStatus.DRAFT, DocStatus.AUDITED].join(',')
+  // tab === undefined（下拉清空 = 全部）⇒ 不加状态/进度条件
   return p
 }
 
@@ -245,8 +257,8 @@ async function loadData() {
 
 /** 切页签：重置分页并只加载当前叶子的数据（筛选条件已由页签本身表达） */
 function handleTabChange() { resetPages(); loadCurrent() }
-/** 各叶子筛选行的「查询」：带条件重查，页签角标同步刷新（角标要反映筛选后的条数，否则与列表对不上） */
-function handleSearch() { resetPages(); loadCurrent(); loadCounts() }
+/** 筛选行的「查询」：带条件重查（合计条数由列表接口的 total 给出，不需另算角标） */
+function handleSearch() { resetPages(); loadCurrent() }
 /** 筛选行「重置」（2026-09-28）：先清空条件再重查 —— 原先重置与查询同为一个动作，条件根本清不掉 */
 function handleReset() { clearFilters(); handleSearch() }
 function resetPages() { ledgerPage.pageNum = 1; pagination.pageNum = 1 }
@@ -256,26 +268,8 @@ function loadCurrent() {
   return loadLedger()
 }
 
-/**
- * 页签角标（2026-09-27）：各页签条数 —— 每页取 1 条只读 total，零后端改动；
- * 让"还有多少没回来"一眼可见（用户核心诉求）。
- */
-async function loadCounts() {
-  for (const t of tabs.value) {
-    const k = leaf.value + ':' + t.key
-    try {
-      let total = 0
-      if (leaf.value === 'REPAIR') {
-        const r = await request.get<any, any>('/outsource/return-order/page', { params: repairParams(t.key, 1, 1) })
-        total = Number(r?.total || 0)
-      } else {
-        const r = await request.get<any, any>('/outsource/order-delivery/return-defect/page', { params: ledgerParams(t.key, 1, 1) })
-        total = Number(r?.total || 0)
-      }
-      tabCounts[k] = total
-    } catch { tabCounts[k] = 0 }
-  }
-}
+// 2026-10-03（用户口径）：原页签角标（每状态各发一次 pageSize=1 的请求取 total）**已移除** ——
+// 状态改成下拉后，选项里带数字会随筛选变化、容易误导；改为列表上方显示**当前筛选的合计条数**（见模板）。
 
 async function handleAudit(row: any) {
   const tip = row.returnType === OutsourceReturnType.REPAIR
@@ -315,14 +309,14 @@ function handleAdd(type: string) { router.push(`/outsource/return-order/add?retu
  *  （有单的退货记录在「加工收退」里看，那边单号列可点）。 */
 function goReturnDetail(row: any) { router.push(`/outsource/return-order/detail/${row.id}`) }
 
-function reloadCurrent() { loadCurrent(); loadCounts() }
+function reloadCurrent() { loadCurrent() }
 
-// 叶子切换（点左侧菜单 / 直达 URL）：页签回到该叶子的第一个（「待返回」）并加载
-watch(leaf, (lv) => {
-  activeTab.value = TABS[lv][0].key
+// TAB 切换（页内点 TAB / 直达 URL 带 ?tab=）：状态回到该 TAB 的第一个，并把 TAB 写回地址栏
+watch(leafTab, (lv) => {
+  syncQuery()
+  activeTab.value = STATUS_OPTIONS[lv][0].key
   resetPages()
   loadCurrent()
-  loadCounts()
 })
 
 // 详情/新增页数据变动后置脏标志，返回列表时按需刷新；否则保留查询/分页现场
@@ -330,9 +324,11 @@ useDomainRefresh('outsourceReturnOrder', () => {
     reloadCurrent()
 }, OUTSOURCE_RETURN_ORDER_DIRTY_KEY)
 onMounted(() => {
-  activeTab.value = TABS[leaf.value][0].key
+  activeTab.value = STATUS_OPTIONS[leafTab.value][0].key
+  // 首次进入即把 TAB 写进地址栏：直接访问 /outsource/return-order 也会变成 ?tab=unlinked/repair，
+  // 与"老地址重定向过来的 URL"形态一致（刷新/分享/前进后退都稳）
+  syncQuery()
   loadCurrent()
-  loadCounts()
 })
 
 </script>
@@ -341,20 +337,20 @@ onMounted(() => {
   <!-- 一页一张卡片（家规）：页签 → 筛选行（含新增按钮）→ 业务提示 → 表格 → 分页 -->
   <div class="page-list">
     <el-card shadow="never">
-      <!-- 页签按叶子生成（2026-09-27 三级菜单）：标签后带**数量角标**（页签条数），
-           让"还有多少没回来 / 多少已作废"一眼可见；口径见 TABS / loadCounts。 -->
-      <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
-        <el-tab-pane v-for="t in tabs" :key="t.key" :name="t.key">
-          <template #label>
-            <span>{{ t.label }}<span v-if="countOf(t.key)" style="margin-left:4px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ countOf(t.key) }}</span></span>
-          </template>
-        </el-tab-pane>
+      <!-- 外层 TAB（2026-10-03 用户口径：三级菜单不要了 ⇒ 工厂售后/客户售后合并到本页做两个 TAB；
+           原**状态页签 + 数量角标**已改为下方筛选行的**状态下拉** + 列表上方显示合计条数） -->
+      <el-tabs v-model="leafTab" style="margin-bottom:8px">
+        <el-tab-pane v-for="t in LEAF_TABS" :key="t.key" :name="t.key" :label="t.label" />
       </el-tabs>
 
       <!-- 筛选行（2026-09-28 用户口径「查询按钮前面都没有输入框和条件」）：补「单号（模糊）+ 加工厂（下拉）」，
            三个叶子共用这一行（单号前缀不同 ⇒ placeholder 动态提示）；右侧新增按钮随叶子切换（一页一个新增入口）。
            原「（单号 GTW-/GTH-）」文字说明已并入输入框 placeholder，筛选行更紧凑。 -->
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px">
+        <!-- 状态筛选（2026-10-03 用户口径：原状态页签改下拉；清空 = 全部） -->
+        <el-select v-model="activeTab" placeholder="状态（全部）" clearable style="width:158px" @change="handleTabChange">
+          <el-option v-for="o in statusOptions" :key="o.key" :label="o.label" :value="o.key" />
+        </el-select>
         <el-input v-model="filters.code" :placeholder="codePlaceholder" clearable
           style="width:220px" @keyup.enter="handleSearch" />
         <RemoteSelect v-model="filters.factoryId" add-route="/outsource/supplier/manage/add" :fetch="fetchFactories" value-key="id" label-key="name"
@@ -368,8 +364,13 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 业务提示（按叶子）：说清"这一页在干什么 + 单从哪来 + 后续在哪办"（2026-09-29 按用户口径：
-           叶子名与两行的业务语义对齐 —— 工厂售后=工厂责任（赔料应收）/ 客户售后=我方责任（我方付维修费）） -->
+      <!-- 合计条数（2026-10-03 用户口径：替代原页签角标 —— 下拉选项里带数字会随筛选变化、容易误导） -->
+      <div style="margin-bottom:8px;font-size:var(--app-font-xs);color:var(--app-text-secondary)">
+        共 {{ leaf === 'UNLINKED' ? ledgerPage.total : pagination.total }} 条
+      </div>
+
+      <!-- 业务提示（按 TAB）：说清"这一页在干什么 + 单从哪来 + 后续在哪办"（2026-09-29 按用户口径：
+           TAB 名与两行的业务语义对齐 —— 工厂售后=工厂责任（赔料应收）/ 客户售后=我方责任（我方付维修费）） -->
       <el-alert v-if="leaf === 'UNLINKED'" type="info" :closable="false" show-icon style="margin-bottom:8px">
         <template #title>
           <span style="font-size:var(--app-font-xs);line-height:1.5">

@@ -81,7 +81,7 @@ const typeHint = computed(() => {
   }
   if (form.materialOrderId != null && orderStatus.value === MaterialOrderStatus.RECEIVING) {
     return '该物料订单「未结单」—— 2026-09-29 起「订单退料」不再新建 ⇒ 不能在这里退料。'
-      + '请到「物料收退」里该单的收货详细页点「物料退货」（按新口径：冲减该单已收数量 + 冲减应付）。'
+      + '请到「物料收货」里该单的收货详细页点「物料退货」（按新口径：冲减该单已收数量 + 冲减应付）。'
   }
   if (form.materialOrderId != null) {
     return '该订单「已结单」⇒ 可走「退货退款」（物料回源仓 + 生成对供应商的应收）或「工厂维修」（送修 → 回厂登记 → 可结案；填了维修费则生成应付）。'
@@ -224,12 +224,12 @@ async function handleSubmit() {
     ElMessage.warning('请选择关联物料订单（如确实不挂订单，请从「无单退料」叶子新增）'); return
   }
   // 2026-09-29（用户口径「订单退料以后不再新建」）：挂了"未结单"订单不允许在本模块退料 ——
-  //   老口径会自动把它锁成「订单退料」，现改为**拦下并引导**：去「物料收退」该单的收货详细页点「物料退货」
+  //   老口径会自动把它锁成「订单退料」，现改为**拦下并引导**：去「物料收货」该单的收货详细页点「物料退货」
   //   （按新口径冲减该单已收数量 + 冲减应付）。历史 ORDER 单的编辑不受影响（effectiveType=ORDER）。
   //   ⚠️ 本拦截**放在明细校验之前**：这是一条"选错了入口"的硬拦，不该等用户填完数量才报。
   if (form.materialOrderId != null && orderStatus.value === MaterialOrderStatus.RECEIVING
       && effectiveType.value !== MaterialReturnType.ORDER) {
-    ElMessage.error('该物料订单还没结单：「订单退料」已不再新建 —— 请到「物料收退」的收货详细页点「物料退货」')
+    ElMessage.error('该物料订单还没结单：「订单退料」已不再新建 —— 请到「物料收货」的收货详细页点「物料退货」')
     return
   }
   if (!form.fromWarehouseId) { ElMessage.warning('请选择出库源仓'); return }

@@ -65,6 +65,15 @@ $fx = SqlRow "SELECT st.warehouse_id, st.material_id, w.warehouse_name, m.materi
 $whId = [int]$fx[0]; $matId = [int]$fx[1]; $whName = "$($fx[2])"; $matName = "$($fx[3])"
 $supId = [int]$fx[5]; $supName = "$($fx[6])"
 Write-Host ('FIXTURE wh=' + $whId + ' (' + $whName + ') material=' + $matId + ' (' + $matName + ') supplier=' + $supId + ' (' + $supName + ')')
+# 2026-10-03：夹具派不出来（本库没有 GOOD 物料库存 >= 10 的行）时，S2~S6 的"建单→审核→登记维修返回→
+#   反审核→作废"整条链路**无法验证**（它会一路红 50 条，全是级联假红）。与 pie 守卫的 Skip 同范式：
+#   显式 SKIP 退出并说明原因，别让"缺数据"伪装成"功能坏了"。
+#   判断放在 Ok 之前 —— 否则 SKIP 的运行里还会先留一条 FAIL，看日志的人会以为是真问题。
+if (($whId -le 0) -or ($matId -le 0) -or ($supId -le 0)) {
+  Write-Output 'SKIP 未派生出夹具（需要一条 GOOD 品质、数量 >= 10 的物料库存 + 一个非供货商供应商）⇒ 跳过 S1~S6（本库当前没有这样的库存行）'
+  Write-Output 'RESULT SKIP ui-e2e-14 material return two types + repair-return round trip (fixture unavailable in this DB)'
+  exit 0
+}
 Ok (($whId -gt 0) -and ($matId -gt 0) -and ($supId -gt 0) -and ($whName -ne '') -and ($matName -ne '')) 'fixture derived (warehouse + material with GOOD stock + supplier)'
 
 # =====================================================================

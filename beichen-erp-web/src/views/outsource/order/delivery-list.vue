@@ -118,7 +118,7 @@ onActivated(() => { loadData(); loadCounts() })
 <template>
   <div class="page-list">
     <el-card shadow="never">
-      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">加工收退</span></div></template>
+      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">加工收货</span></div></template>
       <!-- 页签（2026-09-27 用户口径；2026-09-28 用户口径：文案「收货中」→「生产中」，只改文案）：生产中（默认）｜已结单；标签后带数量角标。
            注：非活动页签的**列**在 DOM 中不存在（列由 v-if 控制），故"行内按钮"类断言不会被隐藏页签干扰。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">

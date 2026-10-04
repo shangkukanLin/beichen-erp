@@ -101,8 +101,8 @@ onActivated(() => { loadData(); loadCounts() })
 <template>
   <div class="page-list">
     <el-card shadow="never">
-      <!-- 卡片头文案（2026-09-29 用户口径：菜单/页面改名「物料收货」→「物料收退」） -->
-      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">物料收退</span></div></template>
+      <!-- 卡片头文案（沿革：2026-09-29 用户口径「物料收货」→「物料收退」；**2026-10-03 用户口径改回「物料收货」**） -->
+      <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">物料收货</span></div></template>
       <!-- 页签（2026-09-27 用户口径；2026-09-28 用户口径：文案「收货中」→「生产中」，只改文案）：生产中（默认）｜已结单；标签后带数量角标。
            非活动页签的**列**由 v-if 控制（DOM 中不存在）⇒ 行内按钮类断言不会被隐藏页签干扰。 -->
       <el-tabs v-model="activeTab" style="margin-bottom:8px" @tab-change="handleTabChange">
