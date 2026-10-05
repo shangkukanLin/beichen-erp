@@ -453,10 +453,23 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
     }
 
+    /**
+     * F7-299（2026-10-05 审核）：客户**必须存在**，不只是"不为空"。
+     * <p>原先只有审核路径校验存在性（见 {@code audit} 里的"客户不存在：ID="），保存草稿只校验 null
+     * ⇒ 客户 id 写错（如 0）或客户已被删除时，草稿能保存、到审核才被拦 —— 正是
+     * {@link #assertItemsForDraft} 注释里说的"能存不能审"的迷惑体验。口径与那个方法一致：
+     * 能在保存时拦下的错误就不要留到审核。</p>
+     */
+    private void assertCustomerExists(Long customerId) {
+        if (customerId == null) throw new BusinessException("客户不能为空");
+        if (customerMapper.selectById(customerId) == null)
+            throw new BusinessException("客户不存在：ID=" + customerId);
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(SaleOrder order, List<SaleOrderItem> items) {
-        if (order.getCustomerId() == null) throw new BusinessException("客户不能为空");
+        assertCustomerExists(order.getCustomerId());
         assertItemsForDraft(items);
         normalizeSettle(order);
         order.setCode(generateCode());
@@ -492,6 +505,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         SaleOrder old = orderMapper.selectById(order.getId());
         if (old == null) throw new BusinessException("销售单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        // F7-299：改单同样不能把草稿指到一个不存在的客户上（null 表示"不改该字段"，由 updateById 忽略）
+        if (order.getCustomerId() != null) assertCustomerExists(order.getCustomerId());
         assertItemsForDraft(items);
         normalizeSettle(order);
         order.setCode(old.getCode());
