@@ -220,7 +220,9 @@ foreach ($c in (SqlList "SELECT code FROM return_sort WHERE status='DRAFT' ORDER
   $msg = Txt '.el-message'
   Write-Host ('  -> ' + $c + ' status=' + $st + ' msg=' + $msg)
   if ($st -eq 'AUDITED') { Ok $true ('return sort ' + $c + ' audited') }
-  else { Write-Host ('  INFO ' + $c + ' blocked by the (correct) stock guard: ' + $msg) }
+  # 2026-10-05 F7-290: the tolerated block used to be an INFO line only (no verdict at all). Being blocked by
+  # the stock guard is legitimate here, so it is a SKIP -- visible and counted, but never a fake PASS.
+  else { Skip ('return sort ' + $c + ' blocked by the (correct) stock guard: ' + $msg) }
 }
 
 Step 'probe 新增收款 form (for the 2 manual receipts)'

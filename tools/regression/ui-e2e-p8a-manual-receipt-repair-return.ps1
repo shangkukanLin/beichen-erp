@@ -135,8 +135,8 @@ Start-Sleep -Milliseconds 900
 #   exactly what a UI-only check would miss. Caliber: unsettled + unpaid>0 (no ADVANCE); overdue = due_date < today.
 $custId = SqlOne ("SELECT id FROM customer WHERE name='" + $custName + "' LIMIT 1")
 if (-not $custId) {
-  Write-Host '  INFO 1a summary check skipped: customer name not resolvable in DB'
-  Ok $true '1a summary check skipped (fixture customer not found)'
+  # 2026-10-05 F7-290: was `Ok $true` -- a permanent PASS that asserted nothing. "Could not check" is a SKIP.
+  Skip '1a summary check skipped (fixture customer not found)'
 } else {
   $expUnpaid = D (SqlOne ("SELECT COALESCE(SUM(unpaid_amount),0) FROM finance_receivable WHERE status IN ('UNSETTLED','PARTIAL') AND amount>0 AND subject_type='CUSTOMER' AND customer_id=" + $custId))
   $expOverdue = D (SqlOne ("SELECT COALESCE(SUM(CASE WHEN unpaid_amount>0 AND due_date IS NOT NULL AND due_date<CURDATE() THEN unpaid_amount ELSE 0 END),0) FROM finance_receivable WHERE status IN ('UNSETTLED','PARTIAL') AND amount>0 AND subject_type='CUSTOMER' AND customer_id=" + $custId))
@@ -220,7 +220,7 @@ Open ('/finance/receipt/detail/' + $r1) 2800
 $sumD = Txt '.party-summary'
 Write-Host ('[1a-detail] draft summary UI=[' + $sumD + ']')
 if ($custId) { Ok ($sumD -match [regex]::Escape($expUnpaidTxt)) ('1a draft detail shows the total debt ' + $expUnpaidTxt) }
-else { Ok $true '1a draft detail summary check skipped (fixture customer not found)' }
+else { Skip '1a draft detail summary check skipped (fixture customer not found)' }
 $revCnt = D (SqlOne ("SELECT COUNT(*) FROM finance_cashflow WHERE related_bill_no='" + $c1 + "' AND flow_type='RECEIPT_REVERSE'"))
 $revSum = D (SqlOne ("SELECT COALESCE(SUM(expense),0) FROM finance_cashflow WHERE related_bill_no='" + $c1 + "' AND flow_type='RECEIPT_REVERSE'"))
 Write-Host ('[1a-un-audit] reverseFlows=' + $revCnt + ' reverseSum=' + $revSum)
@@ -248,8 +248,8 @@ if ($advId -ne '') {
 $orderCode = SqlOne ("SELECT source_bill_no FROM finance_receivable WHERE unpaid_amount>0 AND amount>0 AND status IN ('UNSETTLED','PARTIAL') AND subject_type='CUSTOMER' AND source_bill_no LIKE 'XS-%' AND customer_id=" + $custId + " ORDER BY id LIMIT 1")
 $woAmt = SqlOne ("SELECT CAST(unpaid_amount AS CHAR) FROM finance_receivable WHERE source_bill_no='" + $orderCode + "' AND customer_id=" + $custId + " ORDER BY id LIMIT 1")
 if (-not $custId -or -not $orderCode -or -not $woAmt) {
-  Write-Host '  INFO 1b skipped: that customer has no open credit-sale receivable to write off'
-  Ok $true '1b skipped (no fixture available)'
+  # 2026-10-05 F7-290: see 1a -- "no fixture to work with" is a SKIP, not a PASS.
+  Skip '1b skipped (no fixture available)'
 } else {
   Write-Host ('--- 1b write off ' + $orderCode + ' amount=' + $woAmt + ' using account ' + $acctA)
   Open '/finance/receipt' 2800
@@ -373,7 +373,9 @@ for ($i = 1; $i -le $repNeed; $i++) {
   Start-Sleep -Milliseconds 2200
   $cnt = D (SqlOne "SELECT COUNT(*) FROM outsource_return_order WHERE return_type='REPAIR'")
   if ($cnt -gt $repBefore) { Ok $true ('repair return #' + $i + ' created (db=' + $cnt + ')') }
-  else { Write-Host ('  INFO I25: line product cell could not be filled -> doc not saved (see INFO block below)'); break }
+  # 2026-10-05 F7-290: the tolerated I25 branch was silent (it printed INFO only, so "doc not created" was
+  # indistinguishable from "created" when reading the log). Now it is an explicit SKIP with the reason.
+  else { Skip ('repair return #' + $i + ' NOT saved (I25: line product cell could not be filled)'); break }
 }
 foreach ($c in (SqlList "SELECT code FROM outsource_return_order WHERE return_type='REPAIR' AND status='DRAFT' ORDER BY id")) {
   Open '/outsource/return-order/repair' 2800
@@ -385,7 +387,9 @@ foreach ($c in (SqlList "SELECT code FROM outsource_return_order WHERE return_ty
   Start-Sleep -Milliseconds 3000
   $st = SqlOne ("SELECT status FROM outsource_return_order WHERE code='" + $c + "'")
   if ($st -eq 'AUDITED') { Ok $true ('repair return ' + $c + ' audited') }
-  else { Write-Host ('  INFO ' + $c + ' not audited: ' + (Txt '.el-message')) }
+  # 2026-10-05 F7-290: the else branch used to print INFO only -> an un-audited document produced no verdict
+  # at all (the PASS above is already guarded by the DB status, so the real defect was this silent branch).
+  else { Skip ('repair return ' + $c + ' not audited (tolerated here): ' + (Txt '.el-message')) }
 }
 $rep = D (SqlOne "SELECT COUNT(*) FROM outsource_return_order WHERE return_type='REPAIR'")
 $repAud = D (SqlOne "SELECT COUNT(*) FROM outsource_return_order WHERE return_type='REPAIR' AND status='AUDITED'")

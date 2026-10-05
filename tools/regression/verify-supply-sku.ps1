@@ -262,7 +262,9 @@ if ($Part -eq 0 -or $Part -eq 2) {
     $fraw = (EvalJs $jsOrder).Trim()
     Write-Host ('  field order probe = ' + $fraw)
     $fo = $null
-    try { $fo = $fraw | ConvertFrom-Json } catch { }
+    # 2026-10-05 F7-291: the catch was empty, so a failed parse skipped every assertion in this block and the
+    # guard still reported PASS. Parse failures are now counted (see also the "SKIP vs FAIL" note in the report).
+    try { $fo = $fraw | ConvertFrom-Json } catch { Ok $false ('field order probe parse failed: ' + $fraw) }
     if ($null -ne $fo) {
       Ok ($fo.ok -eq $true) 'add page: SKU / name / supplier / brand fields are all present'
       if ($fo.ok -eq $true) {
@@ -289,7 +291,8 @@ if ($Part -eq 0 -or $Part -eq 2) {
     $oraw = (EvalJs $jsOpts).Trim()
     Write-Host ('  supplier options = ' + $oraw + '  (open=' + $op + ')')
     $o = $null
-    try { $o = $oraw | ConvertFrom-Json } catch { }
+    # 2026-10-05 F7-291: see above -- the empty catch made a parse failure look like "the dropdown is empty".
+    try { $o = $oraw | ConvertFrom-Json } catch { Ok $false ('supplier options probe parse failed: ' + $oraw) }
     $texts = @()
     if ($null -ne $o) { $texts = @(@($o.texts) | ForEach-Object { FromB64 $_ }) }
     $hitName = @($texts | Where-Object { $_ -like ('*' + $supName + '*') }).Count -gt 0
@@ -304,7 +307,8 @@ if ($Part -eq 0 -or $Part -eq 2) {
     $raw2 = (EvalJs $jsShape).Trim()
     Write-Host ('  after picking -> ' + $raw2 + '  (pick=' + $pk + ')')
     $j2 = $null
-    try { $j2 = $raw2 | ConvertFrom-Json } catch { }
+    # 2026-10-05 F7-291: see above -- empty catch = silent skip of the two SKU assertions below.
+    try { $j2 = $raw2 | ConvertFrom-Json } catch { Ok $false ('SKU shape probe (after picking) parse failed: ' + $raw2) }
     if ($null -ne $j2) {
       Write-Host ('  SKU after picking = ' + $j2.skuVal)
       Ok ([string]$j2.skuVal -match ('^' + [regex]::Escape($probePfx) + '-\d{6}$')) 'picking a supplier re-fills the SKU with that supply SKU as prefix'
@@ -346,7 +350,8 @@ if ($Part -eq 0 -or $Part -eq 2) {
     $draw2 = (EvalJs $jsDlg).Trim()
     Write-Host ('  new-SUPPLIER dialog = ' + $draw2 + '  (click=' + $nb2 + ')')
     $d2 = $null
-    try { $d2 = $draw2 | ConvertFrom-Json } catch { }
+    # 2026-10-05 F7-291: see above -- empty catch = silent skip of the "no SKU field in the vendor dialog" check.
+    try { $d2 = $draw2 | ConvertFrom-Json } catch { Ok $false ('new-supplier dialog probe parse failed: ' + $draw2) }
     if ($null -ne $d2) {
       if ([string]$d2.hasDialog -ne 'True') { Write-Host '  SKIP /supplier/manage dialog not reachable (route guard?) - not a feature failure' }
       else {

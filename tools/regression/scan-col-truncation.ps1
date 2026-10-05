@@ -128,13 +128,15 @@ $bad = @()
 $reportRows = @()
 $scanned = 0
 $noTable = 0
+$probeFail = @()
 # 某些页表格要等接口回来才渲染（退货整理 ~3s）⇒ 首次测不到就加长等待重测一次
 $slowPages = @('/inventory/return-sort')
 foreach ($p in $routes) {
   Open $p 2000
   Start-Sleep -Milliseconds 500
   $raw = EvalJs $js
-  if (-not $raw.TrimStart().StartsWith('[')) { Write-Host ('  ?? ' + $p + ' probe failed: ' + $raw); continue }
+  # 2026-10-05 F7-293: see scan-table-overflow -- a failed probe used to be an invisible `continue`.
+  if (-not $raw.TrimStart().StartsWith('[')) { Write-Host ('  ?? ' + $p + ' probe failed: ' + $raw); $probeFail += $p; continue }
   $tables = $raw | ConvertFrom-Json
   if (@($tables).Count -eq 0 -and ($slowPages -contains $p)) {
     Open $p 3500
@@ -180,7 +182,9 @@ foreach ($p in $routes) {
 }
 [IO.File]::WriteAllText($Report, ($reportRows | ConvertTo-Json -Depth 6), (New-Object System.Text.UTF8Encoding($false)))
 Write-Host ''
-Write-Host ('[SCAN] pages with a table = ' + $scanned + ' ; without = ' + $noTable + ' ; offenders = ' + $bad.Count + ' ; report = ' + $Report)
+Write-Host ('[SCAN] pages with a table = ' + $scanned + ' ; without = ' + $noTable + ' ; offenders = ' + $bad.Count + ' ; probeFailures = ' + $probeFail.Count + ' ; report = ' + $Report)
+Ok ($probeFail.Count -eq 0) ('every page could be probed (failures: ' + $probeFail.Count + (if ($probeFail.Count -gt 0) { ' -> ' + ($probeFail -join ', ') } else { '' }) + ')')
+Ok ($scanned -gt 0) ('at least one page actually had a table to measure (measured: ' + $scanned + ')')
 Ok ($bad.Count -eq 0) ('no cut-off column (offenders: ' + $bad.Count + ')')
 if ($bad.Count -gt 0) {
   Write-Host '--- offenders ---'

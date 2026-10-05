@@ -133,7 +133,10 @@ const URL_DOMAIN: Array<[RegExp, Domain]> = [
   [/^\/inventory\/purchase-return(\/|$)/, 'purchaseReturn'],
   [/^\/inventory\/purchase(\/|$)/, 'purchaseOrder'],
   [/^\/dev\/material-flow(\/|$)/, 'devMaterial'],
-  [/^\/dev\/purchase-item(\/|$)/, 'devProject'],
+  // 2026-10-05 F7-283 修复：`/dev/purchase-item` 是**研发物料主数据**的读写路径，原先登记成 `devProject`，
+  //   而物料列表页订阅的是 `devMaterial`（views/dev/material/index.vue）⇒ 改完物料列表不刷新（跨页失效断裂）。
+  //   物料主数据与物料流水（/dev/material-flow）同属 devMaterial 域，故改登记到 devMaterial。
+  [/^\/dev\/purchase-item(\/|$)/, 'devMaterial'],
   [/^\/dev\/file(\/|$)/, 'devProject'],
   [/^\/settings\/company(\/|$)/, 'company'],
   [/^\/settings\/params(\/|$)/, 'sysParam'],
@@ -160,7 +163,10 @@ const URL_DOMAIN: Array<[RegExp, Domain]> = [
  */
 const DOMAIN_DEPS: Partial<Record<Domain, Domain[]>> = {
   // ---- 库存联动：单据审核会改库存（★ 后为已实测的业务联动）----
-  purchaseOrder: ['productStock'],            // 采购审核 => 入成品库存（★ 种子脚本实测 stockQty 增加）
+  // 2026-10-05 F7-286 修复：原为 ['productStock'] —— 与 saleOrder 不对称（销售审核标脏 receivable/cashflow，
+  //   采购审核却不标 payable/cashflow），于是"采购审核后应付/资金流水页不刷新"。采购审核同样生成应付 ⇒ 补齐。
+  //   注：该缺口此前被 F7-284「这些页本来就没接总线」掩盖，两条必须一起修，否则登记完订阅反而露出新缺口。
+  purchaseOrder: ['productStock', 'payable', 'cashflow'],   // 采购审核 => 入成品库存 + 生成应付（★ 实测）
   purchaseReturn: ['productStock'],
   purchaseExchange: ['productStock'],
   saleOrder: ['productStock', 'receivable', 'cashflow'],       // 销售审核 => 出库 + 生成应收（★ 实测）
@@ -188,6 +194,9 @@ const DOMAIN_DEPS: Partial<Record<Domain, Domain[]>> = {
   brand: ['product'],                         // 品牌改名会影响产品列表的品牌列
   materialType: ['material'],
   material: ['materialStock'],
+  // 2026-10-05 F7-283/F7-286：研发物料主数据 —— 改动会影响研发立项页（BOM/用料引用），
+  //   而「研发支出登记」（/dev/purchase-item/{id}/rd-expense）会生成费用单与资金流水 ⇒ 一并标脏。
+  devMaterial: ['devProject', 'expense', 'cashflow'],
   // ---- 财务联动 ----
   receipt: ['receivable', 'cashflow'],
   payment: ['payable', 'cashflow'],

@@ -231,6 +231,12 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             if (acc == null) throw new BusinessException("收款账户不存在：ID=" + order.getSettleAccountId());
             if (acc.getStatus() != null && acc.getStatus() == 0)
                 throw new BusinessException("收款账户已停用，请重新选择：" + acc.getAccountName());
+            // F7-265①（2026-10-04 审核实证）：本分支=历史单账户口径，**金额下界同样必须校验** ——
+            //   原实现只校验账户，负数/零总额可落草稿；而审核侧 received=settleAmount（见 createCashReceipt）
+            //   会据此生成**负数收款单 + 负核销** ⇒ 应收被反向增加、账户出现负流水（资金不一致）。
+            //   null 仍放行（= 未填 = 全额收款，保持老前端/历史草稿行为完全不变）。
+            if (order.getSettleAmount() != null && order.getSettleAmount().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("本次收款总额必须大于 0（现金结算；不用填总额请留空 = 按应收全额收款）");
             return;
         }
         order.setSettleAccounts(rows);
@@ -285,7 +291,11 @@ public class SaleOrderServiceImpl implements SaleOrderService {
      * <p><b>2026-10-01 多账户（第 4 步）</b>：按 {@code sale_order_settle_account} 分款明细**逐账户**生成
      * 收款单分款行（A 800 + B 200 ⇒ 两条资金流水，各自账户余额对得上）；收款单主表金额 = 分款合计。
      * 核销金额取「本次收款总额」（{@code settle_amount}）—— **部分收款时只核销收到的这部分**，
-     * 差额由收款单审核按「未核销余额」落预收台账（既有 createUnsettledAdvance 能力，不改口径）。</p>
+     * 未收的差额**留在应收**（不会变预收）。</p>
+     * <p><b>F7-266（2026-10-04 审核口径订正）</b>：原文写"差额由收款单审核按未核销余额落预收台账"是**错的** ——
+     * 预收的触发条件是 {@code 收款单金额 − Σ核销 > 0}（见 {@code FinanceReceiptServiceImpl} 的 unsettled），
+     * 而本路径核销额**就等于**本次收款额 ⇒ unsettled = 0 ⇒ 不生成预收；预收只在"这笔收款还有未核销部分"
+     * （例如客户已先付过款）时才产生。前端提示文案同批订正（AccountSplitTable）。</p>
      * <p><b>历史兼容</b>：没有分款行的老销售单（旧草稿/旧数据）回退旧的单账户口径
      * （首行快照账户 + 核销全额），行为与改造前完全一致。</p>
      * <p>幂等：同一销售单已有**未作废**的收款单（草稿或已审核）时不再生成 —— 反审核会把自动收款单
@@ -306,6 +316,17 @@ public class SaleOrderServiceImpl implements SaleOrderService {
             for (SaleOrderSettleAccount sa : split)
                 received = received.add(sa.getAmount() != null ? sa.getAmount() : BigDecimal.ZERO);
         }
+        // F7-268（2026-10-04 审核批 1 的 P3，修在"归因点"上）：**下界自查**。
+        //   负数/零的收款额只可能来自"绕过入口的坏数据"（外部导入 / SQL 直改 / 修复前的历史草稿）——
+        //   入口（normalizeSettle）与保存（assertCashWithinTotal）现在都拦得住，但坏数据可以直接到审核。
+        //   此前它会一路走到"按分款生成收款单"，由收款单层的分款行校验拦下并报
+        //   「分款第 1 行金额必须大于 0」—— 而那一行是**系统按本金额自动生成**的，用户从未填过分款行，
+        //   报错无从定位（实测：审核被拒 code=500，用户完全不知道去哪改）。
+        //   在生成之前自查，把错误归因到真正的来源（销售单的本次收款总额）。
+        if (received.compareTo(BigDecimal.ZERO) <= 0)
+            throw new BusinessException("销售单「本次收款总额」必须大于 0（当前 "
+                    + received.stripTrailingZeros().toPlainString() + "，单号 " + order.getCode()
+                    + "）：请检查该销售单的收款总额是否被外部导入或直接改库写坏");
         // 兜底护栏（前端已拦、normalizeSettle 已校验合计=总额）：本次收款不得超过应收，否则核销会超出台账、
         // 多出的部分反被当成"多收预收"，与「禁止超收」口径冲突。此处在审核事务内抛错 ⇒ 整单回滚，不会留下半截数据。
         if (received.compareTo(orderTotal) > 0)
@@ -405,6 +426,24 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                 ? it.getProductName() : "ID=" + it.getProductId();
     }
 
+    /**
+     * F7-265②（2026-10-04 审核修复）：现金结算的「本次收款总额」不得超过应收总额 —— **草稿保存即拦**。
+     *
+     * <p>审核侧本就有同一护栏（见 {@link #createCashReceipt}），但"能存不能审"会让用户先录入、到审核才被拒，
+     * 且被拒时还得自己找原因；与 {@link #assertItemsForDraft} 把明细校验提前到保存是同一条口径。</p>
+     *
+     * <p>{@code settleAmount} 为 null = "未填 = 按应收全额收款"（历史单/老前端口径）⇒ 不校验。</p>
+     */
+    private void assertCashWithinTotal(SaleOrder order, BigDecimal total) {
+        if (!SettleType.isCash(order.getSettleType())) return;
+        BigDecimal received = order.getSettleAmount();
+        if (received == null) return;
+        BigDecimal due = total != null ? total : BigDecimal.ZERO;
+        if (received.compareTo(due) > 0)
+            throw new BusinessException("本次收款总额 " + received.stripTrailingZeros().toPlainString()
+                    + " 不能超过销售单应收总额 " + due.stripTrailingZeros().toPlainString());
+    }
+
     private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
         if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO;
@@ -443,6 +482,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         u.setTotalAmount(total);
         u.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(u);
+        // F7-265②（2026-10-04 审核）：与 create 同口径 —— 应收总额此刻才算出，在这里补"不得超收"
+        assertCashWithinTotal(order, total);
     }
 
     @Override
@@ -456,10 +497,14 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         order.setCode(old.getCode());
         orderMapper.updateById(order);
         // 结算方式改回账期时要清掉旧账户（updateById 忽略 null，必须显式 set）
+        // F7-264（2026-10-04 审核实证）：**两个字段必须一起清** —— 原实现只清了 settle_account_id，
+        //   settle_amount 被 updateById 的"忽略 null"留在库里 ⇒ 账期单残留"本次收款总额"（实测 300.0000），
+        //   任何读该列的出口（详情/列表/导出）都会显示一个不存在的收款额。两个字段同属"账期无意义"。
         if (!SettleType.isCash(order.getSettleType())) {
             orderMapper.update(null, new LambdaUpdateWrapper<SaleOrder>()
                     .eq(SaleOrder::getId, order.getId())
-                    .set(SaleOrder::getSettleAccountId, null));
+                    .set(SaleOrder::getSettleAccountId, null)
+                    .set(SaleOrder::getSettleAmount, null));
         }
         // ⚠️ F7-108（2026-09-20）：这里是"全删重插"⇒ **明细 id 会全部变化**。
         // 当前安全：只有**草稿**可编辑，而引用 sale_order_item.id 的只有 sale_outbound_item.orderItemId，
@@ -488,6 +533,9 @@ public class SaleOrderServiceImpl implements SaleOrderService {
         u.setTotalAmount(total);
         u.setTaxAmount(calcTaxAmount(total, order.getTaxIncluded(), order.getTaxRate()));
         orderMapper.updateById(u);
+        // F7-265②（2026-10-04 审核）：应收总额此刻才算出 ⇒ 在这里补"不得超收"，把校验提前到保存那一步
+        // （与 assertItemsForDraft 同一条口径：避免"能存不能审"的迷惑体验）。
+        assertCashWithinTotal(order, total);
     }
 
     @Override

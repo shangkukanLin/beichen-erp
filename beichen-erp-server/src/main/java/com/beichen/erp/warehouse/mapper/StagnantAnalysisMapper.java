@@ -42,11 +42,25 @@ public interface StagnantAnalysisMapper {
     List<Map<String, Object>> productSaleByDay();
 
     /**
-     * 产品的**首次入库日**（流水正向变动的最早时间）。没有正向流水的产品（例如从未入库、只有期初以外的
-     * 逆向记录）不会出现在结果里 ⇒ 调用方按"未知"处理。
+     * 产品的**首次入库日**（真入库类变动的最早时间）。没有入库流水的产品不出现在结果里 ⇒ 调用方按"未知"处理。
+     *
+     * <p><b>⚠️ 2026-10-05 F7-279 修复：必须限定 {@code change_type} 白名单，不能只看 {@code change_quantity > 0}。</b>
+     * 正向行里混着**回冲**与**重分类** —— 本库实测 {@code SALE_OUT_UN_AUDIT}（销售反审核回冲）、
+     * {@code RECLASSIFY_IN}（品质重分类入）、{@code CANCEL_RECLASSIFY_OUT} 都是正数；拿它们当"首次入库"
+     * 会把在库天数算小 ⇒ "从未销售但入库未满 180 天 ⇒ 不算严重滞销"误判 ⇒ **严重滞销漏报**
+     * （实测：产品 149 的最早正向行正是 {@code SALE_OUT_UN_AUDIT}）。这与本类上面那条"不能用负向流水判断
+     * 『卖过』"是**同一条教训** —— 那一版只把它应用在了负向侧。</p>
+     *
+     * <p>白名单 = 真正让货进入我方库存的变动类型（对照 {@code StockChangeType} 枚举）：期初 {@code INIT}、
+     * 采购入库 {@code PURCHASE_IN}、采购换货入库 {@code PURCHASE_EXCHANGE_IN}、销售退货入库 {@code SALE_RETURN_IN}、
+     * 换货退回入库 {@code EXCHANGE_IN}、委外完成入库 {@code OUTSOURCE_FINISH_IN}、其他入库 {@code OTHER_IN}、
+     * 盘点盘盈 {@code STOCK_TAKE_IN}。刻意**排除**移仓入（{@code MOVE_IN}，货本来就在账上、只是换了个仓）
+     * 与重分类入、各类 {@code CANCEL_*} / {@code *_UN_AUDIT} 回冲。</p>
      */
     @Select("SELECT product_id AS pid, DATE_FORMAT(MIN(create_time), '%Y-%m-%d') AS d " +
             "FROM warehouse_stock_log WHERE product_id IS NOT NULL AND change_quantity > 0 " +
+            "AND change_type IN ('INIT','PURCHASE_IN','PURCHASE_EXCHANGE_IN','SALE_RETURN_IN'," +
+            "'EXCHANGE_IN','OUTSOURCE_FINISH_IN','OTHER_IN','STOCK_TAKE_IN') " +
             "GROUP BY product_id")
     List<Map<String, Object>> productFirstInByProduct();
 }

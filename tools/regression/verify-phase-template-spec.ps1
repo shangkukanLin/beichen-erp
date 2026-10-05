@@ -70,9 +70,10 @@ if ($Part -eq 0 -or $Part -eq 1) {
   $modified = TplList 'MODIFIED'
   $all = TplList ''
   Write-Host ('  templates: matched=' + $matched.Count + ' modified=' + $modified.Count + ' no-filter=' + $all.Count)
-  Ok ($matched.Count -eq 7) 'specType=MATCHED returns exactly 7 templates'
-  Ok ($modified.Count -eq 14) 'specType=MODIFIED returns exactly 14 templates'
-  Ok ($all.Count -eq 21) 'omitting specType returns both sets (21) - backward compatible'
+  # 2026-10-05 F7-292: were 7 / 14 / 21 absolute snapshots -- every template added turned this guard red.
+  # Assert the STRUCTURE instead: both sets are non-empty and together they are exactly the unfiltered list.
+  Ok ($matched.Count -gt 0 -and $modified.Count -gt 0) ('both spec types return templates (matched=' + $matched.Count + ' modified=' + $modified.Count + ')')
+  Ok ($all.Count -eq ($matched.Count + $modified.Count)) ('omitting specType returns exactly the union of both sets (' + $all.Count + ' == ' + $matched.Count + ' + ' + $modified.Count + ')')
 
   # b) matched set holds exactly the 7 expected names, in order
   $matchedNames = @($matched | ForEach-Object { [string]$_.name })

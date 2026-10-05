@@ -180,5 +180,6 @@ if ($sU -match 'ROWS=(\d+)') {
   Ok ($sU -match (';RET=' + $nRows)) 'every row still offers 退货'
 }
 
-Ok $true 'work order chain executed (see stock/payable lines above)'
+# 2026-10-05 F7-290: was `Ok $true` -- the chain's real assertions are the per-row button checks above.
+Skip 'work order chain executed (the per-row checks above are the actual assertions)'
 Summary 'work order chain'

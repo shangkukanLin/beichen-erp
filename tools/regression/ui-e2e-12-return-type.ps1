@@ -101,11 +101,12 @@ function ClickChargeSwitch() {
 $sqlPick = "SELECT o.id, o.code, o.factory_id, TO_BASE64(s.name), p.product_id, TO_BASE64(p.product_name), w.id, TO_BASE64(w.warehouse_name), st.quantity, b.id, b.bom_version FROM outsource_order o JOIN outsource_order_product p ON p.order_id = o.id JOIN warehouse_stock st ON st.product_id = p.product_id AND st.quality_type = 'A' JOIN warehouse w ON w.id = st.warehouse_id AND w.warehouse_type = 'FINISHED' JOIN bom_snapshot b ON b.product_master_id = p.product_id LEFT JOIN supplier s ON s.id = o.factory_id WHERE o.status IN ('PRODUCING','FINISHED') AND st.quantity >= 50 AND o.factory_id IS NOT NULL ORDER BY o.id LIMIT 1"
 $f = SqlRow $sqlPick
 if ($f.Count -lt 11) {
-  Write-Host 'FAIL no usable work order found.'
+  # 2026-10-05 F7-294: fixture missing => SKIP + exit 0 (see ui-e2e-11 for the rationale).
+  Write-Host 'SKIP no usable work order found.'
   Write-Host '     need: a work order whose product master has A-grade stock (>=50) in one of our finished-goods'
   Write-Host '     warehouses AND has a BOM snapshot (that is what the return form prefills from).'
-  Write-Host 'RESULT FAIL ui-e2e-12 return order types (PASS=0 FAIL=1)'
-  exit 1
+  Write-Host 'RESULT SKIP ui-e2e-12 return order types (fixture missing, nothing verified)'
+  exit 0
 }
 $orderId   = [int]$f[0]
 $orderCode = [string]$f[1]
@@ -132,9 +133,10 @@ Info ('fixture: order id=' + $orderId + ' code=' + $orderCode + ' factory id=' +
 Info ('fixture: product master=' + $masterId + ' name=' + $productName + ' | out warehouse id=' + $outWh + ' name=' + $outWhName + ' A-stock=' + $outStock)
 Info ('fixture: BOM snapshot id=' + $snapId + ' v' + $snapVer + ' materials=' + (($matIds | ForEach-Object { 'm' + $_ }) -join ',') + ' | factory outsource warehouse=' + $factoryWh)
 if ($factoryWh -le 0 -or @($matIds).Count -eq 0) {
-  Write-Host 'FAIL the discovered order has no factory outsource warehouse or no BOM snapshot items.'
-  Write-Host 'RESULT FAIL ui-e2e-12 return order types (PASS=0 FAIL=1)'
-  exit 1
+  # 2026-10-05 F7-294: fixture incomplete (no factory outsource warehouse / no BOM items) => SKIP, not a red.
+  Write-Host 'SKIP the discovered order has no factory outsource warehouse or no BOM snapshot items.'
+  Write-Host 'RESULT SKIP ui-e2e-12 return order types (fixture incomplete, nothing verified)'
+  exit 0
 }
 $retQty = 10
 

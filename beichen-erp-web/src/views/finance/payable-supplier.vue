@@ -7,7 +7,8 @@
 //   内容 = 汇总卡（应付总额/已付/未付/逾期金额）+ 应付明细 + 付款记录。
 //   「新增付款」**按权限显示**（2026-09-29 用户口径⑤）：只有拿到 `finance:payment` 的用户才看得见
 //   （v-perm 与后端前缀权限同码），点击进统一的新增付款独立页（`?supplierId=` 预填）。
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
@@ -85,7 +86,7 @@ function goSettlement() { router.push(`/finance/supplier-settlement/${supplierId
 /** 返回应付管理（本页从「按供应商汇总」进来，回列表而不是回付款管理） */
 function goBack() { router.push('/finance/payable') }
 
-onMounted(() => loadAll())
+useDomainRefresh('payable', () => loadAll())
 </script>
 
 <template>

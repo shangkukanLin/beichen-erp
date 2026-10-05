@@ -53,7 +53,9 @@ function AuditAll([string]$listPath, [string]$table, [string]$codeCol, [string]$
     $st = SqlOne ("SELECT " + $stCol + " FROM " + $table + " WHERE " + $codeCol + "='" + $c + "'")
     $msg = Txt '.el-message'
     if ($st -eq 'AUDITED') { Ok $true ($table + ' ' + $c + ' audited') }
-    else { Write-Host ('  INFO ' + $c + ' not audited: ' + $msg) }
+    # 2026-10-05 F7-290: a not-audited document used to produce no verdict (INFO only) -> the step could not
+    # fail. Now it is an explicit SKIP carrying the toast text.
+    else { Skip ($table + ' ' + $c + ' not audited: ' + $msg) }
   }
 }
 

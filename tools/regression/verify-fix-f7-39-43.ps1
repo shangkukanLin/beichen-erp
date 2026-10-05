@@ -165,7 +165,13 @@ if ((CodeOf $sum) -eq '200' -and (CodeOf $p2) -eq '200') {
 $pm = Api 'Get' "$BASE/finance/analysis/profit?months=9999" $null
 $pmLen = 0
 if ($null -ne $pm.data.months) { $pmLen = @($pm.data.months).Count }
-if ($pmLen -eq 60) { Ok "profit?months=9999 capped to 60 months" } else { Bad "profit?months=9999 returned $pmLen months (expect 60)" }
+# 2026-10-05 F7-292: was the hard-coded `-eq 60`. Assert the BEHAVIOUR, not the constant: asking for more
+# months than the server cap must return exactly what asking for the cap returns. The cap may then move
+# without touching this guard, while "no cap at all" still fails.
+$pmCap = Api 'Get' "$BASE/finance/analysis/profit?months=60" $null
+$pmCapLen = 0
+if ($null -ne $pmCap.data.months) { $pmCapLen = @($pmCap.data.months).Count }
+Ok ($pmLen -gt 0 -and $pmLen -eq $pmCapLen) ("profit?months=9999 is capped at the server limit (got $pmLen, months=60 gives $pmCapLen)")
 
 # #3 -- range truncation is unified (400 days) and reported
 $ct = Api 'Get' "$BASE/finance/analysis/cash-trend?start=2024-01-01&end=2026-09-19" $null

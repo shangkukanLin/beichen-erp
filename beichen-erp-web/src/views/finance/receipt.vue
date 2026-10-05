@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -61,7 +62,7 @@ async function loadAccounts() {
   // 失败时显式置空（账户列退化为「—」并回落到主表快照 accountName），不静默留旧值
   try { const r = await request.get('/finance/account/list'); accounts.value = r || [] } catch { accounts.value = [] }
 }
-onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); loadAccounts(); loadData() })
+useDomainRefresh('receipt', () => { loadCustomersOptions(); loadSuppliersOptions(); loadAccounts(); loadData() })
 
 function query_() { page.pageNum = 1; loadData() }
 function reset_() { query.customerId = ''; query.subjectType = ''; query.status = ''; page.pageNum = 1; loadData() }

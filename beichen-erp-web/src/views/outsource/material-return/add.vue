@@ -403,7 +403,7 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
             <el-form-item label="关联物料订单" :required="fromLinked">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel" :disabled="!form.supplierId"
                 :placeholder="!form.supplierId ? '请先选退回对象' : (fromLinked ? '必选（关联退料）' : '可不选（不关联）')" style="width:100%" disable-cache filterable
-                :preset="pickedOrder ? { id: pickedOrder.id, code: pickedOrder.code } : null" @pick="(opts: any[]) => pickedOrder = (opts && opts[0]) || null" domain="material" />
+                :preset="pickedOrder ? { id: pickedOrder.id, code: pickedOrder.code } : null" @pick="(opts: any[]) => pickedOrder = (opts && opts[0]) || null" domain="materialOrder" />
             </el-form-item>
           </el-col>
           <el-col :span="8"><el-form-item :label="isRepair ? '送修日期' : '退货日期'"><el-input v-model="form.returnDate" type="date" /></el-form-item></el-col>

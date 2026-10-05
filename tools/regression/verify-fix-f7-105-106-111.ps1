@@ -206,7 +206,8 @@ Info ("after cleanup: sale_outbound=$obLeft sale_outbound_item=$obItLeft sale_re
 if ($obLeft -eq 0 -and $obItLeft -eq 0) { Ok 'sale_outbound / sale_outbound_item back to the 0-row baseline' }
 else { Bad 'outbound rows still present after cleanup' }
 if ($srLeft -eq 11) { Ok 'sale_return back to the 11-row baseline' }
-else { Info ("sale_return count = $srLeft (baseline was 11; verify manually if it differs)") }
+# 2026-10-05 F7-292: was `Info` -- drift looked like a verified pass. SKIP is the honest verdict.
+else { Skip ("sale_return count = $srLeft (baseline was 11, history drifted) -- not asserted") }
 
 Write-Output ''
 if ($script:fail -eq 0) { Write-Output ("RESULT PASS (skip=$script:skip)") } else { Write-Output ("RESULT FAIL count=$script:fail skip=$script:skip") }

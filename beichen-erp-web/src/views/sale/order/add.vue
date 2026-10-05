@@ -102,7 +102,8 @@ const accountWatcher = createDomainWatcher('account')
 onActivated(() => { if (accountWatcher.changed()) loadAccounts() })
 
 // ==================== 现金收款·多账户分款（2026-09-30） ====================
-// 用户口径：本次收款总额可录入（**默认带出应收**，可改小 = 部分收款，差额后端挂预收），且只能 ≤ 应收；
+// 用户口径：本次收款总额可录入（**默认带出应收**，可改小 = 部分收款；差额仍是**应收未收**，
+// 不是预收 —— 自动收款单的核销额就等于本次收款额，预收只在"本次收款未被全部核销"时才产生），且只能 ≤ 应收；
 // 各账户金额由 AccountSplitTable 按"单一自动吸收行"分摊，分摊合计恒等于总额。
 // 提交：order.settleAmount + order.settleAccounts；后端 normalizeSettle 校验并回写首行快照。
 const settleRows = ref<any[]>([])
@@ -285,6 +286,12 @@ async function doSubmit() {
   // 现金结算：多账户分款校验（账户必选 / 金额 > 0 / 不重复 / 合计 = 本次收款总额）+ 禁止超收；
   // 后端 normalizeSettle 用同一口径兜底（分款行与 settleAmount 不一致会直接拒绝）。
   if (isCash.value) {
+    // F7-267（2026-10-04 审核）：应收为 0 时现金结算无金额可分款（后端要求每行金额 > 0）⇒ 明确拦住并指路，
+    // 否则用户只会看到"各行合计必须等于总额/金额必须大于 0"这种看不出原因的报错。
+    if (orderTotal.value <= 0.004) {
+      ElMessage.warning('应收总额为 0：现金结算没有金额可分款，请改用「账期」结算')
+      return
+    }
     const err = splitRef.value?.validate?.()
     if (err) { ElMessage.warning(err); return }
     if (settleRemaining.value < -0.004) {

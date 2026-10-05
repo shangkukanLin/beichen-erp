@@ -646,11 +646,12 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             m.put("quantity", oi.getQuantity());
             m.put("unitPrice", oi.getUnitPrice());
             m.put("amount", oi.getAmount());
-            // 历史累计仅作参考展示（2026-10-01 起**不参与**可退量计算）
+            // 历史累计（参考展示）：关联该销售明细的**已审核**退货单数量之和
             m.put("returnedQuantity", returned);
-            // 2026-10-01（用户口径）：回显的"可退数量"必须与 validateReturnQuantity **同口径** ——
-            // = 该明细的销售数量（不再扣历史累计），否则前端显示 0 而提交却能通过。
-            m.put("canReturn", sold);
+            // F7-269（2026-10-04 审核批 2 · 口径项 D-01 定案）：回显的"可退数量"必须与 validateReturnQuantity
+            // **同口径** = 销售数量 − 历史已审核退货量（有来源恢复累计上限）；否则又会退回本次改造
+            // 正要消除的那种不一致（"前端显示 0 而提交却能通过"）。
+            m.put("canReturn", sold.subtract(returned));
             res.add(m);
         }
         return res;
@@ -706,10 +707,12 @@ public class SaleReturnServiceImpl implements SaleReturnService {
         if (order.getSaleOrderId() == null || itemMaps == null || itemMaps.isEmpty()) return;
         Map<Long, BigDecimal> qtyMap = new HashMap<>();
         Map<Long, String> nameMap = new HashMap<>();
+        List<Long> soiIds = new ArrayList<>();
         for (Map<String, Object> map : itemMaps) {
             Object soiObj = map.get("saleOrderItemId");
             if (soiObj == null || soiObj.toString().isBlank()) continue;
             Long soiId = Long.valueOf(soiObj.toString());
+            if (!soiIds.contains(soiId)) soiIds.add(soiId);
             BigDecimal qty = map.get("quantity") != null ? new BigDecimal(map.get("quantity").toString()) : BigDecimal.ZERO;
             qtyMap.merge(soiId, qty, BigDecimal::add);
             if (map.get("productId") != null) {
@@ -718,18 +721,41 @@ public class SaleReturnServiceImpl implements SaleReturnService {
             }
         }
         if (qtyMap.isEmpty()) return;
-        List<SaleOrderItem> oiList = saleOrderItemMapper.selectBatchIds(qtyMap.keySet());
-        for (SaleOrderItem oi : oiList) {
+        Map<Long, SaleOrderItem> oiById = new HashMap<>();
+        for (SaleOrderItem oi : saleOrderItemMapper.selectBatchIds(soiIds)) oiById.put(oi.getId(), oi);
+        // F7-272（2026-10-04 审核批 2）：**有来源退货的单价必须等于来源明细单价**。
+        //   负应收金额由 saveItems 用前端传来的 unitPrice 重算（F7-115），与"数量上限"是**两条独立通道**：
+        //   数量合规也可能把金额放大（卖 2 件 × 100，退 1 件却填 999）⇒ 客户被多冲、账单/账龄一起错。
+        //   放在数量校验之前：即便可退量已为 0（本次场景），也能给出"价格不一致"这个准确原因。
+        for (Map<String, Object> map : itemMaps) {
+            Object soiObj = map.get("saleOrderItemId");
+            if (soiObj == null || soiObj.toString().isBlank()) continue;
+            SaleOrderItem src = oiById.get(Long.valueOf(soiObj.toString()));
+            if (src == null || map.get("unitPrice") == null) continue;
+            BigDecimal want = src.getUnitPrice() != null ? src.getUnitPrice() : BigDecimal.ZERO;
+            BigDecimal got = new BigDecimal(map.get("unitPrice").toString());
+            if (got.compareTo(want) != 0) {
+                String name = nameMap.getOrDefault(src.getId(), String.valueOf(src.getProductId()));
+                throw new BusinessException("产品[" + name + "]退货单价" + fmt(got)
+                        + "与销售单原单价" + fmt(want) + "不一致（有来源退货必须按原价冲减，改价会导致负应收金额错误）");
+            }
+        }
+        for (SaleOrderItem oi : oiById.values()) {
             BigDecimal sold = oi.getQuantity() == null ? BigDecimal.ZERO : oi.getQuantity();
             BigDecimal returned = alreadyReturned(oi.getId());
             BigDecimal thisQty = qtyMap.getOrDefault(oi.getId(), BigDecimal.ZERO);
-            // 2026-10-01（用户口径：只要有库存就可以一直退/换，**每一次不超过销售总数**）：
-            // 单次退货量 ≤ 该明细的**销售数量**，**不再扣历史累计已退量**（历史量仅用于报错信息参考）。
-            if (thisQty.compareTo(sold) > 0) {
+            // F7-269（2026-10-04 审核批 2 · 口径项 D-01 已定案）：**有来源**退货恢复"累计"上限 ——
+            //   可退 = 销售数量 − 历史已审核退货量。理由：有来源单据的退货量在业务上有天然上界（卖多少退多少），
+            //   累计放开会让"卖 2 退 4"成立 ⇒ 库存虚增 + 负应收反复冲减（实测负应收只判 totalAmount>0，
+            //   没有任何"不超过来源应收"的约束）。**无来源**（补录/线下/其它渠道）保持用户口径
+            //   "只要有库存就可以一直退"（上限 = 该仓该品质库存，见 validateUntypedReturnQuantity）。
+            //   回显同口径（见 saleOrderItems 的 canReturn），避免重演"前端显示 0 而提交能通过"。
+            BigDecimal canReturn = sold.subtract(returned);
+            if (thisQty.compareTo(canReturn) > 0) {
                 String name = nameMap.getOrDefault(oi.getId(), String.valueOf(oi.getProductId()));
                 throw new BusinessException("产品[" + name + "]本次退货数量" + fmt(thisQty)
-                        + "超过该明细的销售数量（销售" + fmt(sold) + "，历史已退" + fmt(returned)
-                        + "，本次" + fmt(thisQty) + "）");
+                        + "超过可退数量" + fmt(canReturn) + "（销售" + fmt(sold)
+                        + "，历史已退" + fmt(returned) + "，本次" + fmt(thisQty) + "）");
             }
         }
     }

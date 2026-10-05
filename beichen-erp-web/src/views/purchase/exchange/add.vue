@@ -208,6 +208,8 @@ import { onMounted, reactive, ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
+// F7-271（2026-10-04 审核批 2）：库存取数与数量上限收口到单一实现（口径见 utils/stock.ts）
+import { fetchStockQty, stockLimit } from '@/utils/stock'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
@@ -437,26 +439,15 @@ async function loadProducts(query?: string) {
 }
 
 /**
- * 2026-10-01（用户口径）：刷新某行的「库存数量」与**数量上限**。
+ * 刷新某行的「库存数量」与**数量上限**（用户口径 2026-10-01；F7-271 收口到 utils/stock.ts）。
  * 上限 = min(来源采购单数量, 该**退回出库仓** + 该产品 + 该**退回品质**的库存)；无来源（无单换货）⇒ 上限 = 库存。
- * ⚠️ 库存按 stockForm=MATERIAL 求和：审核退回出库走的 changeStock 重载缺省形态即 MATERIAL
- * （同一「仓+产品+品质」还可能有 PRODUCT_DEFECT / PRODUCT_REPAIR 等形态行，混加会高估上限）。
+ * 品质与后端审核退回出库同源（`outQualityOf` **缺省 DEFECT**）——原先不传品质时会混加各品质、高估上限。
  */
 async function refreshStock(row: any) {
-  row.stock = undefined
-  row.quantityLimit = undefined
-  if (!row.productId || !form.warehouseOutId) return
-  try {
-    const p: any = { warehouseId: form.warehouseOutId, productId: row.productId, pageSize: 500 }
-    if (row.qualityType) p.qualityType = row.qualityType
-    const res: any = await request.get('/warehouse/stock/page', { params: p })
-    const arr: any[] = res?.records || []
-    const stock = arr
-      .filter((x: any) => !x.stockForm || x.stockForm === 'MATERIAL')
-      .reduce((s: number, x: any) => s + (Number(x.quantity) || 0), 0)
-    row.stock = stock
-    row.quantityLimit = row.sourceQty != null ? Math.min(Number(row.sourceQty), stock) : stock
-  } catch { row.stock = undefined; row.quantityLimit = undefined }
+  if (!row.productId || !form.warehouseOutId) { row.stock = undefined; row.quantityLimit = undefined; return }
+  const stock = await fetchStockQty(form.warehouseOutId, row.productId, row.qualityType || 'DEFECT')
+  row.stock = stock
+  row.quantityLimit = stockLimit(row.sourceQty, stock)
 }
 
 /**

@@ -302,17 +302,57 @@ function BodyHas([string]$text) {
   $js = "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));return String((document.body.innerText||'').indexOf(T('$b'))>=0)})()"
   return (EvalJs $js)
 }
+function Mark-Fail() {
+  # 2026-10-05 F7-288: a failing guard must also FAIL THE PROCESS, not just print "FAIL ...".
+  # Before this, every script that ended with Summary() printed RESULT FAIL but still exited 0 => any caller
+  # that checks exit codes (CI, a chained run) treated it as success. `exit 1` is NOT usable here: 17 guards
+  # call Summary() once per section (e.g. verify-fix-r5a: 5 calls), so exiting would cut the run short and
+  # hide the later sections. $Host.SetShouldExit(1) sets the exit code WITHOUT aborting -- verified with a
+  # negative control (script kept running to the end, process exit code = 1). Wrapped in try/catch because
+  # non-console hosts (ISE) may not support it -- there it is a harmless no-op.
+  if (-not $script:__markedFail) { $script:__markedFail = $true }
+  try { $Host.SetShouldExit(1) } catch { }
+}
 function Ok([bool]$cond, [string]$msg) {
-  if ($cond) { $script:PASS++; Write-Host ("PASS " + $msg) } else { $script:FAIL++; Write-Host ("FAIL " + $msg) }
+  if ($cond) { $script:PASS++; Write-Host ("PASS " + $msg) }
+  else { $script:FAIL++; Write-Host ("FAIL " + $msg); Mark-Fail }
+}
+function Bad([string]$msg) {
+  # 2026-10-05 F7-289: the counterpart of Ok for the `if (...) { Ok ... } else { Bad ... }` style.
+  # It was MISSING from this library while three ui-e2e cases called it in their FAILURE branches
+  # (ui-e2e-11-return-from-receipt:185, ui-e2e-12-return-type:185, ui-e2e-7-inventory:49). Negative control
+  # showed the call threw CommandNotFoundException, $script:FAIL stayed 0 => the assertion silently vanished.
+  $script:FAIL++
+  Write-Host ("FAIL " + $msg)
+  Mark-Fail
+}
+function Skip([string]$msg) {
+  # 2026-10-05 F7-290: "this branch could not be verified here" must be reported as SKIP -- NOT as
+  # `Ok $true` (which inflates the PASS count and made 12 sites look like verified behaviour when they
+  # asserted nothing), and NOT as FAIL (some branches are legitimately N/A: idempotent rerun, a page whose
+  # rows are all jump-less, a document correctly blocked by a stock guard).
+  # SKIP is deliberately NOT part of Summary's PASS+FAIL total, so a script that only skips still trips the
+  # "no assertions were executed" guard instead of reporting PASS.
+  $script:SKIP++
+  Write-Host ("SKIP " + $msg)
 }
 function Summary([string]$title) {
   # 2026-09-21: 防"哑用例假绿" —— 一条断言都没跑时绝不算 PASS。
   # 触发实例：ui-e2e-8-finance 原为纯人工 dump 脚本（没有任何 Ok 断言），却输出 RESULT PASS (PASS=0 FAIL=0)，
   # 被当成"财务链已验证"。这类脚本要么补真断言（见 verify-finance-kpi.ps1），要么别调用 Summary。
+  # 2026-10-05 F7-288: 两种 FAIL 判定都要**同时**把进程退出码置为非零（Mark-Fail）。
   $total = [int]$script:PASS + [int]$script:FAIL
   if ($total -eq 0) {
+    # 2026-10-05 F7-294: a run that only SKIPped ("fixture missing", "not applicable here") is not a failure --
+    # but it is not a PASS either. Report SKIP, keep the exit code clean (no Mark-Fail).
+    if ([int]$script:SKIP -gt 0) {
+      Write-Host ("RESULT SKIP $title  (PASS=0 FAIL=0 SKIP=$([int]$script:SKIP) -- nothing verifiable in this run)")
+      return
+    }
     Write-Host "RESULT FAIL $title  (PASS=0 FAIL=0 -- NO assertions were executed: this script asserts nothing, so it must not report PASS)"
+    Mark-Fail
     return
   }
-  Write-Host ("RESULT " + $(if ($script:FAIL -eq 0) { 'PASS' } else { 'FAIL' }) + " $title  (PASS=$($script:PASS) FAIL=$($script:FAIL))")
+  Write-Host ("RESULT " + $(if ($script:FAIL -eq 0) { 'PASS' } else { 'FAIL' }) + " $title  (PASS=$($script:PASS) FAIL=$($script:FAIL) SKIP=$([int]$script:SKIP))")
+  if ($script:FAIL -gt 0) { Mark-Fail }
 }

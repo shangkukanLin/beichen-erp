@@ -151,6 +151,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Plus, Download } from '@element-plus/icons-vue'
 import request from '@/utils/request'
+// F7-271（2026-10-04 审核批 2）：库存取数收口到单一实现（口径见 utils/stock.ts）
+import { fetchStockQty } from '@/utils/stock'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
@@ -307,26 +309,14 @@ async function loadFromSaleOrder() {
   }
 }
 /**
- * 2026-10-01（用户口径）：刷新该行的「库存数量」展示。
- * 销售退货是**入库**（客户退回，品质固定 PENDING），不消耗我方库存 ⇒ 库存**仅作展示**，
- * 数量上限仍是「来源销售单的销售数量」（row.canReturn，见列 :max）。本口径已与用户确认。
- * 库存按 退货仓库 + 该产品 + PENDING 品质、stockForm=MATERIAL 取（与审核入库的品质口径一致）。
+ * 刷新该行的「库存数量」展示（用户口径 2026-10-01；F7-271 收口到 utils/stock.ts 单一实现）。
+ * 销售退货是**入库**（客户退回），不消耗我方库存 ⇒ 库存**仅作展示**，数量上限仍是
+ * 「来源销售单的销售数量 − 历史已退」(row.canReturn，见列 :max)。本口径已与用户确认。
+ * 品质取**明细品质**（与后端审核入库同源：`it.getQualityType()` 缺省 PENDING）——
+ * 原先硬编码 PENDING，若该行品质不是 PENDING，页面显示的就不是货实际会被加进去的那个品质。
  */
 async function refreshStock(row: any) {
-  row.stock = undefined
-  if (!row.productId || !form.warehouseId) return
-  try {
-    const res: any = await request.get('/warehouse/stock/page', {
-      params: {
-        warehouseId: form.warehouseId, productId: row.productId,
-        qualityType: 'PENDING', pageSize: 500
-      }
-    })
-    const arr: any[] = res?.records || []
-    row.stock = arr
-      .filter((x: any) => !x.stockForm || x.stockForm === 'MATERIAL')
-      .reduce((s: number, x: any) => s + (Number(x.quantity) || 0), 0)
-  } catch { row.stock = undefined }
+  row.stock = await fetchStockQty(form.warehouseId, row.productId, row.qualityType || 'PENDING')
 }
 
 async function onProductChange(row: any, id: number) {

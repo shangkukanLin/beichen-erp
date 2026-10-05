@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -84,7 +84,8 @@ async function onCancel(row: any) {
   } catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
-onMounted(load)
+// 2026-10-05 F7-287 修复：原 `onMounted(load)` 与下面的 useDomainRefresh **加载的是同一个函数**
+//   ⇒ 首次进入重复请求一遍。useDomainRefresh 自身在 onMounted 调一次 loader，故删掉独立 onMounted。
 // 从新增/详情页返回时按需刷新（保留查询与分页现场）
 useDomainRefresh('payableTransfer', () => {
     load()

@@ -295,8 +295,11 @@ public final class BillStatementExcelBuilder {
      * 会造成"合计 = 明细之和"的**双计**。单开一页后主表一个字没动（对外单据版式稳定，
      * `verify-bill-export.ps1` 对主表的行数/SUM 断言也原样成立），明细另页供内部与对方核对。</p>
      *
-     * <p><b>金额方向</b>：本页金额取**带符号**值（{@code signedAmount}：销售/采购单取正、退货取负），
-     * 与台账方向一致 ⇒ 页脚的 SUM 恰好等于主表「金额」列合计，可互相印证（若不等，Excel 里立刻显形）。</p>
+     * <p><b>金额方向</b>：本页金额取**带符号**值（{@code signedAmount}：销售/采购单取正、退货取负），与台账方向一致。</p>
+     *
+     * <p><b>⚠️ 页脚合计的口径（2026-10-04 F7-275 更正）</b>：页脚 SUM 只含**可展开来源**的明细；
+     * 「无产品明细」的来源只占一行灰字说明、**不带金额** ⇒ 有这类来源时页脚合计**必然小于**主表「金额」列合计，
+     * 差额恰等于那些来源的金额之和 —— 这是设计而非缺陷（原注释写成"恰好等于主表合计"，会把正常差额误读成 bug）。</p>
      *
      * <p>没有产品明细的来源类型（收费之外的各种折损/报损/委外/预收台账…）**仍然占一行**：产品名称列写
      * 该类型的专属原因（灰字），避免对方以为"漏了行"。</p>
@@ -335,13 +338,14 @@ public final class BillStatementExcelBuilder {
         n.setHeightInPoints(28);
         ExcelExportHelper.text(n, 0, "说明：金额为**带符号**值（销售/采购单取正、退货按负数冲减），与对账单主表方向一致；"
                 + "「明细类型」= 货值 / 收费（收费行的金额是逐产品收费额，数量与单价是该单据行的业务量，仅供对照）；"
-                + "「核对」列 = 该来源单的明细合计与其台账金额是否一致。本页仅供核对，不单独作为收付依据。", noteStyle);
+                + "「核对」列 = 该来源单的明细合计与其台账金额是否一致。**本页合计只含可展开来源的明细**：与主表"
+                + "「金额」列合计的差额 = 无产品明细的来源（下方灰字行，不为其编造金额）。本页仅供核对，不单独作为收付依据。", noteStyle);
         ExcelExportHelper.merge(sheet, 1, 0, 1, DETAIL_HEADERS.length - 1);
 
         Row head = sheet.createRow(r++);
         head.setHeightInPoints(22);
         for (int c = 0; c < DETAIL_HEADERS.length; c++) ExcelExportHelper.text(head, c, DETAIL_HEADERS[c], headerStyle);
-
+        int firstDataRow = r;      // 0 基行号：第一条数据行（页脚 SUM 的区间起点，见下）
         int lineRows = 0;
         for (Map<String, Object> g : gs) {
             String typeLabel = sourceTypeLabel(String.valueOf(g.get("sourceBillType")));
@@ -398,8 +402,12 @@ public final class BillStatementExcelBuilder {
         ExcelExportHelper.text(total, 0, "明细金额合计", totalLabelStyle);
         ExcelExportHelper.merge(sheet, total.getRowNum(), 0, total.getRowNum(), 7);
         if (lineRows > 0) {
-            String firstData = String.valueOf(DETAIL_HEADER_ROW + 2);
-            String lastData = String.valueOf(DETAIL_HEADER_ROW + 1 + lineRows);
+            // 2026-10-04 F7-275：区间原先按**产品行数**（lineRows）算 ⇒ 漏掉"无明细来源行"（它们同样占行、
+            //   只是金额列为空），于是"既有可展开来源、又有无明细来源"的账单会少算尾部 K 行（K = 无明细来源数）。
+            //   改成锚在**行号**上：起点 = 第一条数据行、终点 = 合计行的前一行（合计行的 0 基行号，其 1 基行号
+            //   恰好等于最后一条数据行的行号）⇒ 不论 K/L 如何组合都覆盖全部数据行。
+            String firstData = String.valueOf(firstDataRow + 1);
+            String lastData = String.valueOf(total.getRowNum());
             ExcelExportHelper.formula(total, 8, "SUM(I" + firstData + ":I" + lastData + ")", totalMoneyStyle);
         } else {
             ExcelExportHelper.num(total, 8, BigDecimal.ZERO, totalMoneyStyle);

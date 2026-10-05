@@ -416,7 +416,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           <el-col :span="8" v-if="form.materialOrderId != null">
             <el-form-item label="关联物料订单">
               <RemoteSelect v-model="form.materialOrderId" :fetch="fetchMaterialOrders" :label-key="materialOrderLabel"
-                :disabled="!form.supplierId" placeholder="可不选（不关联则靠本单跟踪）" style="width:100%" domain="material" />
+                :disabled="!form.supplierId" placeholder="可不选（不关联则靠本单跟踪）" style="width:100%" domain="materialOrder" />
             </el-form-item>
           </el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>

@@ -132,7 +132,9 @@ Write-Output '=== F7-118) sale_exchange.total_amount column is gone ==='
 $col = SqlOne "SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='$DB' AND TABLE_NAME='sale_exchange' AND COLUMN_NAME='total_amount'"
 if ([string]::IsNullOrWhiteSpace($col)) { Ok 'total_amount column dropped' } else { Bad 'total_amount column still present' }
 $exRows = [int](SqlOne 'SELECT COUNT(*) FROM sale_exchange')
-if ($exRows -eq 13) { Ok 'sale_exchange rows unchanged (13)' } else { Info ('sale_exchange rows = ' + $exRows) }
+# 2026-10-05 F7-292: the drift branch was `Info` (a silent green). Historical counts drift by design, so the
+# honest verdict is SKIP (visible, not counted as PASS) rather than pretending the row count was verified.
+if ($exRows -eq 13) { Ok 'sale_exchange rows unchanged (13)' } else { Skip ('sale_exchange rows = ' + $exRows + ' (baseline was 13, history drifted) -- not asserted') }
 
 # ---------- F7-120: analysis endpoint behaviour ----------
 Write-Output ''
@@ -155,7 +157,7 @@ foreach ($id in ($createdReturns | Select-Object -Unique)) {
 $srLeft = [int](SqlOne 'SELECT COUNT(*) FROM sale_return')
 $soLeft = [int](SqlOne 'SELECT COUNT(*) FROM sale_order')
 Info ("after cleanup: sale_return=$srLeft (baseline 11), sale_order=$soLeft (baseline " + $beforeOrders + ")")
-if ($srLeft -eq 11) { Ok 'sale_return back to baseline' } else { Info 'sale_return count differs - verify manually' }
+if ($srLeft -eq 11) { Ok 'sale_return back to baseline' } else { Skip ('sale_return count = ' + $srLeft + ' (baseline was 11, history drifted) -- not asserted') }
 if ($soLeft -eq $beforeOrders) { Ok 'sale_order unchanged by this script' } else { Bad 'sale_order changed unexpectedly' }
 
 Write-Output ''

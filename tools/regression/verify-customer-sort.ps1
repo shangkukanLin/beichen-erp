@@ -76,7 +76,11 @@ $fit = (EvalJs $jsFit).Trim([char]34) -split '\|'
 Write-Host ('  header total width = ' + $fit[0] + 'px, container = ' + $fit[1] + 'px')
 Ok2 ($fit.Count -ge 2 -and [int]$fit[0] -le ([int]$fit[1] + 2)) ('columns still fit the container (no horizontal scroll): ' + $fit[0] + ' <= ' + $fit[1])
 
-# Column indices are DERIVED from the caret positions so this test survives column add/remove
+# 2026-10-05 F7-292 note: the caret positions ARE derived (so the sortable COLUMN ORDER is flexible), but the
+# two counts above (9 sortable / 12 total) are deliberate CONTRACTS of this page, not derived values -- an
+# intentional column change must update them here. (Before this note the comment claimed the test survives
+# add/remove, which contradicted `-eq 12`.)
+# Column indices are DERIVED from the caret positions so this test survives column-reorder
 # (sortable order is: amount, returnAmount, netAmount, cost, profit, profitRate, share, orderCount, unpaid).
 $colsWithCaret = @()
 for ($i = 0; $i -lt $t.heads.Count; $i++) { if ($t.heads[$i].carets -gt 0) { $colsWithCaret += $i } }

@@ -5,12 +5,15 @@
 //   只被授予应收权限的用户也不会 403（与供应商应付工作台同款处理；「收款记录」是后端镜像的只读视图）。
 //   内容 = 汇总卡（应收总额/已收/未收/逾期金额）+ 应收明细 + 收款记录。
 //   「新增收款」**按权限显示**：只有拿到 `finance:receipt` 的用户才看得见（v-perm 与后端前缀权限同码）。
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import { DocStatusLabel, DocStatusTag } from '@/api/common'
 import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SubjectType, SourceBillDetailRoute } from '@/api/enums'
+// F7-276（2026-10-04）：委外两类的 id 解析抽到 utils/sourceLink.ts，本页改为共用实现（与账单详情页口径一致）
+import { resolveSourceDetailPath } from '@/utils/sourceLink'
 
 const route = useRoute(); const router = useRouter()
 const customerId = Number(route.params.id)
@@ -48,15 +51,9 @@ function sourceRoute(row: any): string {
  * （不直读加工单页 —— 那需 outsource:order 权限，只有 finance:receivable 的用户会 403）。
  */
 async function goSourceDetail(row: any) {
-  const base = sourceRoute(row)
-  if (!base) return
-  let targetId = row.sourceId
-  if (row.sourceBillType === 'OUTSOURCE_DELIVERY' || row.sourceBillType === 'OUTSOURCE_EXCESS_LOSS') {
-    const r: any = await request.get('/common/resolve-code', { params: { code: row.sourceBillNo } })
-    targetId = r?.type === 'order' ? r.id : undefined
-  }
-  if (targetId == null) return
-  router.push(`${base}/${targetId}`)
+  // 路径解析统一走 utils/sourceLink.ts（含委外两类的 /common/resolve-code 换 id）—— 2026-10-04 F7-276
+  const p = await resolveSourceDetailPath(row)
+  if (p) router.push(p)
 }
 
 async function loadAll() {
@@ -81,7 +78,7 @@ function openAddReceipt() { router.push({ path: '/finance/receipt/add', query: {
 /** 返回应收管理（本页从「按客户汇总」进来） */
 function goBack() { router.push('/finance/receivable') }
 
-onMounted(() => loadAll())
+useDomainRefresh('receivable', () => loadAll())
 </script>
 
 <template>

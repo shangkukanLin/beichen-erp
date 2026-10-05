@@ -247,10 +247,24 @@ Write-Host ('  sheet2 rows = ' + $rows2 + ' (' + $sh2.Length + ' chars)')
 Ok ($sh2 -ne '') 'the second sheet part exists and is non-empty'
 Ok (($expRows -gt 0) -and ($rows2 -eq $expRows)) ('detail sheet row count == title+note+header+lines+total (' + $rows2 + ' == ' + $expRows + ')')
 Ok (([regex]::Matches($sh2, '<f>SUM')).Count -ge 1) 'detail sheet totals its amount column with a real SUM formula'
+# 2026-10-04 F7-275：页脚 SUM 区间必须覆盖**全部数据行** —— 数据区从 Excel 第 4 行起（3 行标题/说明/表头），
+# 合计行是最后一行 ⇒ 终点必须是 rows-1。原实现按"产品行数"算区间 ⇒ 账单里若有"无明细来源行"（委外/报损/
+# 预收台账…，它们占行但不带金额）会漏掉尾部若干行。本库当前账单恰好无此类来源（K=0，修前修后同值）
+# ⇒ 这条是**回归锁**：等有 K>0 的数据时它才会真正区分对错。
+$mSum = [regex]::Match($sh2, 'SUM\(I(\d+):I(\d+)\)')
+if ($mSum.Success) {
+  $firstI = [int]$mSum.Groups[1].Value; $lastI = [int]$mSum.Groups[2].Value
+  Write-Host ('  detail SUM range = I' + $firstI + ':I' + $lastI + ' ; sheet2 rows = ' + $rows2)
+  Ok ($firstI -eq 4) ('detail SUM starts at the first data row (I4), got I' + $firstI)
+  Ok ($lastI -eq ($rows2 - 1)) ('detail SUM ends at the last data row (I' + ($rows2 - 1) + '), got I' + $lastI)
+} else { Bad 'detail sheet has no parseable SUM(I..:I..) formula to range-check' }
 # column contract: 来源类型/来源单号/明细类型/产品名称/SKU/品质/数量/单价/金额/说明/核对 = 11 headers on row 3
 $hdr2 = ([regex]::Matches($sh2, '<c r="[A-K]3"')).Count
 Write-Host ('  detail header cells = ' + $hdr2)
-Ok ($hdr2 -eq 11) ('detail sheet has 11 columns (' + $hdr2 + ')')
+# 2026-10-05 F7-292: was the bare `-eq 11`. Keep the contract explicit, and accept a sheet that GAINED
+# columns (adding one should not require a guard edit) while still rejecting a sheet that lost one.
+$detailCols = @('来源类型','来源单号','明细类型','产品名称','SKU','品质','数量','单价','金额','说明','核对')
+Ok ($hdr2 -ge $detailCols.Count) ('detail sheet keeps all ' + $detailCols.Count + ' contracted columns (has ' + $hdr2 + ')')
 if ($groups -and $groups.data) {
   $firstLine = $null
   foreach ($g in @($groups.data)) { if (@($g.lines).Count -gt 0) { $firstLine = $g.lines[0]; break } }
@@ -278,16 +292,30 @@ Start-Sleep -Milliseconds 1700
 # export URL, the success toast appears, and the page logs no errors. The bytes themselves are verified in
 # PART A by downloading the same URL directly.
 $bb = B64 $btnTxt
+# 2026-10-05 F7-277 FIX -- install a MutationObserver BEFORE the click, then read what it recorded.
+#   Why: this block used to poll `document.querySelector('.el-message')` every 250ms for ~3s after the click.
+#   Measured on this host (see audit/audit-20261005-f7277-toast-probe.ps1): the toast IS rendered -- an observer
+#   installed before the click captured the expected text twice -- yet the poll saw nothing, because the toast
+#   appears LATER than that window (the export request + blob save happen first) and is gone by the time we look.
+#   Polling a transient node is inherently racy; observing its insertion is not. Semantics are unchanged: we still
+#   assert the same success text, just captured at insertion time (still base64 on the way home -> Dec above).
+$obs = EvalJs "(()=>{if(window.__mObs)return 'ALREADY';window.__msgs=[];const B=s=>btoa(unescape(encodeURIComponent(s||'')));const rec=el=>{try{const c=el.className?String(el.className):'';if(c.indexOf('message')>=0){const t=(el.innerText||'').trim();if(t)window.__msgs.push(B(t))}}catch(e){}};const scan=n=>{if(n&&n.nodeType===1){rec(n);if(n.querySelectorAll)n.querySelectorAll('[class*=message]').forEach(rec)}};window.__mObs=new MutationObserver(ms=>{ms.forEach(m=>{if(m.addedNodes)m.addedNodes.forEach(scan)})});window.__mObs.observe(document.body,{childList:true,subtree:true});return 'OBSERVING'})()"
+Write-Host ('observer: ' + $obs)
 $found = EvalJs "(()=>{const T=x=>new TextDecoder().decode(Uint8Array.from(atob(x),c=>c.charCodeAt(0)));const N=T('$bb');const vis=e=>e.getClientRects().length>0;const b=[...document.querySelectorAll('button')].filter(vis).find(e=>(e.innerText||'').trim()===N);if(!b)return 'NOBTN';b.click();return 'CLICKED'})()"
 Write-Host ('click: ' + $found)
 Ok ($found -eq 'CLICKED') ('export button found by EXACT text and clicked (' + $btnTxt + ')')
-# The toast lives ~1s (measured), so poll for it immediately instead of reading after a 2.5s sleep; its text
-# is Chinese -> base64 both ways (Dec above).
+# Wait for request + blob + toast, then read the observer's record. Whitespace is stripped because the EvalJs
+# return path can carry trailing junk, which makes ConvertFrom-Json throw (measured).
 $toast = ''
-for ($i = 0; $i -lt 12; $i++) {
-  Start-Sleep -Milliseconds 250
-  $tb = (EvalJs "(()=>{const e=document.querySelector('.el-message');return e?btoa(unescape(encodeURIComponent((e.innerText||'').trim()))):''})()").Trim()
-  if (($tb -ne '') -and ($tb -ne "''")) { $toast = (Dec $tb); break }
+for ($i = 0; $i -lt 20; $i++) {
+  Start-Sleep -Milliseconds 400
+  $msgsRaw = ((EvalJs "(()=>{return JSON.stringify((window.__msgs||[]).slice(0,6))})()") -replace '\s', '')
+  if (($msgsRaw -ne '') -and ($msgsRaw -ne '[]') -and ($msgsRaw -ne "'[]'")) {
+    try {
+      foreach ($b64 in @($msgsRaw | ConvertFrom-Json)) { $tv = (Dec $b64); if ($tv -ne '') { $toast = $tv; break } }
+    } catch { }
+    if ($toast -ne '') { break }
+  }
 }
 $perfRaw = EvalJs "(()=>{const B=s=>btoa(unescape(encodeURIComponent(s||'')));const e=performance.getEntriesByType('resource').filter(x=>x.name.indexOf('/finance/bill/')>=0&&x.name.indexOf('/export')>=0);return B(e.map(x=>x.name).join('\u0001'))})()"
 $perf = (((Dec $perfRaw) -split ([char]1)) -join ' | ')

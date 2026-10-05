@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { getCashflowPage, getAccountPage, type FinanceCashflow, type FinanceAccount } from '@/api/finance'
 import { CashFlowTypeLabel, codeLabelOptions } from '@/api/enums'
 
@@ -44,7 +45,7 @@ function flowTagType(row: any): 'success' | 'danger' | 'info' {
 const accounts = ref<FinanceAccount[]>([])
 async function loadAccounts() { try { const r = await getAccountPage({pageSize:200}); accounts.value = r?.records || [] } catch {} }
 
-onMounted(() => { loadFlow(); loadAccounts() })
+useDomainRefresh('cashflow', () => { loadFlow(); loadAccounts() })
 
 </script>
 <template>

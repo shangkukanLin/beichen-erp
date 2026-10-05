@@ -29,7 +29,8 @@ function AuditAll([string]$listPath, [string]$table, [string]$codeCol, [string]$
     Start-Sleep -Milliseconds 2800
     $st = SqlOne ("SELECT " + $stCol + " FROM " + $table + " WHERE " + $codeCol + "='" + $c + "'")
     if ($st -eq 'AUDITED') { Ok $true ($table + ' ' + $c + ' audited') }
-    else { Write-Host ('  INFO ' + $c + ' not audited: ' + (Txt '.el-message')) }
+    # 2026-10-05 F7-290: see ui-e2e-p7 -- the not-audited branch was INFO-only, i.e. unable to fail.
+    else { Skip ($table + ' ' + $c + ' not audited: ' + (Txt '.el-message')) }
   }
 }
 $custName = (ZH 'val_customer') + '1'

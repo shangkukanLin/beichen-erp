@@ -208,7 +208,9 @@ $runOut = D (SqlOne ("SELECT COALESCE(SUM(-change_quantity),0) FROM warehouse_st
 if ($runRet -gt 0) {
   Ok (($runOut -gt 0)) ('this run created ' + $runRet + ' return(s); their stock-out log sum = ' + $runOut)
 } else {
-  Ok $true 'no material return created in this run (idempotent rerun) - run-scope stock-out evidence not applicable'
+  # 2026-10-05 F7-290: was `Ok $true` -- an idempotent rerun creates nothing, so there is nothing to check
+  # in this run's scope: SKIP (with the reason) rather than a PASS.
+  Skip 'no material return created in this run (idempotent rerun) - run-scope stock-out evidence not applicable'
 }
 Write-Host ('errs=' + (Errs))
 Summary 'P5b material returns'

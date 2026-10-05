@@ -342,6 +342,11 @@ async function doSubmit() {
     // Cash settlement: same split rules as the backend (accounts required / amount>0 / no dupes /
     // rows sum == settleAmount / not exceeding the receivable).
     if (isCashForm.value) {
+      // F7-267（2026-10-04 审核）：应收为 0 ⇒ 现金结算无金额可分款（后端要求每行金额 > 0），明确拦住并指路
+      if (Number(goodsTotal.value || 0) <= 0.004) {
+        ElMessage.warning('应收总额为 0：现金结算没有金额可分款，请改用「账期」结算')
+        return
+      }
       const err = splitRef.value?.validate?.()
       if (err) { ElMessage.warning(err); return }
     }

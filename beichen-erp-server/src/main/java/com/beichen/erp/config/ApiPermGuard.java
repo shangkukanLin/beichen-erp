@@ -125,9 +125,15 @@ public class ApiPermGuard {
     /**
      * 按钮级动作码（**方案 A：动作码默认跟随页面**）：模块前缀 → 已登记的动作名集合。
      * <p>登记范围 = {@code DataInitializer.initButtonPerms()} 写入的 {@code menu_type='button'} 行
-     * （当前 4 个试点模块：采购换货/采购退货/销售单/销售退货）。判定用
-     * {@code <页面码>:<动作>} **或** 页面码 —— 因为方案 A 下动作码必然跟随页面；
-     * 将来切到"动作独立授权"只需去掉页面码兜底（见 {@link #check}）。</p>
+     * （自 2026-10-04 起 5 个模块：采购换货 / 采购退货 / 销售单 / 销售退货 / 销售换货）。
+     * 判定用 {@code <页面码>:<动作>} **或** 页面码 —— 因为方案 A 下动作码必然跟随页面。</p>
+     *
+     * <p><b>⚠️ 口径（F7-270 · 2026-10-04 审核批 2 明确）</b>：本表 + 库里的按钮码**目前不构成任何额外限制** ——
+     * {@code MenuServiceImpl.collectPermsWithButtons} 按 {@code parent_id} 把动作码自动并入持有该页面的用户，
+     * {@link #check} 又始终把页面码放进 {@code checkPermissionOr} 的 any 列表 ⇒ 「持页面 ⇒ 自动持动作」，
+     * 前后放行结果完全一致。它们的实际用途是：① 前端 {@code v-perm} 按钮显隐；② 为将来"动作独立授权"备好码与表。
+     * 因此**不要**把"补一个动作码"理解成"堵一个安全缺口"；真要按动作收口，改的是 {@link #check} 里那句兜底，
+     * 而不是往本表加行。</p>
      */
     private static final Map<String, List<String>> ACTION_RULES = new LinkedHashMap<>();
 
@@ -289,11 +295,18 @@ public class ApiPermGuard {
         // 只持 `sale:order` 的用户可改任意资金账户。修改比新增敏感，收口到账户管理/资金流水两码。
         strictWriteRule("/api/finance/account", "finance:account", "finance:cashflow");
 
-        // ===== 按钮级动作码（方案 A 试点 4 个模块，与 DataInitializer.initButtonPerms 保持一致）=====
+        // ===== 按钮级动作码（方案 A 试点 5 个模块，与 DataInitializer.initButtonPerms 保持一致）=====
         actionRule("/api/inventory/purchase-exchange", "audit", "unaudit", "cancel");
         actionRule("/api/inventory/purchase-return", "audit", "unaudit", "cancel", "delete");
         actionRule("/api/inventory/sale", "audit", "unaudit", "cancel");
         actionRule("/api/sale/return", "audit", "unaudit", "cancel", "delete");
+        // F7-270（2026-10-04 审核批 2）：补上销售换货 —— 605「销售换货单」的按钮码
+        //   (sale:exchange:audit|unaudit|cancel) 已与 601/603 一起写入库，但本表此前漏登 ⇒ 元数据不对称。
+        //   ⚠️ 登记它**不改变任何放行结果**：方案 A 下 check() 走 StpUtil.checkPermissionOr(action, ...pageCodes)，
+        //   页面码始终在 any 列表里兜底（动作码本就随页面自动下发，见本类 125-132 行的说明）⇒
+        //   持页面的用户前后都能过。它只是让"动作码试点模块"与库里的按钮码一一对应，
+        //   便于将来真的切到「动作独立授权」（那时只需删掉 check() 里的页面码兜底）。
+        actionRule("/api/sale/exchange", "audit", "unaudit", "cancel");
     }
 
     /**

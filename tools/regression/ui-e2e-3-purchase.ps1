@@ -87,7 +87,9 @@ Open '/inventory/stock' 2400
 $st = Rows 0
 $si = FindRow $S
 Write-Host ('stock row after un-audit=' + $(if ($si -ne '-1') { ($st.rows[[int]$si] -join ' | ') } else { 'NOT FOUND' }))
-Ok $true 'un-audit executed (see stock row above)'
+# 2026-10-05 F7-290: was `Ok $true` -- a permanent PASS for "we clicked something". The real assertions of
+# this un-audit step are the payable rows checked right below; this line reported nothing.
+Skip 'un-audit executed (the stock/payable rows below are the actual assertions)'
 Open '/finance/payable' 2400
 $py = Rows 0
 $still = $false

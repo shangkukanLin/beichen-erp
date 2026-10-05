@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { SettlementStatus, SettlementStatusLabel, sourceBillTypeShortLabel, SourceBillTypeLabel, codeLabelOptions } from '@/api/enums'
 import { getPayablePage, type FinancePayable } from '@/api/finance'
@@ -67,7 +68,7 @@ async function loadSummary() {
  */
 function goSupplierDetail(row: any) { if (row?.supplierId != null) router.push(`/finance/payable/supplier/${row.supplierId}`) }
 
-onMounted(() => { loadSuppliersOptions(); loadSourceBillTypes(); load(); loadSummary() })
+useDomainRefresh('payable', () => { loadSuppliersOptions(); loadSourceBillTypes(); load(); loadSummary() })
 
 function query_() { page.pageNum = 1; load() }
 function reset_() {

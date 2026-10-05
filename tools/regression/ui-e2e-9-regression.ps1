@@ -24,7 +24,9 @@ Open '/inventory/material-move' 3000
 ClearErrs | Out-Null
 $idx = [int](FindRowByCol 3 $OWH 'st_audited')
 Write-Host ('audited receive row=' + $idx + ' => ' + $(if ($idx -ge 0) { CellText $idx 1 } else { '-' }))
-if ($idx -lt 0) { Ok $false 'D1 audited receive doc not found'; Summary 'regression D1D2D3'; exit 1 }
+# 2026-10-05 F7-294: the audited receive document is a FIXTURE precondition -- its absence means the case
+# could not run, so this is a SKIP (exit 0), not a FAIL that buries real regressions.
+if ($idx -lt 0) { Skip 'D1 audited receive doc not found (fixture missing)'; Summary 'regression D1D2D3'; exit 0 }
 
 Step 'D1 un-audit receive doc from list (target warehouse must drop by 20)'
 # 2026-09-24（用户口径）：反审核已从列表行内移入详情页 ⇒ 先点「详情」，再在详情页头点「反审核」。

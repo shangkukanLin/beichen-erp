@@ -54,7 +54,8 @@ Start-Sleep -Milliseconds 1800
 $sp = (EvalJs 'String(location.pathname)').Trim([char]34)
 Write-Host ('  landed = ' + $sp)
 if ($clicked -eq 'NOLINK') {
-  Ok $true 'no clickable source-bill number on this page (all rows are jump-less types) -- nothing to verify'
+  # 2026-10-05 F7-290: was `Ok $true` -- "there was nothing to click" is a SKIP, not a verified PASS.
+  Skip 'no clickable source-bill number on this page (all rows are jump-less types) -- nothing to verify'
 } else {
   Ok ($sp -match '(outsource|supplier)/') ('the source-bill link opens a MATERIAL-side page, not the finished-goods one (' + $sp + ')')
 }

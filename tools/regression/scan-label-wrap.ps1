@@ -105,6 +105,8 @@ $CLOSEBOX = "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c
 # --- scan -----------------------------------------------------------------------------------
 $script:hits = 0
 $script:pages = 0
+$script:dialogs = 0
+$probeFail = @()
 $script:done = @{}
 $queue = @($targets)
 while ($queue.Count -gt 0) {
@@ -116,7 +118,9 @@ while ($queue.Count -gt 0) {
   $script:pages++
   $seen = @{}
   foreach ($raw in @((EvalJs $SCAN))) {
-    if ("$raw" -notmatch '^\[') { continue }
+    # 2026-10-05 F7-293: a failed scan probe used to be an invisible `continue` (same class as the sibling
+    # scans) -- with the browser down the sweep asserted "0 wrapped labels" and reported PASS.
+    if ("$raw" -notmatch '^\[') { $probeFail += $u; continue }
     foreach ($e in @($raw | ConvertFrom-Json)) {
       if ("$e" -notmatch '\|') { continue }
       $p = "$e" -split '\|'
@@ -131,6 +135,7 @@ while ($queue.Count -gt 0) {
   }
   $clicked = EvalJs $OPENBOX
   if ("$clicked" -eq 'CLICKED') {
+    $script:dialogs++
     Start-Sleep -Milliseconds 1600
     $now = EvalJs "location.pathname+location.search"
     if ("$now" -ne $u -and "$now" -notmatch '^/login') {
@@ -156,6 +161,8 @@ while ($queue.Count -gt 0) {
     Start-Sleep -Milliseconds 800
   }
 }
-Write-Host ('pages scanned = ' + $script:pages + ' ; wrapped sites = ' + $script:hits)
+Write-Host ('pages scanned = ' + $script:pages + ' ; wrapped sites = ' + $script:hits + ' ; probeFailures = ' + $probeFail.Count + ' ; dialogs opened = ' + $script:dialogs)
+Ok ($probeFail.Count -eq 0) ('every page could be scanned (failures: ' + $probeFail.Count + (if ($probeFail.Count -gt 0) { ' -> ' + ($probeFail -join ', ') } else { '' }) + ')')
+Ok ($script:pages -gt 0) ('the sweep actually visited at least one page (visited: ' + $script:pages + ')')
 Ok ($script:hits -eq 0) ('no wrapped form label on any scanned page/dialog (pages=' + $script:pages + ')')
 Summary 'scan-label-wrap'

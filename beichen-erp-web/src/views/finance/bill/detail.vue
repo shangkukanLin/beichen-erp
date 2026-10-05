@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onActivated } from 'vue'
+import { ref, computed, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBill, getBillItems, getBillProductItems, auditBill, unAuditBill, cancelBill, type FinanceBill, type FinanceBillItem, type BillProductGroup } from '@/api/finance'
-import { BillType, BillTypeLabel, sourceBillTypeLabel, FINANCE_BILL_DIRTY_KEY, ProductQualityTypeLabel, ProductQualityTypeTag, SourceBillDetailRoute, billChargeTypeLabel } from '@/api/enums'
+import { BillType, BillTypeLabel, sourceBillTypeLabel, FINANCE_BILL_DIRTY_KEY, ProductQualityTypeLabel, ProductQualityTypeTag, billChargeTypeLabel } from '@/api/enums'
+// F7-276（2026-10-04）：来源单下钻收口到 utils/sourceLink.ts（含委外两类的 id 解析，与应收/应付台账页同一实现）
+import { canDrillSource, resolveSourceDetailPath } from '@/utils/sourceLink'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import request from '@/utils/request'
 import PageShell from '@/components/PageShell.vue'
@@ -84,16 +86,15 @@ async function handleExport() {
 }
 
 /**
- * 「来源单号」→ 该**业务单详情**的路由（2026-10-02 用户要求「来源单号下钻」）。
- * 类型→路由前缀用 `SourceBillDetailRoute`（与应收/应付台账页同一张表，免得两处口径漂移）；
- * **没配前缀的类型就返回空**，模板渲染成纯文本 —— 不假装可点（缺键时点不动的坑，F7-54 已修过一轮）。
+ * 来源单号 → **业务单详情**的下钻（2026-10-02 用户要求「来源单号下钻」；2026-10-04 F7-276 收口）。
+ *
+ * 下钻：目标路径统一由 `utils/sourceLink.ts` 解析。**2026-10-04 F7-276 修复**：本页原先自己拼
+ * `前缀/sourceId`，而委外加工收货（`OUTSOURCE_DELIVERY`）/超损（`OUTSOURCE_EXCESS_LOSS`）的
+ * `sourceId` 是**收货记录 / 结单报表 id**（不是加工单 id）⇒ 点进去是"另一张单据"；应收/应付台账页
+ * 早就用 `/common/resolve-code` 换过 id，这里改为共用同一实现（`canDrillSource` 供模板判"可点吗"）。
  */
-function sourceRoute(row: any) {
-  const base = SourceBillDetailRoute[String(row?.sourceBillType || '')]
-  return base && row?.sourceId ? base + '/' + row.sourceId : ''
-}
-function goSourceDetail(row: any) {
-  const p = sourceRoute(row)
+async function goSourceDetail(row: any) {
+  const p = await resolveSourceDetailPath(row)
   if (p) router.push(p)
 }
 /**
@@ -107,9 +108,9 @@ const groupByItemId = computed(() => {
   for (const g of (groups.value || [])) if (g?.billItemId != null) m[Number(g.billItemId)] = g
   return m
 })
-function itemSourceRoute(row: any): string {
+function itemCanDrill(row: any): boolean {
   const g = groupByItemId.value[Number(row?.id)]
-  return g ? sourceRoute(g) : ''
+  return !!g && canDrillSource(g)
 }
 function goItemSource(row: any) {
   const g = groupByItemId.value[Number(row?.id)]
@@ -139,7 +140,9 @@ function linesSummary({ columns, data }: any) {
   return columns.map((_c: any, i: number) => {
     if (i === 0) return '合计'
     if (i === 3) return fmt(rows.reduce((s: number, l: any) => s + Number(l.quantity || 0), 0))
-    if (i === 5) return fmt(rows.reduce((s: number, l: any) => s + Number(l.amount || 0), 0))
+    // 2026-10-04 F7-274 修复：金额合计必须用 **signedAmount**（与行内「金额」列同源）。用无符号 amount
+    //   会让退货类来源出现"行 −200、合计 +200"——正是上面「金额」列注释想避免的情况。
+    if (i === 5) return fmt(rows.reduce((s: number, l: any) => s + Number(l.signedAmount || 0), 0))
     return ''
   })
 }
@@ -196,8 +199,9 @@ async function handleCancel() {
   catch (e: any) { ElMessage.error(e?.message || '作废失败') }
 }
 
-onMounted(() => { loadDetail() })
-// keep-alive 缓存下再次进入会复用组件，onMounted 不再触发
+// 2026-10-05 F7-287 修复：原 `onMounted(loadDetail)` + `onActivated(loadDetail)` —— keep-alive 组件的
+//   onActivated **在首次挂载时也会触发** ⇒ 首次进入 loadDetail() 跑了两遍。单据详情本就要"每次进入都拉"，
+//   故只留 onActivated（首次挂载 + 每次激活各一次：语义不变、少一次重复请求）。
 onActivated(() => { loadDetail() })
 </script>
 
@@ -251,7 +255,7 @@ onActivated(() => { loadDetail() })
              （明细行自己的 sourceId 是台账行 id，不能用来拼路由） -->
         <el-table-column label="来源单号" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button v-if="itemSourceRoute(row)" type="primary" link
+            <el-button v-if="itemCanDrill(row)" type="primary" link
                        @click.stop="goItemSource(row)">{{ row.sourceBillNo }}</el-button>
             <span v-else>{{ row.sourceBillNo }}</span>
           </template>
@@ -362,7 +366,7 @@ onActivated(() => { loadDetail() })
         <!-- 来源单号 → 业务单详情（2026-10-02 用户要求）；没配路由前缀的类型渲染成纯文本，不假装可点 -->
         <el-table-column label="来源单号" min-width="170" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button v-if="sourceRoute(row)" type="primary" link
+            <el-button v-if="canDrillSource(row)" type="primary" link
                        @click.stop="goSourceDetail(row)">{{ row.sourceBillNo }}</el-button>
             <span v-else>{{ row.sourceBillNo }}</span>
           </template>

@@ -3,7 +3,11 @@
 # 说明：只组合既有断言套件（PASS/FAIL 约定一致），不改任何数据清理逻辑；失败时打印明细并 exit 1
 $ErrorActionPreference = 'Continue'
 $ProgressPreference = 'SilentlyContinue'
-$root = 'c:\Users\75629\CodeBuddy\20260710123705'
+# 2026-10-05 F7-293: was a hard-coded absolute path ('c:\Users\75629\CodeBuddy\20260710123705'). The B0-B8
+# suite scripts (t1/u1/s1/edge/...) live at the WORKSPACE ROOT, while this gate lives in
+# <ws>\beichen-erp\tools\regression -- derive it (three levels up) so the gate survives a repo move, and so
+# a copy of this script anywhere else correctly reports "suites missing" instead of silently doing nothing.
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
 $mysql = 'E:\dev\mysql\mysql-8.0.46-winx64\bin\mysql.exe'
 $base = 'http://localhost:8080/api'
 
@@ -85,7 +89,13 @@ $inv = @(
   # 2026-09-21（配合口径同步「待分类」→「待整理」）：品质必须存**枚举 code**（A/B/C/DEFECT/PENDING），
   # 不能把 label 当 code 写库 —— 否则售后仓/退货整理的待整理库存校验、销售单可售品质护栏会**静默失效**
   # （与仓库类型那条同理，2026-09-14 造数时就踩过 label-as-code）。
-  @{ n = '品质类型越界(须为枚举code)'; q = "SELECT (SELECT COUNT(*) FROM warehouse_stock WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_order_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_return_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_exchange_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING'))" }
+  # 2026-10-05 F7-296：这条不变量有两处错误（工具层，非数据问题）——
+  # ① 引用了 `sale_exchange_item.quality_type`，该表**没有**这一列（列名是 `out_quality_type`，见 information_schema）
+  #    ⇒ 整条 SQL 报 Unknown column ⇒ 输出为空 ⇒ 门禁永远把它记成 FAIL（不可能通过）；
+  # ② 即使修好列名，`warehouse_stock` 同时承载**产品行与物料行**，而**物料品质只有 GOOD/DEFECT** 两档
+  #    （见 DashboardService 的注释）⇒ 不加 `product_id IS NOT NULL` 会把合法的物料行（quality_type='GOOD'）
+  #    误报为越界。产品行的枚举才是 A/B/C/DEFECT/PENDING。
+  @{ n = '品质类型越界(须为枚举code,仅产品行)'; q = "SELECT (SELECT COUNT(*) FROM warehouse_stock WHERE product_id IS NOT NULL AND quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_order_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_return_item WHERE quality_type IS NOT NULL AND quality_type NOT IN ('A','B','C','DEFECT','PENDING')) + (SELECT COUNT(*) FROM sale_exchange_item WHERE out_quality_type IS NOT NULL AND out_quality_type NOT IN ('A','B','C','DEFECT','PENDING'))" }
 )
 
 foreach ($i in $inv) {
@@ -104,7 +114,14 @@ Write-Output '================ 发版前门禁汇总 ================'
 $tp = 0; $tf = 0; $bad = 0
 foreach ($row in $rows) {
   $tp += $row.Pass; $tf += $row.Fail
-  if ($row.Verdict -eq 'FAIL') { $bad++ }
+  # 2026-10-05 F7-293: a gate must not pass on a suite that never ran. Before this, only FAIL was counted,
+  # so SKIP(缺脚本) and NOASSERT were silently "green" -- if every suite file went missing the gate still
+  # printed RESULT 门禁通过 and exited 0 (gate literally could not fail). Now any non-PASS verdict is a
+  # gate failure with an explicit line in the detail list.
+  if ($row.Verdict -ne 'PASS') {
+    $bad++
+    $failDetail += ('[' + $row.Suite + '] 未通过: ' + $row.Verdict + ' (pass=' + $row.Pass + ' fail=' + $row.Fail + ')')
+  }
   Write-Output ($row.Verdict.PadRight(9) + ' pass=' + ([string]$row.Pass).PadRight(4) + ' fail=' + ([string]$row.Fail).PadRight(4) + ' ' + $row.Suite)
 }
 Write-Output '------------------------------------------------'

@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { ElMessage, ElMessageBox, type FormInstance } from 'element-plus'
 import { getAccountPage, createAccount, updateAccount, type FinanceAccount } from '@/api/finance'
 import { AccountTypeLabel, accountTypeLabel } from '@/api/enums'
@@ -62,7 +63,7 @@ async function toggleStatus(row: FinanceAccount) {
   } catch { /* 提示由拦截器统一给出 */ }
 }
 
-onMounted(() => { loadAccounts() })
+useDomainRefresh('account', () => { loadAccounts() })
 
 </script>
 <template>

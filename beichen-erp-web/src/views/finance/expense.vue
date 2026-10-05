@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { computed, reactive, ref, onMounted } from 'vue'
+import { computed, reactive, ref } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -64,7 +65,7 @@ async function cancel(row: any) {
 }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
-onMounted(() => { loadData(); loadAccounts() })
+useDomainRefresh('expense', () => { loadData(); loadAccounts() })
 </script>
 <template>
   <div class="page-list">

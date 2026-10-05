@@ -51,14 +51,32 @@ foreach ($k in ($stat.Keys | Sort-Object)) {
   if ($hit) { $covered += $k } else { $uncovered += $k }
 }
 
-Write-Host ('prefixes in code = ' + $stat.Count + '  (covered=' + $covered.Count + ' uncovered=' + $uncovered.Count + ')')
-Write-Host ''
-Write-Host '=== UNCOVERED with WRITES (real gaps - list refresh will be lost) ==='
+Write-Output ('prefixes in code = ' + $stat.Count + '  (covered=' + $covered.Count + ' uncovered=' + $uncovered.Count + ')')
+Write-Output ''
+Write-Output '=== UNCOVERED with WRITES (real gaps - list refresh will be lost) ==='
 foreach ($k in ($uncovered | Sort-Object { -$stat[$_].W })) {
-  if ($stat[$k].W -gt 0) { Write-Host ('  ' + $k.PadRight(36) + ' writes=' + $stat[$k].W + ' reads=' + $stat[$k].R + '  e.g. ' + $stat[$k].Sample) }
+  if ($stat[$k].W -gt 0) { Write-Output ('  ' + $k.PadRight(36) + ' writes=' + $stat[$k].W + ' reads=' + $stat[$k].R + '  e.g. ' + $stat[$k].Sample) }
 }
-Write-Host ''
-Write-Host '=== UNCOVERED reads-only (likely alias prefixes - review) ==='
+Write-Output ''
+Write-Output '=== UNCOVERED reads-only (likely alias prefixes - review) ==='
 foreach ($k in ($uncovered | Sort-Object)) {
-  if ($stat[$k].W -eq 0) { Write-Host ('  ' + $k.PadRight(36) + ' reads=' + $stat[$k].R + '  e.g. ' + $stat[$k].Sample) }
+  if ($stat[$k].W -eq 0) { Write-Output ('  ' + $k.PadRight(36) + ' reads=' + $stat[$k].R + '  e.g. ' + $stat[$k].Sample) }
+}
+
+# 2026-10-05 F7-293: this script used to print everything through Write-Host and never set an exit code, so
+# piping its output captured NOTHING (that is why two audit runs came back empty) and a caller could not tell
+# a clean sweep from a real gap. Now: (a) Write-Output so logs/redirection can capture it, (b) an explicit
+# verdict + non-zero exit code when a WRITE-carrying prefix is uncovered, (c) a whitelist for prefixes that
+# legitimately must NOT be attached to a data domain (auth / tenant switching / platform-level company ops).
+$wl = @('/auth/login', '/auth/logout', '/company/admin/verify', '/company/switch', '/system/import-data', '/system/clear-company-data', '/common/resolve-code')
+$gaps = @($uncovered | Where-Object { $stat[$_].W -gt 0 -and -not ($wl -contains $_) })
+Write-Output ''
+foreach ($k in $gaps) { Write-Output ('GAP ' + $k + ' writes=' + $stat[$k].W + ' (uncovered by any data domain)') }
+Write-Output ('TOTAL prefixes=' + $stat.Count + ' covered=' + $covered.Count + ' uncovered=' + $uncovered.Count + ' realGaps=' + $gaps.Count)
+if ($gaps.Count -eq 0) {
+  Write-Output 'RESULT URL-DOMAIN-COVERAGE PASS'
+  exit 0
+} else {
+  Write-Output ('RESULT URL-DOMAIN-COVERAGE FAIL  ' + $gaps.Count + ' write prefix(es) with no data domain')
+  exit 1
 }

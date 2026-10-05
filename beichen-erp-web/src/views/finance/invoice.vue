@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { reactive, ref, computed, onMounted } from 'vue'
+import { reactive, ref, computed } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getInvoicePage, createInvoice, updateInvoice, cancelInvoice, type FinanceInvoice } from '@/api/finance'
 // 2026-09-20（F7-165）：4 组映射原先硬编码在本页，现集中到 @/api/enums（新增票种/状态只改一处）；
@@ -110,7 +111,7 @@ async function cancel(row: FinanceInvoice) {
 }
 function fmt(v?: number) { return v == null ? '0.00' : Number(v).toFixed(2) }
 function fmtDate(v?: string) { return v ? String(v).slice(0, 10) : '' }
-onMounted(() => { loadData() })
+useDomainRefresh('invoice', () => { loadData() })
 </script>
 <template>
   <div class="page-list">

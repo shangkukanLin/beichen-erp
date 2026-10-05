@@ -361,10 +361,12 @@ public class ProductAnalysisServiceImpl implements ProductAnalysisService {
                 returnQty = returnQty.add(q);
                 returnAmount = returnAmount.add(a);
             }
-            // 日期倒序；同日销售在前、退货在后（便于逐单核对冲减）
+            // 日期倒序；同日**销售在前、退货在后**（便于逐单核对冲减）。
+            // 2026-10-05 F7-278 修复：原先 `thenComparing(type)` 是**字符串升序**，而 "RETURN" < "SALE"
+            //   （'R' < 'S'）⇒ 同日退货反而排在销售前面，与本注释承诺相反。改为显式权重：SALE=0、RETURN=1。
             list.sort(Comparator
                     .comparing((Map<String, Object> m) -> String.valueOf(m.get("date"))).reversed()
-                    .thenComparing(m -> String.valueOf(m.get("type"))));
+                    .thenComparingInt(m -> "RETURN".equals(String.valueOf(m.get("type"))) ? 1 : 0));
         }
 
         Map<String, Object> res = new LinkedHashMap<>();

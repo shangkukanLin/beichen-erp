@@ -94,7 +94,8 @@ foreach ($isCash in @($true, $false)) {
   Write-Host ('  switch before: ' + $info0)
   Ok (($info0 -match 'checked')) 'a switch (not a select) renders for 结算方式'
   $o0 = $null
-  try { $o0 = $info0 | ConvertFrom-Json } catch { }
+  # 2026-10-05 F7-291: empty catch -> every assertion in the block below silently vanished on a parse failure.
+  try { $o0 = $info0 | ConvertFrom-Json } catch { Ok $false ('switch info probe parse failed: ' + $info0) }
   if ($o0) {
     Ok (([int]$o0.selects -eq 0)) 'no el-select left inside the 结算方式 form item'
     # inline-prompt 的开关**只显示当前状态的文案**：关=账期 / 开=现金（两个状态分别断言，防术语回退）

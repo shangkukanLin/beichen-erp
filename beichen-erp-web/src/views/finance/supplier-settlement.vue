@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -100,7 +101,7 @@ function refreshChecks() {
   stocksOk.value = (data.value.stocks || []).length === 0
 }
 
-onMounted(async () => { await loadAll(); refreshChecks() })
+useDomainRefresh('supplierSettlement', async () => { await loadAll(); refreshChecks() })
 
 </script>
 

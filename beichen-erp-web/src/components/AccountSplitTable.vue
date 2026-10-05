@@ -14,7 +14,7 @@
         @update:model-value="onTotalInput"
       />
       <span v-if="upperLimit != null" class="account-split__limit">
-        （{{ upperLabel }} ¥{{ fmt(upperLimit) }}<template v-if="remaining > 0.004">，本次待收 <b>¥{{ fmt(remaining) }}</b> 将挂预收</template><template v-else-if="remaining < -0.004">，<b class="is-err">已超出 ¥{{ fmt(-remaining) }}</b></template>）
+        （{{ upperLabel }} ¥{{ fmt(upperLimit) }}<template v-if="remaining > 0.004">，本次待收 <b>¥{{ fmt(remaining) }}</b> 仍在应收（未收）</template><template v-else-if="remaining < -0.004">，<b class="is-err">已超出 ¥{{ fmt(-remaining) }}</b></template>）
       </span>
     </div>
 

@@ -37,7 +37,8 @@ function TableOver([int]$idx) {
 # ---- fixtures (self-healing: the product/warehouse pair that really holds grade-A stock) ----
 $fx = [string](SqlOne "SELECT CONCAT(ws.warehouse_id,'|',ws.product_id,'|',p.sku,'|',p.name) FROM warehouse_stock ws JOIN product p ON p.id=ws.product_id WHERE ws.quality_type='A' AND ws.product_id IS NOT NULL AND IFNULL(ws.quantity,0) > 10 ORDER BY ws.quantity DESC LIMIT 1")
 $f = @($fx -split '\|')
-if ($f.Count -lt 4) { Write-Host ('RESULT FAIL p11c (fixture missing: no grade-A stock found)'); exit 1 }
+# 2026-10-05 F7-294: fixture-missing => SKIP + exit 0 (was a red).
+if ($f.Count -lt 4) { Write-Host ('RESULT SKIP p11c (fixture missing: no grade-A stock found)'); exit 0 }
 $WH = [int]$f[0]; $PROD = [int]$f[1]; $SKU = [string]$f[2]; $PNAME = [string]$f[3]
 $WH_NAME = [string](SqlOne ("SELECT warehouse_name FROM warehouse WHERE id=$WH"))
 $QTY = 2; $FEE = 30

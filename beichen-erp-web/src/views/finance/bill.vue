@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, computed, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getBillPage, generateBill, auditBill, unAuditBill, cancelBill, type FinanceBill } from '@/api/finance'
@@ -83,9 +83,11 @@ function afterChange() {
   invalidate('bill')
   loadData()
 }
-onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); loadData() })
+// 2026-10-05 F7-287 修复：原先 `onMounted` 与 `useDomainRefresh` **并存**（且前者还多加载两个下拉选项）
+//   ⇒ 首次进入把 loadData() 跑了两遍。useDomainRefresh 内部已在 onMounted 调一次 loader，
+//   故把原来的三项加载**整体并入** loader、删掉独立的 onMounted（行为不变，只少一次重复请求）。
 useDomainRefresh('bill', () => {
-    loadData()
+    loadCustomersOptions(); loadSuppliersOptions(); loadData()
 }, FINANCE_BILL_DIRTY_KEY)
 
 function query_() { page.pageNum = 1; loadData() }

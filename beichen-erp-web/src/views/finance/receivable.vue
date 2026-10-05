@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from 'vue'
+import { reactive, ref, watch } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { getReceivablePage, type FinanceReceivable, type PageResult } from '@/api/finance'
 import { SettlementStatus, SettlementStatusLabel, sourceBillTypeLabel, SubjectType, SubjectTypeLabel, SubjectTypeTag } from '@/api/enums'
@@ -60,7 +61,7 @@ async function loadSummary() {
 /** 汇总行「详情」→ 客户应收工作台（2026-09-29 新增，与「供应商应付工作台」对称） */
 function goCustomerDetail(row: any) { if (row?.customerId != null) router.push(`/finance/receivable/customer/${row.customerId}`) }
 
-onMounted(() => { loadCustomersOptions(); loadSuppliersOptions(); load(); loadSummary() })
+useDomainRefresh('receivable', () => { loadCustomersOptions(); loadSuppliersOptions(); load(); loadSummary() })
 
 // 切页签：清空往来单位筛选回到第一页
 watch(activeSubject, () => {

@@ -146,6 +146,8 @@ import { useUnsavedGuard } from '@/composables/usePageBack'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useTabStore } from '@/stores/tabs'
 import request from '@/utils/request'
+// F7-271（2026-10-04 审核批 2）：库存取数与数量上限收口到单一实现（口径见 utils/stock.ts）
+import { fetchStockQty, stockLimit } from '@/utils/stock'
 import { applyPageTitle } from '@/utils/pageTitle'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
 // 2026-09-20（F7-157）：原页内直接拼 request.get/post/put('/inventory/purchase-return...') 绕过 API 层
@@ -281,26 +283,15 @@ async function loadProducts(query?: string) {
 }
 
 /**
- * 2026-10-01（用户口径）：刷新某行的「库存数量」与**数量上限**。
+ * 刷新某行的「库存数量」与**数量上限**（用户口径 2026-10-01；F7-271 收口到 utils/stock.ts）。
  * 上限 = min(来源采购单数量, 该退货仓库 + 该产品 + 该品质的库存)；无来源（无单退货）⇒ 上限 = 库存。
- * ⚠️ 库存必须按 stockForm=MATERIAL 求和：审核出库走 changeStock 的 8 参重载，缺省形态即 MATERIAL；
- * 同一「仓+产品+品质」还可能有 PRODUCT_DEFECT / PRODUCT_REPAIR 等其它形态的行，混加会高估上限。
+ * 品质取明细品质（后端审核出库走 `it.getQualityType()`，无缺省 ⇒ 此处同样原样传，不做猜测）。
  */
 async function refreshStock(row: ReturnItem) {
-  row.stock = undefined
-  row.quantityLimit = undefined
-  if (!row.productId || !form.warehouseId) return
-  try {
-    const p: any = { warehouseId: form.warehouseId, productId: row.productId, pageSize: 500 }
-    if (row.qualityType) p.qualityType = row.qualityType
-    const res = await request.get<any, any>('/warehouse/stock/page', { params: p })
-    const arr: any[] = res?.records || []
-    const stock = arr
-      .filter((x: any) => !x.stockForm || x.stockForm === 'MATERIAL')
-      .reduce((s: number, x: any) => s + (Number(x.quantity) || 0), 0)
-    row.stock = stock
-    row.quantityLimit = row.sourceQty != null ? Math.min(Number(row.sourceQty), stock) : stock
-  } catch { row.stock = undefined; row.quantityLimit = undefined }
+  if (!row.productId || !form.warehouseId) { row.stock = undefined; row.quantityLimit = undefined; return }
+  const stock = await fetchStockQty(form.warehouseId, row.productId, row.qualityType)
+  row.stock = stock
+  row.quantityLimit = stockLimit(row.sourceQty, stock)
 }
 
 async function onProductChange(val: number, row: ReturnItem) {

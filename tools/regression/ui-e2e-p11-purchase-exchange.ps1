@@ -41,10 +41,11 @@ function ListLayout() {
 # 名字/单号选：采购单下拉显示的是单号）。
 $fx = [string](SqlOne ("SELECT CONCAT(o.supplier_id,'|',s.name,'|',o.id,'|',o.code,'|',oi.product_id,'|',p.name,'|',oi.unit_price,'|',oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) FROM purchase_order_item oi JOIN purchase_order o ON o.id=oi.order_id JOIN supplier s ON s.id=o.supplier_id JOIN product p ON p.id=oi.product_id WHERE o.status='AUDITED' AND EXISTS (SELECT 1 FROM warehouse_stock ws WHERE ws.warehouse_id=$OUT_WH AND ws.product_id=oi.product_id AND ws.quality_type='A' AND IFNULL(ws.quantity,0) > 5) ORDER BY (oi.quantity - IFNULL((SELECT SUM(ri.quantity) FROM purchase_return_item ri WHERE ri.purchase_order_item_id=oi.id AND ri.return_id IN (SELECT id FROM purchase_return WHERE status<>'CANCELLED')),0) - IFNULL((SELECT SUM(xi.quantity) FROM purchase_exchange_item xi WHERE xi.purchase_order_item_id=oi.id AND xi.exchange_id IN (SELECT id FROM purchase_exchange WHERE status<>'CANCELLED')),0)) DESC LIMIT 1"))
 $f = @($fx -split '\|')
-if ($f.Count -lt 8) { Write-Host 'RESULT FAIL p11 (fixture missing: no audited PO item is swapable with grade-A stock)'; exit 1 }
+# 2026-10-05 F7-294: fixture-missing => SKIP + exit 0 (was a red).
+if ($f.Count -lt 8) { Write-Host 'RESULT SKIP p11 (fixture missing: no audited PO item is swapable with grade-A stock)'; exit 0 }
 $SUP_ID = [int]$f[0]; $SUP_NAME = [string]$f[1]; $PO_ID = [int]$f[2]; $PO_CODE = [string]$f[3]
 $PROD = [int]$f[4]; $PROD_NAME = [string]$f[5]; $PRICE = [decimal]$f[6]; $CAN = [decimal]$f[7]
-if ($CAN -lt 1) { Write-Host 'RESULT FAIL p11 (fixture exhausted: swapable=0)'; exit 1 }
+if ($CAN -lt 1) { Write-Host 'RESULT SKIP p11 (fixture exhausted: swapable=0, rerun the seed to refill)'; exit 0 }
 if ($QTY -gt $CAN) { $QTY = [int]$CAN }
 Write-Host ('[FIXTURE] supplier=' + $SUP_ID + ' (' + $SUP_NAME + ') po=' + $PO_ID + ' (' + $PO_CODE + ') product=' + $PROD + ' (' + $PROD_NAME + ') price=' + $PRICE + ' swapable=' + $CAN + ' qty=' + $QTY)
 

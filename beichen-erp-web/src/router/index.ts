@@ -356,11 +356,11 @@ const routes: RouteRecordRaw[] = [
       { path: 'inventory/customer/detail/:id', name: 'InventoryCustomerDetail', component: () => import('@/views/customer/detail.vue'), meta: { title: '客户详情', requiresAuth: true, operate: true } },
       { path: 'inventory/customer/add', name: 'InventoryCustomerAdd', component: () => import('@/views/customer/detail.vue'), meta: { title: '新增客户', requiresAuth: true, operate: true } },
       { path: 'inventory/purchase', name: 'InventoryPurchase', component: () => import('@/views/purchase/order/index.vue'), meta: { title: '成品采购单', requiresAuth: true }
-      }, {
-        path: 'inventory/purchase/add',
-        name: 'InventoryPurchaseAdd',
-        component: () => import('@/views/purchase/order/add.vue'),
-        meta: { title: '新增成品采购单', requiresAuth: true, operate: true } },
+      },
+      // 2026-10-05 F7-280 修复：这里原有一次**重复注册** —— 同一 path+name 早在 2026-07-29 就注册过
+      // （指向旧的 purchase/order/add.vue），2026-09-23 新增"独立成页"时又注册了一次（form.vue，见下方 operate 组）。
+      // 重复 name/path 时**先注册者生效** ⇒ 09-23 的本意（form.vue）一直没生效。现移除本条旧注册，
+      // 让「新增成品采购单」走 form.vue（旧 add.vue 自此无引用；若确认不再需要可另行删文件）。
       { path: 'inventory/purchase/detail/:id',
         name: 'InventoryPurchaseDetail',
         component: () => import('@/views/purchase/order/detail.vue'),
@@ -560,6 +560,16 @@ router.beforeEach((to, _from, next) => {
   // 其本身不是菜单，无需菜单白名单授权，直接放行（路由表未声明的路径不会带此标记，越权防护不削弱）
   if ((to.meta as any).operate) {
     next()
+    return
+  }
+
+  // 2026-10-05 F7-281 修复：`/company-manage`（超管登录后选公司）**不是菜单**，却由 views/login/index.vue
+  //   push 进来（layout 特意不为它开页签）⇒ 原先直接落到下面的白名单判定、被判 /403，超管自己都进不去
+  //   （库里现有 2 家公司，"公司管理"一直在用）。这里显式放行，但**仅限超管** —— 与后端
+  //   SystemController 的类级 @SaCheckRole(SUPER_ADMIN) 同口径，不为普通用户放宽。
+  if (to.path === '/company-manage') {
+    if (userStore.isSuperAdmin) { next(); return }
+    next('/403')
     return
   }
 

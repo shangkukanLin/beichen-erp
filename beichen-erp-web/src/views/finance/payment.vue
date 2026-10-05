@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref } from 'vue'
+import { useDomainRefresh } from '@/utils/dataFreshness'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -99,7 +100,7 @@ async function handleUnAudit(row: FinancePayment) {
 function handleDetail(row: FinancePayment) { if (row?.id != null) router.push(`/finance/payment/detail/${row.id}`) }
 function openAttach(url: string) { window.open(url + '?inline=true') }
 
-onMounted(() => { loadSuppliersOptions(); loadAccounts(); loadData() })
+useDomainRefresh('payment', () => { loadSuppliersOptions(); loadAccounts(); loadData() })
 
 </script>
 

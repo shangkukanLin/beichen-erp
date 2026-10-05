@@ -62,11 +62,15 @@ $js = "(()=>{const vis=e=>e.getClientRects().length>0;const out=[];const ts=[...
 $bad = @()
 $scanned = 0
 $noTable = 0
+$probeFail = @()
 foreach ($p in $routes) {
   Open $p 1800
   Start-Sleep -Milliseconds 600
   $raw = EvalJs $js
-  if (-not $raw.TrimStart().StartsWith('{')) { Write-Host ('  ?? ' + $p + ' probe failed: ' + $raw); continue }
+  # 2026-10-05 F7-293: a failed probe (browser/frontend not up, page crashed) used to be `continue`d -- i.e.
+  # invisible. With every probe failing the sweep still reported PASS ("0 offenders"). Now probe failures are
+  # collected and asserted to be zero, and a sweep that measured nothing at all is a failure too.
+  if (-not $raw.TrimStart().StartsWith('{')) { Write-Host ('  ?? ' + $p + ' probe failed: ' + $raw); $probeFail += $p; continue }
   $d = $raw | ConvertFrom-Json
   if (@($d.tables).Count -eq 0) { $noTable++; continue }
   $scanned++
@@ -82,7 +86,9 @@ foreach ($p in $routes) {
   Write-Host ('  ok   ' + $p + '  ' + $summary)
 }
 Write-Host ''
-Write-Host ('[SCAN] pages with a table = ' + $scanned + ' ; without = ' + $noTable + ' ; offenders = ' + $bad.Count)
+Write-Host ('[SCAN] pages with a table = ' + $scanned + ' ; without = ' + $noTable + ' ; offenders = ' + $bad.Count + ' ; probeFailures = ' + $probeFail.Count)
+Ok ($probeFail.Count -eq 0) ('every page could be probed (failures: ' + $probeFail.Count + (if ($probeFail.Count -gt 0) { ' -> ' + ($probeFail -join ', ') } else { '' }) + ')')
+Ok ($scanned -gt 0) ('at least one page actually had a table to measure (measured: ' + $scanned + ')')
 Ok ($bad.Count -eq 0) ('every list fits on one line (offenders: ' + $bad.Count + ')')
 if ($bad.Count -gt 0) {
   Write-Host '--- offenders (worst margin first) ---'
