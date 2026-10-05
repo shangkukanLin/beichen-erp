@@ -230,3 +230,5 @@ try {
 }
 
 Write-Output ("RESULT " + $(if ($script:fails -eq 0) { 'PASS' } else { "FAIL($script:fails)" }))
+# F7-288 同类：原先失败时进程退出码仍为 0（调用方看退出码会当通过）=> 与 RESULT 文本保持一致
+exit $script:fails

@@ -196,6 +196,11 @@ SqlExec ("DELETE FROM outsource_order_close_report WHERE id=$reportId")
 SqlExec ("DELETE FROM outsource_order WHERE id=$orderId")
 if ($stockRows0 -eq 0) {
   SqlExec ("DELETE FROM warehouse_stock WHERE warehouse_id=$FACT_WH AND material_id=$MAT AND IFNULL(quantity,0)=0")
+} else {
+  # F7-297（2026-10-05 审核）：基线里该维度**本来就有行**时，光删本次新增的流水是不够的 ——
+  # 那会变成"删了流水但没恢复库存"。此处把数量显式还原回基线（原先只靠下游 self-check 报红，
+  # 等于把差异留在库里）。
+  SqlExec ("UPDATE warehouse_stock SET quantity=$stockQty0 WHERE warehouse_id=$FACT_WH AND material_id=$MAT")
 }
 # F7-141：只删本次运行新增的流水（见快照处说明；历史审计行不动）
 SqlExec ("DELETE FROM warehouse_stock_log WHERE id > $slMax0")

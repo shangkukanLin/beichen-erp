@@ -76,6 +76,17 @@ $cntROR   = [int](SqlOne 'SELECT COUNT(*) FROM outsource_return_order_repair')
 # F7-141（2026-09-20，测试卫生 B2）：warehouse_stock_log 是 append-only 台账，审核/反审核都会新增行；
 # 本脚本只还原业务表 ⇒ 反复运行会把测试噪声累积进审计表。记录主键上界，收尾只删**本次运行新增的**。
 $slMax0 = [int](SqlOne 'SELECT IFNULL(MAX(id),0) FROM warehouse_stock_log')
+# F7-297（2026-10-05 审核）：本用例经接口审核/反审核改动库存，而清理段只删掉本次新增的**流水**。
+# 原先自检只比对 8 张业务表 + 流水的 max(id)，**完全没有库存断言** ⇒ 只要有一次审核没被对称撤销，
+# 就会留下"库存被改、流水被删"的静默差异（正是门禁那条"库存 vs 流水"不变量被测试自身破坏的路径）。
+# 这里按 (warehouse, product, material, quality) 维度各取一份**精确快照**（库存侧与流水侧各一份），
+# 运行末逐字比对 —— 与 verify-fix-f7-138 的"整行快照 + 双侧回滚"同范式。
+function Snap([string]$table, [string]$col) {
+  $q = "SELECT IFNULL(GROUP_CONCAT(k SEPARATOR ';'),'') FROM (SELECT CONCAT(warehouse_id,'/',IFNULL(product_id,0),'/',IFNULL(material_id,0),'/',IFNULL(quality_type,'-'),'=',SUM($col)) k FROM $table GROUP BY warehouse_id, product_id, material_id, quality_type ORDER BY warehouse_id, product_id, material_id, quality_type) t"
+  return [string](SqlOne $q)
+}
+$stkMap0 = Snap 'warehouse_stock' 'quantity'
+$logMap0 = Snap 'warehouse_stock_log' 'change_quantity'
 Info "baseline: order=$cntOrder mo=$cntMo moi=$cntMoi ret=$cntRet retItem=$cntRetI repairRec=$cntRep retOrder=$cntRO roRepair=$cntROR"
 
 # ---------- F7-61 ----------
@@ -241,6 +252,15 @@ if ($c1 -eq $cntOrder -and $c2 -eq $cntMo -and $c3 -eq $cntMoi -and $c4 -eq $cnt
     -and $c7 -eq $cntRO -and $c8 -eq $cntROR -and $slNow -le $slMax0) {
   Ok 'all 8 tables + this run''s stock-log rows back to their pre-run baseline'
 } else { Bad 'cleanup incomplete (see counts above)' }
+
+# F7-297：库存 / 流水两侧的维度快照必须与运行前逐字一致（见本文件上方 Snap 的说明）
+$stkMap1 = Snap 'warehouse_stock' 'quantity'
+$logMap1 = Snap 'warehouse_stock_log' 'change_quantity'
+if ($stkMap1 -eq $stkMap0 -and $logMap1 -eq $logMap0) {
+  Ok 'stock AND stock-log per-dimension snapshots match the pre-run baseline (F7-297)'
+} else {
+  Bad 'stock/stock-log per-dimension snapshots DRIFTED from the pre-run baseline (F7-297) -- the fixture changed stock without a paired log row'
+}
 
 Write-Output ''
 if ($script:fail -eq 0) { Write-Output ("RESULT PASS (skip=$script:skip)") } else { Write-Output ("RESULT FAIL count=$script:fail skip=$script:skip") }
