@@ -9,6 +9,8 @@ import { getCompanyList, verifyAdmin } from '@/api/company'
 import { useUserStore, type UserInfo } from '@/stores/user'
 import type { MenuVO } from '@/api/system'
 import type { Company } from '@/api/company'
+// 2026-10-07「记住密码」：本地存储口径集中在 utils/remember.ts（含安全说明与"只记用户名"开关）
+import { loadRememberedLogin, saveRememberedLogin, clearRememberedLogin } from '@/utils/remember'
 
 const router = useRouter()
 const userStore = useUserStore()
@@ -17,8 +19,6 @@ const loginFormRef = ref<FormInstance>()
 const loading = ref(false)
 const companyOptions = ref<Company[]>([])
 const companyLoading = ref(false)
-
-const REMEMBER_KEY = 'beichen_erp_remember'
 
 const loginForm = reactive({
   username: '',
@@ -60,25 +60,23 @@ watch(companyOptions, (list) => {
 
 onMounted(() => {
   loadCompanies()
-  const saved = localStorage.getItem(REMEMBER_KEY)
-  if (saved) {
-    try {
-      const obj = JSON.parse(saved)
-      loginForm.username = obj.username || ''
-      loginForm.remember = true
-      // 迁移：历史版本曾把密码 base64 存进本地存储（可逆 = 明文），此处读到即原地清除
-      if (obj.password) localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username: loginForm.username }))
-    } catch { localStorage.removeItem(REMEMBER_KEY) }
+  const saved = loadRememberedLogin()
+  if (saved.username) {
+    loginForm.username = saved.username
+    loginForm.remember = true
+    // 回填口令（仅当历史遗留格式能被识别时才有值；旧格式会被 loadRememberedLogin 顺手清掉）
+    if (saved.password) loginForm.password = saved.password
   }
 })
 
-/** 只记住用户名，绝不落地密码（口令只存在于内存与登录请求中） */
+/**
+ * 「记住密码」（2026-10-07 用户要求）：勾选则把账号 + 口令（**混淆后**）落到本地存储，下次进入自动回填；
+ * 取消勾选立即清除。⚠️ 混淆不是加密 —— 能打开本机 DevTools 的人可还原口令，仅适合受控设备；
+ * 详见 utils/remember.ts 顶部的安全边界说明（含"改回只记用户名"的一行开关）。
+ */
 function saveRemember() {
-  if (loginForm.remember) {
-    localStorage.setItem(REMEMBER_KEY, JSON.stringify({ username: loginForm.username }))
-  } else {
-    localStorage.removeItem(REMEMBER_KEY)
-  }
+  if (loginForm.remember) saveRememberedLogin(loginForm.username, loginForm.password)
+  else clearRememberedLogin()
 }
 
 async function handleLogin() {
@@ -155,13 +153,13 @@ async function handleAdminVerify() {
             </el-select>
           </el-form-item>
           <el-form-item prop="username">
-            <el-input v-model="loginForm.username" placeholder="请输入用户名" :prefix-icon="User" clearable />
+            <el-input v-model="loginForm.username" placeholder="请输入用户名" :prefix-icon="User" clearable autocomplete="username" />
           </el-form-item>
           <el-form-item prop="password">
-            <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" :prefix-icon="Lock" show-password />
+            <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" :prefix-icon="Lock" show-password autocomplete="current-password" />
           </el-form-item>
           <div class="login-options">
-            <el-checkbox v-model="loginForm.remember">记住用户名</el-checkbox>
+            <el-checkbox v-model="loginForm.remember">记住密码</el-checkbox>
           </div>
           <el-form-item>
             <el-button type="primary" size="large" class="login-btn" :loading="loading" @click="handleLogin">登 录</el-button>
