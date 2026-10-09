@@ -13,9 +13,10 @@
  * 再插 4 列必然出现横向滚动条，而"所有列表一行显示、不许左右滑动"是本仓用户口径
  * （`tools/regression/scan-table-overflow.ps1` 的 margin &lt; -2 直接判 FAIL）。故本组件自成一张表。</p>
  *
- * <p><b>两个天数是两回事（用户 2026-10-02 追问过一次）</b>：`noSaleDays`（默认 15）是**滞销判定线**；
- * `recentDays`（默认 90，可选 30/60/90/180）是算「期间销量 / 周转天数」的**统计窗口**。
- * 两者都由后端随响应回传，本组件的文案一律用回传值，不写死。</p>
+ * <p><b>现在只有一个天数（2026-10-09 用户口径变更）</b>：`noSaleDays`（默认 15）是**滞销判定线** ——
+ * 含义为「距**最近一次来货（采购入库 / 委外加工回货）或最后销售**的天数」，二者取较晚者（来货会重置时钟）。
+ * 原先独立的「统计窗口（默认 90 天，可选 30/60/90/180）」按用户「90 天这个不要」⇒ 连同「期间销量 / 周转天数」
+ * 两列一并移除；阈值仍由后端随响应回传（`threshold`），本组件文案一律用回传值，不写死。</p>
  *
  * <p>刷新的驱动方式：**由父页面调用 {@link reload}**（组件自身不在 mounted 里拉数据，避免父页面
  * `useDomainRefresh` 的"首次挂载拉一次"与组件挂载各拉一次 ⇒ 首屏白拉两遍）。</p>
@@ -48,12 +49,12 @@ const emit = defineEmits<{
   (e: 'product-click', row: any): void
 }>()
 
-/** 统计窗口候选（天） */
-const RECENT_OPTIONS = [30, 60, 90, 180]
+// 2026-10-09 用户口径变更：原「统计窗口（默认 90 天，可选 30/60/90/180）」整体取消（原话「90 天这个不要」）
+// ⇒ RECENT_OPTIONS / st.recentDays / 「期间销量」「周转天数」两列一并移除；
+//    「15 天」的起算点改为「最近一次来货日（委外加工回货 / 成品购入）与最后销售日里较晚的那个」。
 
 const st = reactive({
-  noSaleDays: 15,        // 滞销判定线（可调）
-  recentDays: 90,        // 统计窗口（可调）
+  noSaleDays: 15,        // 滞销判定线（可调）：距最近来货或销售超过这么多天 ⇒ 滞销
   onlyStagnant: true,    // 默认只列滞销；取消 = 列全部有库存产品（等价于"给主表补上停滞天数列"）
   onlySevere: false,
   includeDiscontinued: true,
@@ -68,10 +69,8 @@ const buckets = ref<any[]>([])
 const empty = ref(false)
 let chart: echarts.ECharts | null = null
 
-/** 后端回传的窗口优先（它会被 clamp），拿不到才用本地值 */
-const recent = computed(() => Number(kpi.value.recentDays) || st.recentDays)
-/** 期间销量列的 tooltip / 导出表头都用它，避免"窗口改成 30 天、表头还写近90天" */
-const recentText = computed(() => '近 ' + recent.value + ' 天')
+// 2026-10-09：原 recent / recentText（统计窗口回显）已随窗口一并移除；
+// 「最近来货」列直接用后端回传的 lastInDate（不再有第二个天数需要在文案里拼）。
 
 function fmt(v?: any) { return v == null ? '0' : String(Math.round(Number(v))) }
 /** 金额展示：千分位 + 2 位小数 */
@@ -103,7 +102,6 @@ function params(pageNum: number, pageSize: number) {
     pageNum,
     pageSize,
     noSaleDays: st.noSaleDays,
-    recentDays: st.recentDays,
     // ⚠️ 三个布尔一律**显式传**（不能"为默认值时省略"）：后端把缺省当成 true（只看滞销 / 含停售），
     //    省略参数时"取消勾选"就完全没有效果 —— 2026-10-02 浏览器实测抓到过（取消勾选后仍是 1 行）。
     onlyStagnant: st.onlyStagnant,
@@ -185,10 +183,10 @@ async function exportList() {
     const res = await request.get<any, any>('/warehouse/stock/stagnant/page', { params: params(1, 9999) })
     if (Array.isArray(res?.records)) data = res.records
   } catch { /* 拉取失败：退回当前页已加载数据 */ }
-  const cols = ['SKU', '产品名称', '品牌', '最后销售日', '停滞天数', recentText.value + '销量', '周转天数', '总库存', '参考金额', '状态']
+  const cols = ['SKU', '产品名称', '品牌', '最后销售日', '最近来货', '停滞天数', '总库存', '参考金额', '状态']
   const statusText = (r: any) => (r.discontinued ? '停售' : (r.productStatus === 'DEVELOPING' ? '研发中' : '正常'))
   const aoa: (string | number)[][] = [
-    [`滞销清单（判定：超过 ${st.noSaleDays} 天没有销售${st.onlyStagnant ? '' : '；含未滞销产品'}，统计窗口：${recentText.value}，导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
+    [`滞销清单（判定：距最近来货或销售超过 ${st.noSaleDays} 天没有销售${st.onlyStagnant ? '' : '；含未滞销产品'}，导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
     [],
     cols,
   ]
@@ -198,9 +196,8 @@ async function exportList() {
       r.productName || '',
       r.brandName || '—',
       r.lastSaleDate || '从未销售',
+      r.lastInDate || '无来货',
       r.stagnantDays == null ? '—' : Number(r.stagnantDays),
-      Number(r.saleQtyRecent ?? 0),
-      r.turnoverDays == null ? '—' : Number(r.turnoverDays),
       Number(r.totalQuantity ?? 0),
       r.costMissing ? '成本未维护' : Number(r.refAmount ?? 0),
       statusText(r),
@@ -208,7 +205,7 @@ async function exportList() {
   })
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
-  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 8 }]
+  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 8 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '滞销清单')
   XLSX.writeFile(wb, `滞销清单_${localDate()}.xlsx`)
@@ -232,8 +229,8 @@ defineExpose({ reload })
       <div class="st-head">
         <span class="st-title">{{ props.title }}</span>
         <span class="st-hint">
-          口径：最后销售日 = 已审核销售单的**建单日**；有库存 × 超过阈值没有销售 = 滞销。
-          移仓 / 品质重分类 / 退货出库 / 反审核都不算"卖过"（否则会漏报）
+          口径：有库存 × **距「最近一次来货（采购入库 / 委外回货）」或「最后销售」**超过阈值没有销售 = 滞销。
+          最后销售日 = 已审核销售单的**建单日**；移仓 / 品质重分类 / 退货出库 / 反审核都不算"卖过"（否则会漏报）
         </span>
       </div>
     </template>
@@ -241,11 +238,7 @@ defineExpose({ reload })
       <span class="st-label">滞销判定</span>
       <el-input-number v-model="st.noSaleDays" :min="1" :max="3650" :step="5" controls-position="right"
                        size="small" style="width:118px" @change="onFilterChange" />
-      <span class="st-label">天没有销售</span>
-      <span class="st-label">统计窗口</span>
-      <el-select v-model="st.recentDays" size="small" style="width:104px" @change="onFilterChange">
-        <el-option v-for="d in RECENT_OPTIONS" :key="d" :label="'近 ' + d + ' 天'" :value="d" />
-      </el-select>
+      <span class="st-label">天无来货或销售</span>
       <el-checkbox v-model="st.onlyStagnant" label="仅看滞销" @change="onFilterChange" />
       <el-checkbox v-model="st.onlySevere" label="仅看严重滞销（>180 天）" @change="onFilterChange" />
       <el-checkbox v-model="st.includeDiscontinued" label="含停售产品" @change="onFilterChange" />
@@ -269,9 +262,9 @@ defineExpose({ reload })
       <div class="bar-empty" v-show="empty">当前筛选下没有有库存的产品</div>
       <div id="stagnantBar" class="bar-chart" />
     </div>
-    <!-- 列宽合计 940（SKU98/名称130/品牌84/最后销售日100/停滞92/期间销量92/周转84/库存76/金额116/状态68
-         ≤ 内容区 ~948）。「期间销量」表头固定 4 字（窗口天数写进 tooltip）—— 若写成「近180天销量」这类
-         动态表头会撑破本列（实测 6 字需 ≥105px）⇒ 由 scan-col-truncation.ps1 的 HDRTIGHT 规则卡着。 -->
+    <!-- 列宽合计 ≈ 864（SKU98/名称130/品牌84/最后销售日100/最近来货100/停滞92/库存76/金额116/状态68
+         ≤ 内容区 ~948）。2026-10-09：随「统计窗口」取消，「期间销量」「周转天数」两列删除（原各 92/84），
+         新增「最近来货」——滞销时钟的另一个起点，用户要能看见"为什么它被算成滞销"。 -->
     <el-table v-loading="loading" :data="rows" border stripe @row-click="(r: any) => emit('row-click', r)">
       <el-table-column prop="sku" label="SKU" min-width="98" show-overflow-tooltip />
       <el-table-column label="产品名称" min-width="130" show-overflow-tooltip>
@@ -288,26 +281,22 @@ defineExpose({ reload })
           <span v-else class="never">从未销售</span>
         </template>
       </el-table-column>
-      <el-table-column label="停滞天数" min-width="92" align="right">
+      <el-table-column label="最近来货" min-width="100" align="center">
         <template #default="{ row }">
-          <span :style="{ color: row.severe ? '#f56c6c' : (row.stagnant ? '#e6a23c' : ''), fontWeight: (row.severe || row.stagnant) ? 600 : 400 }">
-            {{ row.stagnantDays == null ? '—' : row.stagnantDays }}
-          </span>
-          <el-tooltip v-if="row.severe" content="严重滞销：停滞超过 180 天（从未销售的按入库已超 180 天判定）" placement="top">
-            <el-icon style="vertical-align:-2px"><WarningFilled /></el-icon>
+          <span v-if="row.lastInDate" title="最近一次来货：采购入库（成品购入）或委外收货入库（委外加工回货）">{{ row.lastInDate }}</span>
+          <el-tooltip v-else content="没有采购入库 / 委外收货入库流水 ⇒ 滞销时钟只看最后销售日" placement="top">
+            <span class="never">无来货</span>
           </el-tooltip>
         </template>
       </el-table-column>
-      <el-table-column label="期间销量" min-width="92" align="right">
+      <el-table-column label="停滞天数" min-width="92" align="right">
         <template #default="{ row }">
-          <span :title="recentText + '内已审核销售单的销量合计（建单日归期）'">{{ fmt(row.saleQtyRecent) }}</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="周转天数" min-width="84" align="right">
-        <template #default="{ row }">
-          <span v-if="row.turnoverDays != null" :title="'按' + recentText + '日均销量估算：当前库存还能卖多少天'">{{ row.turnoverDays }}</span>
-          <el-tooltip v-else :content="recentText + '内没有销售 ⇒ 算不出周转天数'" placement="top">
-            <span class="never">—</span>
+          <span title="距「最近一次来货」或「最后销售」的天数（取较晚者）"
+                :style="{ color: row.severe ? '#f56c6c' : (row.stagnant ? '#e6a23c' : ''), fontWeight: (row.severe || row.stagnant) ? 600 : 400 }">
+            {{ row.stagnantDays == null ? '—' : row.stagnantDays }}
+          </span>
+          <el-tooltip v-if="row.severe" content="严重滞销：距最近一次来货或销售超过 180 天（从未销售且无来货的按在库已超 180 天判定）" placement="top">
+            <el-icon style="vertical-align:-2px"><WarningFilled /></el-icon>
           </el-tooltip>
         </template>
       </el-table-column>

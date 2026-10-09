@@ -27,11 +27,17 @@ $tok = [string]$la.data.token
 $res = Invoke-RestMethod -Uri "$api/warehouse/stock/stagnant/page?onlyStagnant=false&pageSize=50" -Headers @{ Authorization = $tok } -TimeoutSec 30
 $k = $res.data.kpi
 $rows = @($res.data.records)
-Write-Host ("threshold=" + $res.data.threshold + " recentDays=" + $res.data.recentDays + " records=" + $rows.Count)
+# 2026-10-09 (user): the independent "statistics window" (default 90 days) was REMOVED together with the
+# period-qty / turnover-days columns, so the response no longer carries recentDays. Kept as a printed fact
+# only (no assertion either way) so the probe keeps documenting what the live payload looks like.
+Write-Host ("threshold=" + $res.data.threshold + " records=" + $rows.Count)
 Write-Host ("kpi: productCount=" + $k.productCount + " neverSoldCount=" + $k.neverSoldCount + " allProductCount=" + $k.allProductCount + " shareQty=" + $k.shareQty + " avgStagnantDays=" + $k.avgStagnantDays)
 
 $sqlAll = [int](SqlOne 'SELECT COUNT(DISTINCT product_id) FROM warehouse_stock WHERE product_id IS NOT NULL')
-$sqlNever = [int](SqlOne 'SELECT COUNT(*) FROM (SELECT DISTINCT s.product_id FROM warehouse_stock s WHERE s.product_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sale_order o JOIN sale_order_item i ON i.order_id=o.id WHERE o.status=0x41554449544544 AND i.product_id=s.product_id)) x')
+# 2026-10-09（用户口径变更）：15 天时钟的起点多了"最近一次来货日"（PURCHASE_IN / OUTSOURCE_FINISH_IN），
+# 而本 KPI 现在统计的是"滞销品里从未销售过的" ⇒ 从未销售但**来货未满 15 天**的是新到的货、不算滞销 ⇒
+# 必须排除。故下面多了一个 NOT EXISTS（15 = 本次调用使用的默认阈值，API 未传 noSaleDays）。
+$sqlNever = [int](SqlOne 'SELECT COUNT(*) FROM (SELECT DISTINCT s.product_id FROM warehouse_stock s WHERE s.product_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM sale_order o JOIN sale_order_item i ON i.order_id=o.id WHERE o.status=0x41554449544544 AND i.product_id=s.product_id) AND NOT EXISTS (SELECT 1 FROM warehouse_stock_log l WHERE l.product_id=s.product_id AND l.change_type IN (0x50555243484153455F494E,0x4F5554534F555243455F46494E4953485F494E) AND DATEDIFF(CURDATE(), l.create_time) < 15)) x')
 if ([int]$k.allProductCount -eq $sqlAll) { Ok ("KPI denominator matches SQL: products with stock = $sqlAll") } else { Bad ("allProductCount=$($k.allProductCount) but SQL says $sqlAll") }
 if ([int]$k.neverSoldCount -eq $sqlNever) { Ok ("KPI never-sold count matches SQL: $sqlNever") } else { Bad ("neverSoldCount=$($k.neverSoldCount) but SQL says $sqlNever") }
 

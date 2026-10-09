@@ -52,15 +52,16 @@ public class WarehouseStockController {
     private final BrandMapper brandMapper;
     private final StagnantAnalysisMapper stagnantAnalysisMapper;
 
-    /** 滞销判定默认阈值：多少天没有销售算滞销（用户 2026-10-02 口径：默认 15 天，页面可调） */
-    private static final int DEFAULT_NO_SALE_DAYS = 15;
     /**
-     * 「期间销量 / 周转天数」的默认统计窗口（天）。
-     * ⚠️ 与阈值是**两个量**：阈值（noSaleDays）决定"算不算滞销"；本窗口（recentDays）决定"按多快的速度卖"。
-     * 两者都可由页面传入（2026-10-02 用户要求窗口也做成可调 30/60/90/180）。
+     * 滞销判定默认阈值（天）：**距「最近一次来货日」或「最后销售日」中较晚的那个**超过这么多天 ⇒ 滞销。
+     *
+     * <p>口径来源：用户 2026-10-02（默认 15 天、页面可调）；2026-10-09 追加"来货也重置滞销时钟"
+     * （原话：「15 天应该是最新来货（委外加工或者是成品购入）后，15 天这个产品没有销售记录的。就算滞销」）。
+     * 同一天用户还取消了原先独立的「统计窗口（默认 90 天）」（原话：「90 天这个不要」）⇒
+     * 本类不再有 {@code DEFAULT_RECENT_DAYS}，「期间销量 / 周转天数」两个派生字段一并与窗口移除。</p>
      */
-    private static final int DEFAULT_RECENT_DAYS = 90;
-    /** 严重滞销：停滞超过这么多天（"从未销售"的用"在库天数"比同一个值判定） */
+    private static final int DEFAULT_NO_SALE_DAYS = 15;
+    /** 严重滞销：停滞超过这么多天（"从未销售且无来货"的用"在库天数"比同一个值判定） */
     private static final int SEVERE_NO_SALE_DAYS = 180;
     /** 停滞天数分桶（固定区间，末桶 = 从未销售；顺序即图表 x 轴顺序） */
     private static final List<String> STAGNANT_BUCKETS = List.of(
@@ -367,9 +368,11 @@ public class WarehouseStockController {
      *       {@code CANCEL_RECLASSIFY_IN}、{@code SALE_OUT_UN_AUDIT}（反审核）⇒ 用"任何减少"口径会把它们
      *       全算成"卖过"，滞销清单**漏报**（2026-10-02 实测结论，勿改回）。</li>
      *   <li>换货出库不计入"销售"（换货不是新增销售，与产品分析同口径）。</li>
-     *   <li>「期间销量 / 周转天数」的统计窗口由 {@code recentDays} 传入（默认 {@value #DEFAULT_RECENT_DAYS} 天，
-     *       页面可选 30/60/90/180）—— 与阈值**相互独立**：阈值决定"算不算滞销"，窗口决定"按多快的速度卖"。
-     *       两者都随响应回传（{@code threshold} / {@code recentDays}），前端文案一律用回传值，不要自己写死。</li>
+     *   <li><b>【2026-10-09 已取消】</b>原「期间销量 / 周转天数」的统计窗口（{@code recentDays}，默认 90 天）——
+     *       用户口径「90 天这个不要」⇒ 窗口连同这两个派生字段一并移除，响应里不再有 {@code recentDays}。</li>
+     *   <li>滞销时钟起点 = <b>max(最近一次来货日, 最后销售日)</b>：来货会重置时钟（"新到的货 15 天没卖出去"
+     *       也算滞销，用户 2026-10-09 口径），"卖了之后又 15 天没动"同样算滞销。阈值 {@code noSaleDays}
+     *       （默认 {@value #DEFAULT_NO_SALE_DAYS} 天）随响应回传（{@code threshold}），前端文案用回传值。</li>
      * </ol>
      *
      * <p><b>为什么这里的库存聚合另写一段，而不复用 {@link #productSummaryPage}：</b>那是本页主表的读路径，
@@ -390,14 +393,11 @@ public class WarehouseStockController {
             @RequestParam(required = false) Long productId,
             @RequestParam(required = false) String productName,
             @RequestParam(required = false) Integer noSaleDays,
-            @RequestParam(required = false) Integer recentDays,
             @RequestParam(required = false) Boolean onlyStagnant,
             @RequestParam(required = false) Boolean onlySevere,
             @RequestParam(required = false) Boolean includeDiscontinued) {
 
         int threshold = noSaleDays == null ? DEFAULT_NO_SALE_DAYS : Math.max(1, Math.min(3650, noSaleDays));
-        // 「期间销量 / 周转天数」的统计窗口（与滞销阈值相互独立，见 DEFAULT_RECENT_DAYS 注释）
-        int recentWindow = recentDays == null ? DEFAULT_RECENT_DAYS : Math.max(1, Math.min(3650, recentDays));
         boolean stagnantOnly = !Boolean.FALSE.equals(onlyStagnant);            // 默认只列滞销
         boolean severeOnly = Boolean.TRUE.equals(onlySevere);
         boolean withDiscontinued = !Boolean.FALSE.equals(includeDiscontinued); // 默认把停售产品一并归入
@@ -410,7 +410,7 @@ public class WarehouseStockController {
         Set<Long> filteredProductIds = buildProductIdFilter(brandId, productName);
         if (filteredProductIds != null) {
             if (filteredProductIds.isEmpty()) {
-                return R.ok(stagnantResult(Collections.emptyList(), threshold, recentWindow));
+                return R.ok(stagnantResult(Collections.emptyList(), threshold));
             }
             qw.in(WarehouseStock::getProductId, filteredProductIds);
         }
@@ -447,18 +447,20 @@ public class WarehouseStockController {
             }
         }
 
-        // ---- ② 销售活动：最后销售日 + 期间（近 recentWindow 天）销量（阈值只影响"是否滞销"，不影响这里的窗口）----
+        // ---- ② 销售活动：最后销售日（2026-10-09：原"近 recentWindow 天销量"随统计窗口一并取消）----
         LocalDate today = LocalDate.now();
-        LocalDate recentFrom = today.minusDays(recentWindow - 1L);
         Map<Long, LocalDate> lastSale = new HashMap<>();
-        Map<Long, BigDecimal> recentQty = new HashMap<>();
-        for (Map<String, Object> r : stagnantAnalysisMapper.productSaleByDay()) {
+        for (Map<String, Object> r : stagnantAnalysisMapper.productLastSaleByProduct()) {
             if (r.get("pid") == null || r.get("d") == null) continue;   // 无建单日的行无法归期
-            Long pid = ((Number) r.get("pid")).longValue();
-            LocalDate day = LocalDate.parse(String.valueOf(r.get("d")));
-            LocalDate cur = lastSale.get(pid);
-            if (cur == null || day.isAfter(cur)) lastSale.put(pid, day);
-            if (!day.isBefore(recentFrom)) recentQty.merge(pid, toDecimal(r.get("qty")), BigDecimal::add);
+            lastSale.put(((Number) r.get("pid")).longValue(), LocalDate.parse(String.valueOf(r.get("d"))));
+        }
+
+        // ---- ②b 来货日：最近一次来货（2026-10-09 新增，白名单见 StagnantAnalysisMapper.INBOUND_TYPES）----
+        // 用途：与"最后销售日"一起构成滞销时钟的起点（取较晚者）—— 新到的货压 15 天没卖出去同样算滞销。
+        Map<Long, LocalDate> lastIn = new HashMap<>();
+        for (Map<String, Object> r : stagnantAnalysisMapper.productLastInByProduct()) {
+            if (r.get("pid") == null || r.get("d") == null) continue;
+            lastIn.put(((Number) r.get("pid")).longValue(), LocalDate.parse(String.valueOf(r.get("d"))));
         }
 
         // ---- ③ 首次入库日：在库天数；并用于"从未销售但入库未满 180 天 ⇒ 不算严重滞销（视为新品）"----
@@ -492,24 +494,23 @@ public class WarehouseStockController {
 
             Product p = productMap.get(pid);
             LocalDate ls = lastSale.get(pid);
-            Long stagnantDays = ls == null ? null : ChronoUnit.DAYS.between(ls, today);
+            LocalDate li = lastIn.get(pid);
+            // 停滞天数 = 今天 − max(最后销售日, 最近来货日)：
+            //   · 来货会重置时钟 ⇒ "新到的货 15 天没卖出去"照样算滞销（用户 2026-10-09 口径）；
+            //   · 卖了之后又 15 天没动 ⇒ 同样算滞销（保留 2026-10-02 原口径的灵敏度）。
+            // 两个日期都没有（既没有白名单来货、也从没卖出过）⇒ null：库里压着、一天都没动 ⇒ 一律算滞销。
+            LocalDate ref = (ls == null) ? li : (li == null || ls.isAfter(li) ? ls : li);
+            Long stagnantDays = ref == null ? null : ChronoUnit.DAYS.between(ref, today);
             LocalDate fi = firstIn.get(pid);
             Long stockAgeDays = fi == null ? null : ChronoUnit.DAYS.between(fi, today);
-            // 从未销售过的一律算滞销（库里压着、一天都没卖出去）
-            boolean stagnant = (stagnantDays != null) ? stagnantDays >= threshold : true;
-            // 严重滞销：停滞 > 180 天；从未销售的按"在库超过 180 天"判定（刚建的新品不算）
+            boolean stagnant = stagnantDays == null || stagnantDays >= threshold;
+            // 严重滞销：停滞 > 180 天；"从未销售且无来货"的按"在库超过 180 天"判定（刚建的新品不算）
             boolean severe = (stagnantDays != null)
                     ? stagnantDays > SEVERE_NO_SALE_DAYS
                     : (stockAgeDays != null && stockAgeDays > SEVERE_NO_SALE_DAYS);
 
             BigDecimal unitCost = p != null && p.getCostPrice() != null ? p.getCostPrice() : BigDecimal.ZERO;
             BigDecimal refAmount = total.multiply(unitCost);
-            BigDecimal recent = recentQty.getOrDefault(pid, BigDecimal.ZERO);
-            // 周转天数（数量口径）= 当前总库存 ÷ 期间日均销量；期间内没有销售 ⇒ 算不出（前端显示 —）
-            Long turnoverDays = recent.compareTo(BigDecimal.ZERO) > 0
-                    ? BigDecimal.valueOf(total.doubleValue() / (recent.doubleValue() / recentWindow))
-                        .setScale(0, RoundingMode.HALF_UP).longValue()
-                    : null;
             ProductStatus status = p != null ? p.getStatus() : null;
             boolean discontinued = status == ProductStatus.DISCONTINUED;
 
@@ -522,11 +523,10 @@ public class WarehouseStockController {
             row.put("totalQuantity", total);
             row.put("warehouseCount", productWarehouses.getOrDefault(pid, Collections.emptySet()).size());
             row.put("lastSaleDate", ls != null ? ls.toString() : null);
+            row.put("lastInDate", li != null ? li.toString() : null);
             row.put("stagnantDays", stagnantDays);
             row.put("firstInDate", fi != null ? fi.toString() : null);
             row.put("stockAgeDays", stockAgeDays);
-            row.put("saleQtyRecent", recent);
-            row.put("turnoverDays", turnoverDays);
             row.put("unitCost", unitCost);
             row.put("refAmount", refAmount);
             row.put("costMissing", unitCost.compareTo(BigDecimal.ZERO) <= 0);
@@ -554,7 +554,7 @@ public class WarehouseStockController {
                 .thenComparing(Comparator.comparing((Map<String, Object> r) -> (BigDecimal) r.get("totalQuantity")).reversed())
                 .thenComparing(r -> String.valueOf(r.get("productName"))));
 
-        Map<String, Object> result = stagnantResult(allRows, threshold, recentWindow);
+        Map<String, Object> result = stagnantResult(allRows, threshold);
         long total = list.size();
         int from = (pageNum - 1) * pageSize;
         List<Map<String, Object>> records = (from < list.size())
@@ -570,7 +570,7 @@ public class WarehouseStockController {
      * 分桶区间固定为 0-15 / 16-30 / 31-60 / 61-90 / 91-180 / &gt;180 / 从未销售，
      * 与页面可调的阈值分开 —— 阈值只决定"算不算滞销"，区间决定"停在哪个天数档"。
      */
-    private Map<String, Object> stagnantResult(List<Map<String, Object>> allRows, int threshold, int recentWindow) {
+    private Map<String, Object> stagnantResult(List<Map<String, Object>> allRows, int threshold) {
         int allProducts = allRows.size();
         BigDecimal allQty = BigDecimal.ZERO;
         BigDecimal stagnantQty = BigDecimal.ZERO;
@@ -595,8 +595,12 @@ public class WarehouseStockController {
             stagnantQty = stagnantQty.add(qty);
             stagnantValue = stagnantValue.add((BigDecimal) r.get("refAmount"));
             if (Boolean.TRUE.equals(r.get("costMissing"))) costMissingQty = costMissingQty.add(qty);
+            // 2026-10-09 口径变更：停滞天数 = 今天 − max(最近来货日, 最后销售日)。此时
+            // "停滞天数为 — " ⟺ 既无来货也从未卖出过 ⇒「从未销售」改按 **lastSaleDate 为空** 判定
+            // （更贴合卡片名；这类产品的 days 也一定为 null ✓）。
+            if (r.get("lastSaleDate") == null) neverSold++;
             Long d = (Long) r.get("stagnantDays");
-            if (d == null) neverSold++; else { daysSum += d; daysCount++; }
+            if (d != null) { daysSum += d; daysCount++; }
         }
 
         Map<String, Object> kpi = new LinkedHashMap<>();
@@ -627,7 +631,6 @@ public class WarehouseStockController {
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("threshold", threshold);
-        result.put("recentDays", recentWindow);
         result.put("kpi", kpi);
         result.put("buckets", buckets);
         result.put("records", Collections.emptyList());
@@ -645,15 +648,6 @@ public class WarehouseStockController {
         if (d <= 90) return STAGNANT_BUCKETS.get(3);
         if (d <= 180) return STAGNANT_BUCKETS.get(4);
         return STAGNANT_BUCKETS.get(5);
-    }
-
-    private static BigDecimal toDecimal(Object v) {
-        if (v == null) return BigDecimal.ZERO;
-        try {
-            return new BigDecimal(String.valueOf(v));
-        } catch (NumberFormatException e) {
-            return BigDecimal.ZERO;
-        }
     }
 
     /**
