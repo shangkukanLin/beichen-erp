@@ -39,3 +39,6 @@ beichen-erp-web/build_out.txt
 # 一次性调研/调试脚本（浏览器探针、数据抓取等，不入库）
 beichen-erp-server/scripts/
 
+# 后端本地配置（含数据库密码，禁止入库）
+beichen-erp-server/config/
+
