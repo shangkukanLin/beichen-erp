@@ -792,8 +792,8 @@ function onNameBlur() {
             <el-button type="success" size="small" @click="saveBom">保存</el-button>
             <!-- 历史快照：下加工单时按「研发BOM版本 + 明细内容」生成/共享（2026-09-17） -->
             <el-button size="small" @click="openSnapshots">历史快照</el-button>
-            <!-- I4 口径明确了（2026-09-18）：研发侧「用量 / 损耗率%」只读，数值在「加工单下单」时按需调整 -->
-            <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">用量 / 损耗率% 在研发侧为只读，可在「加工单下单」时调整</span>
+            <!-- 2026-10-09（用户需求）：损耗率% 已放开为可就地修改（0~100，点「保存」生效）；用量仍为只读 -->
+            <span style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">用量在研发侧为只读（可在「加工单下单」时调整）；<b>损耗率% 可直接修改</b>，点「保存」生效</span>
           </div>
           <el-table :data="bomList" border size="small">
             <el-table-column label="类型" width="100">
@@ -823,7 +823,17 @@ function onNameBlur() {
             <el-table-column label="规格" width="90"><template #default="{row}"><span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span><el-input v-else v-model="row.spec" size="small" /></template></el-table-column>
             <el-table-column label="单位" width="65"><template #default="{row}"><span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">-</span><el-input v-else v-model="row.unit" size="small" /></template></el-table-column>
             <el-table-column label="用量" width="75"><template #header><span title="只读展示：用量在「加工单下单」时可调">用量</span></template><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.quantityPerSet }}</span></template></el-table-column>
-            <el-table-column label="损耗率%" width="80"><template #header><span title="只读展示：损耗率在「加工单下单」时可调">损耗率%</span></template><template #default="{row}"><span :style="{fontSize:'12px'}">{{ row.lossRate }}</span></template></el-table-column>
+            <!-- 2026-10-09（用户需求「研发立项详情的BOM信息的损耗率%需要可以修改」）：
+                 损耗率% 改为**父行可就地编辑**（子行是物料信息带出的只读展示，不落库）。
+                 口径 = 百分数 0~100（与「加工单下单」页同口径）；走同一条「保存」整表提交（saveBom 本就提交 lossRate）。
+                 用量仍保持只读 —— 本次只放开损耗率。 -->
+            <el-table-column label="损耗率%" width="90">
+              <template #header><span title="研发侧可直接修改；下加工单时仍可按单调整">损耗率%</span></template>
+              <template #default="{row}">
+                <span v-if="row._isChild" style="color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ row.lossRate }}</span>
+                <el-input-number v-else v-model="row.lossRate" size="small" :min="0" :max="100" :precision="2" :controls="false" style="width:100%" />
+              </template>
+            </el-table-column>
             <el-table-column label="操作" width="60" align="center">
               <template #default="{$index}">
                 <el-button type="danger" link @click="removeBomRow($index)">{{ bomList[$index]._isChild ? '' : '删除' }}</el-button>

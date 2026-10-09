@@ -10,6 +10,7 @@ import com.beichen.erp.exception.BusinessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -61,6 +62,9 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
         // 空明细会"删旧版且不插入"＝静默清空整个版本的 BOM，必须拦下
         if (items == null || items.isEmpty())
             throw new BusinessException("BOM 明细不能为空；如需清空请先新建版本");
+        // 2026-10-09：**先全量校验、再删旧版** —— 校验放在删除之前 ⇒ 非法输入（如损耗率 500）不会
+        // "先把旧版删掉、再靠回滚兜底"，语义更干净（只读守卫/脚本也不会看到中间态）
+        for (Bom item : items) validateItem(item);
         // 删除当前最新版本的所有BOM项，再批量插入
         Integer maxVersion = getMaxVersion(projectId);
         baseMapper.delete(new LambdaQueryWrapper<Bom>()
@@ -111,5 +115,22 @@ public class BomServiceImpl extends ServiceImpl<BomMapper, Bom> implements BomSe
         if (cnt != null && cnt <= 1)
             throw new BusinessException("该行是版本 V" + bom.getVersion() + " 的唯一明细，不可删除；如需变更请先新建版本");
         baseMapper.deleteById(id);
+    }
+
+    /**
+     * 校验一行 BOM 的用户输入（2026-10-09：损耗率% 放开为可就地修改后才需要 —— 后端不信任前端）。
+     *
+     * <p>损耗率口径 = **百分数 0~100**（与「加工单下单」页同口径）；结单良率按
+     * {@code targetYieldRate = 100 − lossRate} 计算 ⇒ 越界值（如 500）会把良率算成负数 ✗。
+     * 前端已用 {@code el-input-number} 的 :min/:max 限制，这里兜底"直调 API"的情况。</p>
+     * <p>null / 空 ⇒ 归 0（与列默认值一致，避免库里出现 NULL）。</p>
+     */
+    @Override
+    public void validateItem(Bom bom) {
+        if (bom == null) return;
+        BigDecimal lr = bom.getLossRate();
+        if (lr == null) { bom.setLossRate(BigDecimal.ZERO); return; }
+        if (lr.compareTo(BigDecimal.ZERO) < 0 || lr.compareTo(new BigDecimal("100")) > 0)
+            throw new BusinessException("损耗率%应在 0~100 之间：当前 " + lr);
     }
 }

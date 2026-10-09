@@ -64,6 +64,8 @@ public class BomController {
                 throw new BusinessException("历史版本（V" + exist.getVersion() + "）的 BOM 行不可修改，请先新建版本");
             }
         }
+        // 2026-10-09：用户输入先校验（与整表保存同口径：损耗率 0~100；null ⇒ 0），再落库
+        bomService.validateItem(bom);
         bom.setProjectId(projectId);
         bom.setVersion(maxVersion);
         bomService.saveOrUpdate(bom);
