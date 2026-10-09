@@ -35,15 +35,26 @@ $bRdBtn = B64 (ZH 'lbl_material_rd')
 # shared JS prelude: decode labels, find a form item by label, set an input value the Vue way
 $pre = "const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const vis=e=>e.getClientRects().length>0;const dlg=()=>[...document.querySelectorAll('.el-dialog')].filter(vis).pop();const item=(root,lab)=>{for(const it of root.querySelectorAll('.el-form-item')){const l=it.querySelector('.el-form-item__label');if(l&&(l.innerText||'').replace(/[\s*:]/g,'')===lab)return it}return null};const setv=(el,v)=>{const p=el.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;Object.getOwnPropertyDescriptor(p,'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}))};const rdBtnAt=(name,btn)=>{const bodies=[...document.querySelectorAll('.el-table__body')].filter(vis);let idx=-1;for(const b of bodies){const rows=[...b.querySelectorAll('tr')].filter(vis);const i=rows.findIndex(tr=>(tr.innerText||'').includes(name));if(i>=0){idx=i;break}}if(idx<0)return 'NOROW';for(const b of bodies){const rows=[...b.querySelectorAll('tr')].filter(vis);if(rows.length<=idx)continue;const x=[...rows[idx].querySelectorAll('button')].filter(vis).find(y=>(y.innerText||'').trim()===btn);if(x)return x}return 'NOBTN'};"
 
+# ============================================================================================
+# 2026-10-09 修两条长期假红（A / C / E）。两处根因都不是产品问题：
+#   ① **中文不能从浏览器读回 PowerShell**：agent-browser 的 stdout 被控制台按 GBK 解码，
+#      从页面读回的「研发支出」是乱码 ⇒ `-like '*研发支出*'` 恒假（A 段就踩这个）。
+#      改法：把标签 base64 传进 JS，**在浏览器内**比较，只回传 ASCII 的布尔/JSON。
+#   ② **ElMessage 寿命约 1 秒**（2026-10-02 实测），而 C/E 是"点完 +2.2s 再读 document.body"
+#      ⇒ 必然扑空（不是提示没出现，是读晚了）。改法：点击**前**装 MutationObserver，
+#      把提示文本收进 window.__msgs，点完再回读。
+# ============================================================================================
+$mObsInstall = "(()=>{window.__msgs=[];try{window.__mObs&&window.__mObs.disconnect()}catch(e){}window.__mObs=new MutationObserver(m=>{for(const r of m){for(const n of r.addedNodes){if(n&&n.nodeType===1){const t=(n.innerText||'').trim();if(t&&(n.className||'').toString().indexOf('message')>=0)window.__msgs.push(t)}}}});window.__mObs.observe(document.body,{childList:true,subtree:true});return 'watch'})()"
+
 Write-Host '--- A) the dialog prompts for an R&D expense, fields stay hidden until ticked'
 Open '/dev/material' 3500
 $r = (EvalJs "(()=>{$pre;const bs=[...document.querySelectorAll('.toolbar button')].filter(vis).filter(b=>(b.innerText||'').trim()===T('$bNew'));if(!bs.length)return 'NOBTN';bs[0].click();return 'OK'})()")
 Ok ($r -eq 'OK') 'A: add-material dialog opened'
 Start-Sleep -Milliseconds 1200
-$r = (EvalJs "(()=>{$pre;const d=dlg();if(!d)return 'NODLG';const cb=[...d.querySelectorAll('.el-checkbox')].filter(vis).map(c=>(c.innerText||'').trim());const labels=[...d.querySelectorAll('.el-form-item__label')].map(l=>(l.innerText||'').replace(/[\s*:]/g,'').trim());return JSON.stringify({cb:cb,hasAmt:labels.includes(T('$bAmount'))})})()") -replace '"', ''
+$r = (EvalJs "(()=>{$pre;const d=dlg();if(!d)return 'NODLG';const want=T('$bCheck');const cbs=[...d.querySelectorAll('.el-checkbox')].filter(vis).map(c=>(c.innerText||'').trim());const labels=[...d.querySelectorAll('.el-form-item__label')].map(l=>(l.innerText||'').replace(/[\s*:]/g,'').trim());return JSON.stringify({hasCb:cbs.some(x=>x.indexOf(want)>=0),hasAmt:labels.includes(T('$bAmount'))})})()") -replace '"', ''
 Write-Host ('  ' + $r)
-Ok ($r -like ('*' + (ZH 'chk_material_rd') + '*')) 'A: dialog shows the R&D-expense checkbox'
-Ok ($r -notlike 'true*' -and $r -notmatch 'hasAmt":true') 'A: amount field hidden while unticked'
+Ok ($r -match 'hasCb:true') 'A: dialog shows the R&D-expense checkbox'
+Ok ($r -match 'hasAmt:false') 'A: amount field hidden while unticked'
 
 Write-Host '--- B) ticking reveals the fields; the account list is populated'
 $r = (EvalJs "(()=>{$pre;const d=dlg();const it=item(d,T('$bName'));if(!it)return 'NOITEM_NAME';setv(it.querySelector('input'),'$matName');return 'OK'})()")
@@ -70,14 +81,15 @@ Ok ($r -eq 'OK') 'B: account picked'
 
 Write-Host '--- C) one submit files the material AND the DRAFT expense'
 ClearErrs | Out-Null
+EvalJs $mObsInstall | Out-Null   # 必须在点击**之前**装：提示寿命约 1 秒，点完再读必然扑空
 $r = (EvalJs "(()=>{$pre;const d=dlg();const bs=[...d.querySelectorAll('.el-dialog__footer button')].filter(vis).filter(b=>(b.innerText||'').trim()===T('$bOk'));if(!bs.length)return 'NOOK';bs[0].click();return 'OK'})()")
 Ok ($r -eq 'OK') 'C: submitted'
 Start-Sleep -Milliseconds 2200
-# NOTE: assert on the whole page text instead of scraping the toast node -- join()/quoting of the toast node was
-# unreliable through the CLI pipe, while "is the hint on screen" is exactly what we care about.
-$msgOk = (EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));return String((document.body.innerText||'').indexOf(T('$bMsgAudited'))>=0)})()") -replace '"', ''
-Write-Host ('  auto-audit hint on screen = ' + $msgOk.Trim())
-Ok ($msgOk.Trim() -eq 'true') 'C: success message says the expense was AUTO-AUDITED and paid'
+# 断言改为读**观测到的提示文本**（在浏览器内比较，只回传 ASCII 的命中布尔）。
+# 原先"点完 2.2s 读 document.body"在本应用里恒假红 —— 不是提示没出现，而是 ElMessage 约 1 秒就消失了。
+$msg = (EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const want=T('$bMsgAudited');const ms=window.__msgs||[];return JSON.stringify({n:ms.length,hit:ms.some(m=>m.indexOf(want)>=0),sample:ms.length?ms[0].slice(0,40).replace(/[^\x20-\x7E]/g,'?'):''})})()")
+Write-Host ('  captured messages = ' + $msg)
+Ok ($msg -match '"hit":true') 'C: success message says the expense was AUTO-AUDITED and paid'
 $matId = SqlOne "SELECT id FROM dev_purchase_item WHERE name='$matName' ORDER BY id DESC LIMIT 1"
 Ok ($matId -ne '') ('C: dev material created (id=' + $matId + ')')
 $row = SqlOne ("SELECT CONCAT(status,'/',expense_type,'/',amount,'/',IFNULL(source_bill_type,''),'/',IFNULL(source_id,0)) FROM finance_expense WHERE source_bill_type='RD_DEV_MATERIAL' AND source_id=" + $matId + " ORDER BY id DESC LIMIT 1")
@@ -116,11 +128,13 @@ Start-Sleep -Milliseconds 1100
 $r = (EvalJs "(()=>{const vis=e=>e.getClientRects().length>0;const opts=[...document.querySelectorAll('.el-select-dropdown__item')].filter(vis);if(!opts.length)return 'NOOPT';opts[0].click();return 'OK'})()")
 Ok ($r -eq 'OK') 'E: account picked'
 ClearErrs | Out-Null
+EvalJs $mObsInstall | Out-Null   # 同 C 段：观测器必须在点击前装（提示寿命约 1 秒）
 $r = (EvalJs "(()=>{$pre;const d=dlg();const bs=[...d.querySelectorAll('.el-dialog__footer button')].filter(vis).filter(b=>(b.innerText||'').trim()===T('$bOk'));if(!bs.length)return 'NOOK';bs[0].click();return 'OK'})()")
 Ok ($r -eq 'OK') 'E: submitted'
 Start-Sleep -Milliseconds 2200
-$msgOk = (EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));return String((document.body.innerText||'').indexOf(T('$bMsg'))>=0)})()") -replace '"', ''
-Ok ($msgOk.Trim() -eq 'true') 'E: the same draft hint is shown'
+$msg = (EvalJs "(()=>{const T=b=>new TextDecoder().decode(Uint8Array.from(atob(b),c=>c.charCodeAt(0)));const want=T('$bMsg');const ms=window.__msgs||[];return JSON.stringify({n:ms.length,hit:ms.some(m=>m.indexOf(want)>=0),sample:ms.length?ms[0].slice(0,40).replace(/[^\x20-\x7E]/g,'?'):''})})()")
+Write-Host ('  captured messages = ' + $msg)
+Ok ($msg -match '"hit":true') 'E: the same draft hint is shown'
 $row2 = SqlOne ("SELECT CONCAT(status,'/',expense_type,'/',amount,'/',IFNULL(source_id,0)) FROM finance_expense WHERE source_bill_type='RD_DEV_MATERIAL' AND source_id=" + $matBId + " ORDER BY id DESC LIMIT 1")
 Write-Host ('  row = ' + $row2)
 Ok ($row2 -like ('DRAFT/RND/66*' + $matBId)) 'E: one DRAFT RND expense sourced from that dev material'
