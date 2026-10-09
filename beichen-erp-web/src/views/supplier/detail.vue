@@ -210,8 +210,14 @@ async function handleSave() {
     if (!isVendor.value) body.supplySku = ''
     await request.put('/supplier', body)
     ElMessage.success('已保存'); invalidate('supplier')
-    takeBaseline()   // 保存成功 ⇒ 重建基线（保存不重跑 loadData），避免离开时误报"未保存"
-    loadData()
+    // 2026-10-08 修复（用户报障：编辑供应商"已经保存了，点返回还是弹未保存提醒"）
+    // ⚠️ 原先顺序是 takeBaseline() 在前、loadData() 在后**且未 await** —— 基线取的是"刚提交的表单"，
+    // 而 loadData() 里 `Object.assign(form, res)` 会把**后端独有字段**并进 form
+    // （payableBalance / companyId / createTime / updateTime / hasDisplay / hasTouch ...）。
+    // useUnsavedGuard 的判定是 JSON.stringify(snapshot()) **整体比对** ⇒ 键集变多必然判为"有改动" ⇒ 保存成功也误报。
+    // 正解：先 await 重载（拿到服务端真值），**再**重建基线；顺序反了这条就白写。
+    await loadData()
+    takeBaseline()   // 必须放在 loadData 之后：基线 = 服务端真值
   } finally { saving.value = false }
 }
 

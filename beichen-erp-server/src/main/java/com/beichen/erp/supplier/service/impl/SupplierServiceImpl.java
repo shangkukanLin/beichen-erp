@@ -274,12 +274,27 @@ public class SupplierServiceImpl extends com.baomidou.mybatisplus.extension.serv
         exist.setCreditPeriodMonths(dto.getCreditPeriodMonths());
         exist.setCreditPeriod(dto.getCreditPeriod());
         exist.setRemark(dto.getRemark());
+        // 2026-10-08 修复（用户报障：供应商"停用 → 改成启用 → 保存"不生效，列表/详情仍是停用）：
+        // ⚠️ 本方法是**逐字段赋值**，原先漏了 status —— exist 是 getById 刚读出来的对象（status=0），
+        // updateById 会把 status 列**照旧写回**（日志可见 `... address = ?, status = ?, ...`），
+        // 但写的是**库里的旧值**，前端选的"启用"被静默丢弃（HTTP 200、无任何报错，最难查）。
+        // 与 CustomerServiceImpl.update 的 `u.setStatus(customer.getStatus())` 对齐（客户侧本来就有，反证此处是漏写）。
+        // status 为 null 时保持不变（updateById 默认跳过 null 列），避免 DTO 未携带该字段时被误清为停用。
+        if (dto.getStatus() != null) {
+            exist.setStatus(dto.getStatus());
+        }
         // 2026-09-21（供货SKU）：⚠️ 本方法是**逐字段赋值**（不像 create 走 BeanUtils）⇒ 新增字段必须显式带上，
         // 否则编辑保存时前端传的值会被静默丢弃。传空 ⇒ null = 取消前缀（此后新产品走默认 SKU-，已生成的 SKU 不变）。
         // ⚠️ 口径：该字段**只属于供货商（类型 = 成品商 product）** ⇒ 改成其它类型时前缀一并清掉（见 hasProductType）。
         String supplySku = hasProductType(dto.getTypeCodes()) ? normalizeSupplySku(dto.getSupplySku()) : null;
         assertSupplySkuAvailable(supplySku, exist.getId());
         exist.setSupplySku(supplySku);
+        // 2026-10-08：**同一根因的第二处症状** —— exist 是"刚从库里读出来的对象"，其 updateTime 非空，
+        // 而 MybatisPlusConfig 的 updateFill 用的是 strictUpdateFill（**仅当字段为 null 才填**）
+        // ⇒ update_time 会被**旧值原样写回**，表现为"保存成功但修改时间不变"
+        // （排查本次报障时实测：20:16 保存成功，库里 update_time 仍是 18:37 —— 正是这个假象让人以为"没保存成功"）。
+        // 置 null 让自动填充重新盖章为当前时间；即便将来填充器被移除，也只是退回"不刷新"，不会写坏数据。
+        exist.setUpdateTime(null);
         updateById(exist);
         // ⚠️ 同一坑的第二处：updateById 跳过 null 字段 ⇒ 上面那句 setSupplySku(null) 落不了库。
         // 「清空供货SKU」（改为不启用前缀）必须再显式写一次 null，否则旧前缀会一直留着。
