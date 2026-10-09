@@ -10,8 +10,9 @@ import request from '@/utils/request'
 import { useTabStore } from '@/stores/tabs'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import { OrderType, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
+import { OrderType, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY, SettleType, SettleTypeLabel } from '@/api/enums'
 import { invalidate } from '@/utils/dataFreshness'
+import { getAccountPage } from '@/api/finance'
 
 const router = useRouter(); const route = useRoute()
 const tabStore = useTabStore()
@@ -20,13 +21,28 @@ const editId = route.params.id ? Number(route.params.id) : 0
 const saving = ref(false)
 
 // 2026-10-08（用户口径：物料订单与加工单一致）：含税 / 税率
-const form = reactive({ orderType: OrderType.PURCHASE as string, supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '', taxIncluded: 0, taxRate: '' })
+// 2026-10-09 结算方式（用户需求：参考新增销售单做法）：**默认现金**（用户口径"老单据默认现金"）。
+// 现金 = 该订单**收货单审核**时自动生成并立即审核付款单核销应付（立刻付钱，结算方式随订单透传）；账期 = 只挂应付。
+const form = reactive({ orderType: OrderType.PURCHASE as string, supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '', taxIncluded: 0, taxRate: '', settleType: SettleType.CASH as string, settleAccountId: undefined as any, settleAmount: undefined as any })
 const items = ref<any[]>([])
 /**
  * 未保存拦截（2026-09-23 统一模板）
  * ⚠️ 必须写在 form / items 等状态**之后**（watch 注册时立即求值，放前面会 TDZ 静默失效）。
  */
 const { takeBaseline, markClean } = useUnsavedGuard(() => ({ form, items: items.value }))
+// ===== 结算方式（与销售单/成品采购单同款开关：开=现金、关=账期）=====
+const isCash = computed(() => form.settleType === SettleType.CASH)
+const accounts = ref<any[]>([])
+/** 可选付款账户：只列启用的（与销售单收款账户同一张表、同一过滤口径） */
+const accountOptions = computed(() => accounts.value.filter((a: any) => a.status === undefined || a.status === 1))
+async function loadAccounts() {
+  try { const res: any = await getAccountPage({ pageSize: 200 }); accounts.value = res?.records || [] } catch { accounts.value = [] }
+  if (isCash.value && !form.settleAccountId && accountOptions.value.length > 0) form.settleAccountId = accountOptions.value[0].id
+}
+function onSettleSwitch(v: any) {
+  form.settleType = v ? SettleType.CASH : SettleType.CREDIT
+  if (!isCash.value) { form.settleAccountId = undefined; form.settleAmount = undefined }
+}
 const supplierOptions = ref<any[]>([])
 const materialOptions = ref<any[]>([])
 const materialTypes = ref<any[]>([])
@@ -97,7 +113,7 @@ async function handleSubmit() {
     else {
       await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已新增')
       // 重置表单，避免 keep-alive 缓存残留数据
-      Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '', taxIncluded: 0, taxRate: '' })
+      Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '', taxIncluded: 0, taxRate: '', settleType: SettleType.CASH, settleAccountId: undefined, settleAmount: undefined })
       items.value = []
       onOrderTypeChange()
     }
@@ -161,12 +177,15 @@ function resetForm() {
 async function handleRefreshData() { await loadOptions() }
 onMounted(async () => {
   await loadOptions()
+  await loadAccounts() // 现金结算的付款账户选项（静默失败：拉不到就留空，不影响账期单保存）
   if (editId) {
     isEdit.value = true
     try {
       const r = await request.get<any, any>(`/outsource/material-order/${editId}`)
       if (r) {
-        Object.assign(form, { orderType: r.orderType || OrderType.PURCHASE, supplierId: r.supplierId, targetWarehouseId: r.targetWarehouseId, deliveryDate: r.deliveryDate, remark: r.remark })
+        // ⚠️ 必须把结算方式一起回填：漏了的话，编辑一张「账期」单会被表单默认值静默改回「现金」
+        //    ⇒ 收货审核时自动付款（**动钱**）。这是后端把 settle_type 落库之外的另一半保护。
+        Object.assign(form, { orderType: r.orderType || OrderType.PURCHASE, supplierId: r.supplierId, targetWarehouseId: r.targetWarehouseId, deliveryDate: r.deliveryDate, remark: r.remark, settleType: r.settleType || SettleType.CASH, settleAccountId: r.settleAccountId, settleAmount: r.settleAmount })
         await loadSuppliers()
         items.value = (r.items || []).map((it: any) => ({ materialTypeId: it.materialTypeId, materialId: it.materialId, materialName: it.materialName, unit: it.unit, orderQuantity: it.orderQuantity, unitPrice: it.unitPrice, remark: it.remark }))
       }
@@ -205,6 +224,19 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
             </RemoteSelect>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="交期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
+          <!-- 2026-10-09 结算方式（用户需求：参考新增销售单做法）。开=现金、关=账期；
+               现金在**本订单收货单审核**时自动付款核销应付（立刻付钱），账期只挂应付。 -->
+          <el-col :span="8"><el-form-item label="结算方式">
+            <el-switch :model-value="isCash" inline-prompt
+              :active-text="SettleTypeLabel[SettleType.CASH]" :inactive-text="SettleTypeLabel[SettleType.CREDIT]"
+              @change="onSettleSwitch" />
+            <span style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ isCash ? '收货时自动付款' : '只挂应付' }}</span>
+          </el-form-item></el-col>
+          <el-col :span="8" v-if="isCash"><el-form-item required label="付款账户">
+            <el-select v-model="form.settleAccountId" placeholder="请选择付款账户" style="width:100%" filterable>
+              <el-option v-for="a in accountOptions" :key="a.id" :label="a.accountName || ('账户#' + a.id)" :value="a.id" />
+            </el-select>
+          </el-form-item></el-col>
           <!-- 2026-10-08（用户口径：与加工单一致）：是否含税 + 税率（开关打开默认 13%） -->
           <el-col :span="8"><el-form-item label="是否含税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" @change="(v: any) => { form.taxRate = v ? (form.taxRate || '13') : '' }" /></el-form-item></el-col>
           <el-col :span="8" v-if="form.taxIncluded"><el-form-item label="税率(%)"><el-input v-model="form.taxRate" placeholder="如13" /></el-form-item></el-col>

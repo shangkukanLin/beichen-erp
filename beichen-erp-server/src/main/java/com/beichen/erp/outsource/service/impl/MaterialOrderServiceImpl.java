@@ -65,6 +65,31 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     private final JdbcTemplate jdbcTemplate;
     /** F7-137（2026-09-20）：委外类物料订单的"加工厂"必须带 factory 类型标签（与 §23-F7-61 的 assertFactory 同口径） */
     private final com.beichen.erp.supplier.mapper.SupplierTypeRefMapper supplierTypeRefMapper;
+    /** 结算方式（2026-10-09）：与成品采购单共用同一套校验与自动付款实现，避免两域各写一份 */
+    private final com.beichen.erp.finance.service.SettleSupport settleSupport;
+
+    /**
+     * 结算方式归一 + 校验（2026-10-09，用户口径「参考新增销售单做法」）。
+     * <p>实现集中在 {@link com.beichen.erp.finance.service.SettleSupport}（与成品采购单**逐字同一套**）。
+     * 本订单**审核不产生应付** ⇒ 付款发生在**收货单审核**时（届时从本订单读取，见 DeliveryServiceImpl）。</p>
+     */
+    private void normalizeSettle(MaterialOrder o) {
+        com.beichen.erp.finance.service.SettleSupport.Normalized n =
+                settleSupport.normalize(o.getSettleType(), o.getSettleAccountId(), o.getSettleAmount(), "物料订单");
+        o.setSettleType(n.settleType());
+        o.setSettleAccountId(n.accountId());
+        o.setSettleAmount(n.amount());
+    }
+
+    /** 账期时必须把现金字段**显式置 null**（updateById 忽略 null 字段，否则"现金→账期"会残留上次选的账户） */
+    private void clearCashFieldsIfCredit(MaterialOrder o) {
+        if (o.getId() == null || com.beichen.erp.finance.service.SettleSupport.isCash(o.getSettleType())) return;
+        orderMapper.update(null,
+                new com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper<MaterialOrder>()
+                        .eq(MaterialOrder::getId, o.getId())
+                        .set(MaterialOrder::getSettleAccountId, null)
+                        .set(MaterialOrder::getSettleAmount, null));
+    }
 
     @Override
     public Page<Map<String, Object>> page(int pageNum, int pageSize, String code, String status, String statuses, Long supplierId) {
@@ -108,6 +133,7 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     @Transactional(rollbackFor = Exception.class)
     public Long create(MaterialOrder o, List<Map<String, Object>> itemsRaw) {
         assertFactoryForOutsource(o.getOrderType(), o.getSupplierId());
+        normalizeSettle(o); // 2026-10-09：结算方式归一 + 校验（现金必须有可用付款账户）
         o.setCode(generateCode());
         o.setStatus(MaterialOrderStatus.PENDING.getCode());
         orderMapper.insert(o);
@@ -142,6 +168,8 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         if (!MaterialOrderStatus.PENDING.getCode().equals(old.getStatus()))
             throw new BusinessException("只有待审核的订单可以编辑（当前状态：" + old.getStatus()
                     + "）；如需修改请先反审核");
+        normalizeSettle(o);                 // 2026-10-09：改单同样归一 + 校验（口径与新增一致）
+        clearCashFieldsIfCredit(o);         // 账期时显式清空现金字段（updateById 不会把字段更新成 null）
         o.setId(id);
         // F7-137（2026-09-20）：编辑同样要校验（供应商/订单类型都可能被改；未传则沿用原值）
         assertFactoryForOutsource(

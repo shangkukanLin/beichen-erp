@@ -37,6 +37,14 @@ public class FinancePayment {
     private String status;
     private String remark;
     private String attachUrl;
+
+    /**
+     * 来源单据类型 / ID（2026-10-09 随 V6 新增，与收款单 {@code finance_receipt} 同口径）。
+     * <p>系统自动付款（采购单现金结算）时写入，用于：① 幂等（同一采购单不重复生成付款单）；
+     * ② 反审核采购单时据此冲正对应付款单。人工创建的付款单为 NULL。</p>
+     */
+    private String sourceBillType;
+    private Long sourceId;
     @TableField(fill = FieldFill.INSERT) private Long companyId;
     private LocalDateTime createTime;
     @TableField(fill = FieldFill.INSERT_UPDATE) private LocalDateTime updateTime;

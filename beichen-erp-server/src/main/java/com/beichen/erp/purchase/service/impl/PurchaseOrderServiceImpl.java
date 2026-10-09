@@ -56,6 +56,35 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final WarehouseStockService stockService;
     private final com.beichen.erp.warehouse.service.CostService costService;
     private final WarehouseMapper warehouseMapper;
+    /**
+     * 结算方式（2026-10-09）：与物料订单收货**共用同一份**校验与自动付款实现（{@code SettleSupport}）。
+     * 原先本类各写一份 ⇒ 两处 money 逻辑等价却各自维护（改一处漏一处的经典来源），已对齐。
+     */
+    private final com.beichen.erp.finance.service.SettleSupport settleSupport;
+
+    /**
+     * 结算方式 code（与销售侧 {@code sale.common.SettleType} 同一套取值）。
+     * 这里刻意用字符串常量而不是 import 销售侧枚举：采购/销售属于不同业务域，共享枚举会把两个域绑死；
+     * code 本身是落库契约（见 V6 迁移的列注释），改它要同时改库。
+     */
+    private static final String SETTLE_CREDIT = "CREDIT";
+    private static final String SETTLE_CASH = "CASH";
+    /** 用户 2026-10-09 口径：**老单据默认现金**（未指定即现金 ⇒ 审核后自动付款） */
+    private static final String SETTLE_DEFAULT = SETTLE_CASH;
+
+    /**
+     * 结算方式归一 + 校验（2026-10-09，用户口径「参考新增销售单做法」）。
+     * <p>实现集中在 {@link com.beichen.erp.finance.service.SettleSupport}（与物料订单收货**逐字同一套**）：
+     * 未指定 → 现金（用户"老单据默认现金"）；非法值**直接报错**（不静默兜底，避免写错字母就静默自动付款）；
+     * 现金必须给出可用付款账户；账期清空账户与金额。</p>
+     */
+    private void normalizeSettle(PurchaseOrder order) {
+        com.beichen.erp.finance.service.SettleSupport.Normalized n = settleSupport.normalize(
+                order.getSettleType(), order.getSettleAccountId(), order.getSettleAmount(), "成品采购单");
+        order.setSettleType(n.settleType());
+        order.setSettleAccountId(n.accountId());
+        order.setSettleAmount(n.amount());
+    }
 
     @Override
     public Page<Map<String, Object>> page(Integer status, Long supplierId, String code, int pageNum, int pageSize) {
@@ -185,6 +214,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     public void create(PurchaseOrder order, List<PurchaseOrderItem> items) {
         if (order.getSupplierId() == null) throw new BusinessException("供应商不能为空");
         assertFinishedWarehouse(order.getWarehouseId()); // F7-149：入库仓必须是自有成品仓
+        normalizeSettle(order); // 2026-10-09：结算方式归一 + 校验（现金必须有可用付款账户）
         order.setCode(generateCode());
         order.setStatus(DocStatus.DRAFT.getCode());
         Long cid = CompanyContext.get();
@@ -215,8 +245,17 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         if (old == null) throw new BusinessException("采购单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
         assertFinishedWarehouse(order.getWarehouseId()); // F7-149：入库仓必须是自有成品仓
+        normalizeSettle(order); // 2026-10-09：改单同样归一 + 校验（口径与新增一致）
         order.setCode(old.getCode());
         orderMapper.updateById(order);
+        // 账期时必须把现金字段**显式置 null**：updateById 忽略 null 字段，
+        // 否则"现金 → 改回账期"会残留上次选的付款账户（销售侧同款坑，用 UpdateWrapper 显式清）
+        if (SETTLE_CREDIT.equals(order.getSettleType())) {
+            orderMapper.update(null, new LambdaUpdateWrapper<PurchaseOrder>()
+                    .eq(PurchaseOrder::getId, order.getId())
+                    .set(PurchaseOrder::getSettleAccountId, null)
+                    .set(PurchaseOrder::getSettleAmount, null));
+        }
         itemMapper.delete(new LambdaQueryWrapper<PurchaseOrderItem>().eq(PurchaseOrderItem::getOrderId, order.getId()));
         BigDecimal total = BigDecimal.ZERO;
         Long cid = CompanyContext.get();
@@ -290,6 +329,10 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         // 按 bill_no 保存：反审核后该单号台账已存在（仅置 CANCELLED 留痕），必须复用重置，
         // 否则再次审核会撞 finance_payable.uk_bill_no（2026-09-10 审核发现，P1-01）
         payableHelper.saveByBillNo(fp);
+        // 1.5) 现金结算（2026-10-09 用户口径「现金 = 立刻付钱」）：挂应付后**立即**生成并审核付款单，
+        //      把本单应付核销掉（与销售侧"现金 = 立刻到账即结算"完全对称）；账期则只挂应付不付款。
+        //      幂等：同一采购单已有未作废付款单时不再生成（反审核会把自动付款单冲正并作废）。
+        if (SETTLE_CASH.equals(order.getSettleType())) createCashPayment(order, fp);
         // 2) 审核直接入库，按品质等级分别增加库存
         for (PurchaseOrderItem it : items) {
             Product product = it.getProductId() != null ? productMapper.selectById(it.getProductId()) : null;
@@ -322,6 +365,13 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
         if (!DocStatusGuard.claim(orderMapper, PurchaseOrder::getId, id, PurchaseOrder::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
             throw new BusinessException("只有已完成状态可反审核");
+
+        // 0) 现金结算自动生成的付款单：**必须先冲正**（2026-10-09）—— 否则下面"应付已核销不能反审核"的检查
+        //    会把我方自动付款造成的 paid_amount > 0 当成"人工核销"，把反审核永久拦死（销售侧同款顺序）。
+        //    已审核 → 先反审核（回退核销 / 账户余额 / 资金流水）再作废留痕；草稿 → 直接作废。
+        //    只处理 source 指向本采购单的自动付款单，人工创建的付款单不受影响。
+        //    实现见 SettleSupport.reverseAutoPayments（已审核 → 先反审核再作废；草稿 → 直接作废）。
+        settleSupport.reverseAutoPayments(SourceBillType.PURCHASE_ORDER.getCode(), order.getId());
 
         // 1) 检查应付台账状态
         LambdaQueryWrapper<FinancePayable> payableW = new LambdaQueryWrapper<FinancePayable>()
@@ -378,6 +428,25 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
                 .set(PurchaseOrder::getAuditorId, null)
                 .set(PurchaseOrder::getAuditorName, null)
                 .set(PurchaseOrder::getAuditTime, null));
+    }
+
+    /** 本采购单由系统自动生成的付款单（幂等判定与反审核冲正都靠它；实现见 SettleSupport） */
+    private List<com.beichen.erp.finance.entity.FinancePayment> autoPayments(PurchaseOrder order) {
+        return settleSupport.autoPayments(SourceBillType.PURCHASE_ORDER.getCode(),
+                order == null ? null : order.getId());
+    }
+
+    /**
+     * 现金结算：按来源生成付款单并**立即审核**（= 立刻付钱、即结算，用户 2026-10-09 口径）。
+     * <p>实现与物料订单收货共用 {@link com.beichen.erp.finance.service.SettleSupport#payNow}：
+     * 幂等（同来源不重复生成）+ 金额上下界在生成前自查并归因到本单 + 单账户分款行。</p>
+     */
+    private void createCashPayment(PurchaseOrder order, FinancePayable fp) {
+        if (fp == null || fp.getId() == null)
+            throw new BusinessException("现金结算付款单生成失败：采购单 " + order.getCode() + " 的应付台账不存在");
+        settleSupport.payNow(SourceBillType.PURCHASE_ORDER.getCode(), order.getId(), order.getSupplierId(),
+                order.getSettleAccountId(), fp.getId(), fp.getBillNo(), fp.getAmount(), order.getSettleAmount(),
+                "成品采购单", order.getCode());
     }
 
     private String generateCode() {

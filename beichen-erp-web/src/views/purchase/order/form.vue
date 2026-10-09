@@ -8,7 +8,8 @@ import { useRoute, useRouter } from 'vue-router'
 import PageShell from '@/components/PageShell.vue'
 import { useUnsavedGuard } from '@/composables/usePageBack'
 import { useTabStore } from '@/stores/tabs'
-import { WarehouseCategory, WarehouseType } from '@/api/enums'
+import { WarehouseCategory, WarehouseType, SettleType, SettleTypeLabel } from '@/api/enums'
+import { getAccountPage } from '@/api/finance'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
 import { getQualityTypes, productLabel, type QualityOption } from '@/api/product'
@@ -29,8 +30,25 @@ const loading = ref(false)
 const submitLoading = ref(false)
 const formRef = ref<FormInstance>()
 const form = reactive<PurchaseOrder>({
-  supplierId: undefined, warehouseId: undefined, orderDate: localDate(), taxIncluded: 0, taxRate: 0, remark: ''
+  supplierId: undefined, warehouseId: undefined, orderDate: localDate(), taxIncluded: 0, taxRate: 0, remark: '',
+  // 2026-10-09 结算方式（用户口径「参考新增销售单做法」）：**默认现金**（用户："老单据默认现金"），
+  // 现金 = 审核后自动生成并立即审核付款单核销本单应付（立刻付钱）；账期 = 只挂应付。
+  settleType: SettleType.CASH, settleAccountId: undefined, settleAmount: undefined
 })
+// 结算方式（与销售单同款开关：开=现金、关=账期）
+const isCash = computed(() => form.settleType === SettleType.CASH)
+const accounts = ref<any[]>([])
+/** 可选付款账户：只列启用的（与销售单收款账户同一张表、同一过滤口径） */
+const accountOptions = computed(() => accounts.value.filter((a: any) => a.status === undefined || a.status === 1))
+async function loadAccounts() {
+  try { const res: any = await getAccountPage({ pageSize: 200 }); accounts.value = res?.records || [] } catch { accounts.value = [] }
+  // 列表异步返回：若用户已切到「现金」但还没选账户，这里补一次默认带出（同销售单）
+  if (isCash.value && !form.settleAccountId && accountOptions.value.length > 0) form.settleAccountId = accountOptions.value[0].id
+}
+function onSettleSwitch(v: any) {
+  form.settleType = v ? SettleType.CASH : SettleType.CREDIT
+  if (!isCash.value) { form.settleAccountId = undefined; form.settleAmount = undefined }
+}
 const items = ref<PurchaseOrderItem[]>([])
 /**
  * 未保存拦截（2026-09-23 统一模板）
@@ -82,6 +100,7 @@ async function load() {
     // getQualityTypes() 是同步返回的品质选项常量（与列表页同一口径）
     qualityOptions.value = getQualityTypes() || []
     await loadMaterials()
+    await loadAccounts() // 现金结算的付款账户选项（静默失败：拉不到就留空，不影响账期单保存）
     if (isEdit.value) {
       const id = Number(route.params.id)
       const [o, its] = await Promise.all([
@@ -141,6 +160,23 @@ onMounted(async () => { await load(); takeBaseline() })
           <el-col :span="12">
             <el-form-item label="订单日期">
               <el-date-picker v-model="form.orderDate" type="date" value-format="YYYY-MM-DD" placeholder="选择日期" style="width:100%" />
+            </el-form-item>
+          </el-col>
+          <!-- 2026-10-09 结算方式（用户需求：参考新增销售单做法）。开关：开=现金、关=账期；
+               现金 = **审核后自动生成并立即审核付款单**核销本单应付（立刻付钱），账期 = 只挂应付。 -->
+          <el-col :span="12">
+            <el-form-item label="结算方式">
+              <el-switch :model-value="isCash" inline-prompt
+                :active-text="SettleTypeLabel[SettleType.CASH]" :inactive-text="SettleTypeLabel[SettleType.CREDIT]"
+                @change="onSettleSwitch" />
+              <span style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">{{ isCash ? '审核后自动付款' : '只挂应付' }}</span>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12" v-if="isCash">
+            <el-form-item label="付款账户" required>
+              <el-select v-model="form.settleAccountId" placeholder="请选择付款账户" style="width:100%" filterable>
+                <el-option v-for="a in accountOptions" :key="a.id" :label="a.accountName || ('账户#' + a.id)" :value="a.id" />
+              </el-select>
             </el-form-item>
           </el-col>
           <el-col :span="6">

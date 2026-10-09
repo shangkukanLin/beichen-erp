@@ -183,6 +183,14 @@ public class MaterialOrderController {
         if (tr != null && !tr.toString().isBlank()) {
             try { o.setTaxRate(new BigDecimal(tr.toString().trim())); } catch (NumberFormatException ignore) { /* 非法税率按未填处理 */ }
         }
+        // 2026-10-09 结算方式（现金/账期）。**必须显式映射**：本方法是手写白名单，不列出的字段会被静默丢弃
+        // ——成品采购单那边刚被守卫抓到过同一个坑（字段丢了之后服务层只看得到 null，报错还像"校验失败"）。
+        if (body.get("settleType") != null && !body.get("settleType").toString().isBlank())
+            o.setSettleType(body.get("settleType").toString());
+        Object said = body.get("settleAccountId");
+        if (said != null && !said.toString().isBlank()) o.setSettleAccountId(Long.valueOf(said.toString()));
+        Object samt = body.get("settleAmount");
+        if (samt != null && !samt.toString().isBlank()) o.setSettleAmount(new BigDecimal(samt.toString().trim()));
         return o;
     }
 

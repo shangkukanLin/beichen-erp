@@ -51,6 +51,12 @@ export interface PurchaseOrder {
   status?: number
   taxIncluded?: number
   taxRate?: number
+  /** 结算方式（2026-10-09）：CASH=现金（审核后自动生成并审核付款单核销应付）/ CREDIT=账期（只挂应付）；未指定=现金 */
+  settleType?: string
+  /** 现金结算的付款账户（账期时后端清空） */
+  settleAccountId?: number
+  /** 本次付款总额（不填 = 按应付全额付款） */
+  settleAmount?: number
   taxAmount?: number
   totalAmount?: number
   remark?: string

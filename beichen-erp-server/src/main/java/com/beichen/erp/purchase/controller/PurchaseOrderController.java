@@ -116,6 +116,14 @@ public class PurchaseOrderController {
         if (d.get("taxRate") != null && !d.get("taxRate").toString().isBlank())
             o.setTaxRate(new BigDecimal(d.get("taxRate").toString()));
         o.setRemark((String) d.get("remark"));
+        // 2026-10-09 结算方式（现金/账期）随单提交。**必须显式映射**：本方法是手写白名单，
+        // 不列出的字段会被静默丢弃 —— 守卫实测抓到的就是这个：字段丢了之后服务层只看到 null，
+        // 于是"未指定 ⇒ 现金"兜底生效并报「必须选择付款账户」，看起来像校验错，其实是入参被吃掉。
+        if (d.get("settleType") != null) o.setSettleType(d.get("settleType").toString());
+        if (d.get("settleAccountId") != null && !d.get("settleAccountId").toString().isBlank())
+            o.setSettleAccountId(Long.valueOf(d.get("settleAccountId").toString()));
+        if (d.get("settleAmount") != null && !d.get("settleAmount").toString().isBlank())
+            o.setSettleAmount(new BigDecimal(d.get("settleAmount").toString()));
         return o;
     }
 

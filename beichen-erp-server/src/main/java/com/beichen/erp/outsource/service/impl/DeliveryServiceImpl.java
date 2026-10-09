@@ -65,6 +65,8 @@ public class DeliveryServiceImpl implements DeliveryService {
     private final WarehouseStockService warehouseStockService;
     private final PayableHelper payableHelper;
     private final SupplierMapper supplierMapper;
+    /** 结算方式（2026-10-09）：物料订单上的结算方式在**收货审核**时透传使用（与成品采购单共用同一套实现） */
+    private final com.beichen.erp.finance.service.SettleSupport settleSupport;
     private final com.beichen.erp.warehouse.service.CostService costService;
     /** F7-77（2026-09-20）：物料单价统一实现（加权 / FIFO 同一份取数与状态过滤口径） */
     private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
@@ -239,8 +241,17 @@ public class DeliveryServiceImpl implements DeliveryService {
                     .map(it -> (it.getAmount() != null ? it.getAmount() : BigDecimal.ZERO))
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
             if (totalAmount.compareTo(BigDecimal.ZERO) != 0) {
-                payableHelper.createPayable(order.getSupplierId(), SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(),
+                com.beichen.erp.finance.entity.FinancePayable fp = payableHelper.createPayable(
+                        order.getSupplierId(), SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(),
                         delivery.getCode(), delivery.getId(), totalAmount, delivery.getDeliveryDate(), "委外物料订单收货");
+                // 2026-10-09 结算方式**透传**（用户口径：放订单上，收货时读取）：订单为现金 ⇒ 收货审核即付款。
+                // 刻意只做**正应付（收货）**这一支：退货/退不良产生的是**负应付**（供应商欠我们钱），
+                // 给它自动生成"付款单"语义上说不通 ⇒ 那两条分支保持原样（只挂账）。
+                if (com.beichen.erp.finance.service.SettleSupport.isCash(order.getSettleType())) {
+                    settleSupport.payNow(SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(), delivery.getId(),
+                            order.getSupplierId(), order.getSettleAccountId(), fp.getId(), fp.getBillNo(),
+                            fp.getAmount(), order.getSettleAmount(), "物料收货单", delivery.getCode());
+                }
             }
         } else if (isReceiveReturn) {
             // 退货（2026-09-29 用户口径「冲减应付」）：整单按退货金额生成**负应付** —— 退回的这批货不再欠物料商钱；
@@ -392,6 +403,10 @@ public class DeliveryServiceImpl implements DeliveryService {
             // 成本冲销：删除本单收货批次并反加权
             costService.reverseByBill(StockChangeType.RECEIVE_IN.getCode(), id);
         }
+
+        // 2.5) 现金结算自动生成的付款单：**必须先冲正**（2026-10-09）—— 否则下面"冲回应付（已付款的阻止）"
+        //      会把我方自动付款当成人工核销而把反审核永久拦死（与成品采购单同一条顺序坑）。
+        settleSupport.reverseAutoPayments(SourceBillType.OUTSOURCE_MATERIAL_DELIVERY.getCode(), id);
 
         // 3. 冲回应付（已付款的阻止）+ 回退供应商应付余额 —— 统一**按本单据ID**冲回：收货的正应付、
         //    退货/退不良-折现的负应付都挂在同一个来源（OUTSOURCE_MATERIAL_DELIVERY + 本单ID）上，

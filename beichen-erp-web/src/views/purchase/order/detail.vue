@@ -376,6 +376,13 @@ onActivated(async () => { await loadData() })
           <el-descriptions-item label="订单日期">{{ head.orderDate }}</el-descriptions-item>
           <el-descriptions-item label="税额">{{ fmt(head.taxAmount) }}</el-descriptions-item>
           <el-descriptions-item label="总金额">{{ fmt(head.totalAmount) }}</el-descriptions-item>
+          <!-- 2026-10-09 结算方式（只读展示）：现金 = 审核时已自动生成并审核付款单核销本单应付；账期 = 只挂应付。
+               与销售单详情同口径：这里只展示，切换开关在「新增/编辑」表单上。 -->
+          <el-descriptions-item label="结算方式">
+            <el-tag :type="head.settleType === 'CASH' ? 'success' : 'info'" size="small" effect="plain">
+              {{ head.settleType === 'CASH' ? '现金（审核后自动付款）' : '账期（只挂应付）' }}
+            </el-tag>
+          </el-descriptions-item>
           <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
           <el-descriptions-item label="制单人">{{ head.createByName || '—' }}</el-descriptions-item>
           <el-descriptions-item label="审核人">{{ head.auditorName || '—' }}</el-descriptions-item>

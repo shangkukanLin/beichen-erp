@@ -16,7 +16,8 @@ const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
 // 2026-10-08（用户口径：物料订单与加工单一致）：含税 / 税率 / 税额 / 总金额
-const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', createTime: '', finishTime: '', finisherName: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any, createByName: '', auditorName: '', taxIncluded: 0, taxRate: '', taxAmount: '', totalAmount: '' })
+// 2026-10-09 结算方式（只读展示）：现金 = **收货单审核**时自动生成并立即审核付款单核销应付；账期 = 只挂应付。
+const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', createTime: '', finishTime: '', finisherName: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any, createByName: '', auditorName: '', taxIncluded: 0, taxRate: '', taxAmount: '', totalAmount: '', settleType: '' as string, settleAccountId: undefined as any, settleAmount: undefined as any })
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
@@ -63,7 +64,7 @@ async function handleSaveAttach() {
   try {
     const fd = new FormData(); fd.append('file', uploadFile.value)
     const res = await request.post<any, string>('/dev/file/upload', fd)
-    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, taxIncluded: order.taxIncluded, taxRate: order.taxRate, attachUrl: res as unknown as string, items: items.value })
+    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, taxIncluded: order.taxIncluded, taxRate: order.taxRate, settleType: order.settleType, settleAccountId: order.settleAccountId, settleAmount: order.settleAmount, attachUrl: res as unknown as string, items: items.value })
     ElMessage.success('合同文件已保存'); uploadFile.value = null; await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { attachSaving.value = false }
 }
@@ -80,7 +81,8 @@ async function loadAll() {
     // 收货/退货记录已移到独立菜单页「物料收退」加载，本页不再拉 /deliveries
     const o = await request.get<any, any>(`/outsource/material-order/${id}`)
     if (o) {
-      Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || OrderType.PURCHASE, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '', taxIncluded: o.taxIncluded || 0, taxRate: o.taxRate ?? '', taxAmount: o.taxAmount ?? '', totalAmount: o.totalAmount ?? '' })
+      // settleType 必须一并回填：漏了的话页面按"未指定=现金"渲染，且下面的保存体会把它丢掉 ⇒ 账期单被静默改回现金（动钱）
+      Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || OrderType.PURCHASE, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '', taxIncluded: o.taxIncluded || 0, taxRate: o.taxRate ?? '', taxAmount: o.taxAmount ?? '', totalAmount: o.totalAmount ?? '', settleType: o.settleType || '', settleAccountId: o.settleAccountId, settleAmount: o.settleAmount })
     }
     items.value = o?.items || []
     loadOptions()
@@ -108,7 +110,7 @@ async function handleSave() {
   if (badRow >= 0) { ElMessage.warning(`第 ${badRow + 1} 行未选择物料，请先选择物料`); return }
   saving.value = true
   try {
-    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, taxIncluded: order.taxIncluded, taxRate: order.taxRate, items: items.value })
+    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, taxIncluded: order.taxIncluded, taxRate: order.taxRate, settleType: order.settleType, settleAccountId: order.settleAccountId, settleAmount: order.settleAmount, items: items.value })
     ElMessage.success('已保存')
     await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
@@ -205,6 +207,11 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             <el-col :span="8" v-if="order.taxIncluded"><el-form-item label="税率(%)"><el-input v-model="order.taxRate" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="如13" /></el-form-item></el-col>
             <el-col :span="8" v-if="order.taxIncluded"><el-form-item label="税额"><el-input :model-value="order.taxAmount" readonly class="readonly-input" /></el-form-item></el-col>
             <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
+            <el-col :span="8"><el-form-item label="结算方式">
+              <el-tag :type="(order.settleType || 'CASH') === 'CASH' ? 'success' : 'info'" size="small" effect="plain">
+                {{ (order.settleType || 'CASH') === 'CASH' ? '现金（收货时自动付款）' : '账期（只挂应付）' }}
+              </el-tag>
+            </el-form-item></el-col>
             <el-col :span="8"><el-form-item label="制单人"><el-input :model-value="order.createByName || '—'" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="审核人"><el-input :model-value="order.auditorName || '—'" readonly class="readonly-input" /></el-form-item></el-col>
             <!-- 下单日期（2026-09-25）：原列表列，因列表 10 列总宽超出容器、按下单日期最低价值移入详情页（信息不丢） -->
