@@ -5,6 +5,7 @@ import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import { QualityType, QualityTypeLabel } from '@/api/enums'
 import PageShell from '@/components/PageShell.vue'
+import StockAmountBar from '@/components/StockAmountBar.vue'
 
 /** 库存形态（2026-09-25 P0-3）：与 /warehouse/stock/by-warehouse 返回的 stockForm 对应 */
 const StockFormLabel: Record<string, string> = {
@@ -142,6 +143,8 @@ onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
 <template>
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta)；本页只读（导出按钮留在卡内） -->
   <PageShell :loading="loading" back-fallback="/outsource/warehouse">
+    <!-- 2026-10-09 用户需求：本仓库存金额（委外仓同样要；口径与物料/成品库存列表页同源） -->
+    <StockAmountBar :warehouse-id="warehouseId" />
     <!-- 仓库基础信息 -->
     <el-card shadow="never">
       <template #header><span style="font-weight:600">仓库信息</span></template>

@@ -425,7 +425,19 @@
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/product-stock')">
             <div class="stat-value" style="color:var(--app-color-success)">{{ fmtN(stockTotalValue) }}</div>
-            <div class="stat-label">库存总金额（近 200 条）</div>
+            <div class="stat-label">
+              库存总金额（成品 + 物料）
+              <el-tooltip placement="top" trigger="hover">
+                <template #content>
+                  <div style="max-width:320px;line-height:1.6">{{ stockAmountCaliber || '——' }}</div>
+                </template>
+                <span style="cursor:help;color:#909399">ⓘ</span>
+              </el-tooltip>
+            </div>
+            <div style="font-size:12px;color:#909399;margin-top:2px">
+              成品 {{ fmtN(stockProductValue) }} · 物料 {{ fmtN(stockMaterialValue) }}
+              <span v-if="stockAmountMissing" style="color:#e6a23c">· 含成本未维护</span>
+            </div>
           </div>
           <div class="stat-card clickable" @click="$router.push('/inventory/return-sort')">
             <div class="stat-value" style="color:var(--app-color-warning)">{{ fmtN(stockPendingQty) }}</div>
@@ -442,9 +454,15 @@
             <el-table-column prop="name" label="仓库" min-width="140" show-overflow-tooltip>
               <template #default="{row}"><el-link type="primary" @click="goWarehouse(row.warehouseId)">{{ row.name }}</el-link></template>
             </el-table-column>
-            <el-table-column prop="rows" label="产品行数" width="90" align="center" />
-            <el-table-column label="库存件数" width="110" align="right"><template #default="{row}">{{ fmtN(row.qty) }}</template></el-table-column>
-            <el-table-column label="库存金额" width="130" align="right"><template #default="{row}">{{ fmtN(row.value) }}</template></el-table-column>
+            <el-table-column prop="rows" label="成品行数" width="90" align="center" />
+            <el-table-column label="成品件数" width="110" align="right"><template #default="{row}">{{ fmtN(row.qty) }}</template></el-table-column>
+            <el-table-column label="成品金额" width="130" align="right">
+              <template #default="{row}">
+                <el-tooltip content="本表由成品库存行聚合，只含成品；含物料的按仓库明细见两个库存列表页的「库存金额」合计条" placement="top">
+                  <span>{{ fmtN(row.value) }}</span>
+                </el-tooltip>
+              </template>
+            </el-table-column>
           </el-table>
         </el-card>
         <el-card shadow="never" class="section-card" v-if="lowStockItems.length">
@@ -890,6 +908,11 @@ const saleTodayCards = computed(() => {
 const topCustomers = ref<any[]>([])
 const stockTotalQty = ref(0)
 const stockTotalValue = ref(0)
+// 2026-10-09 用户需求：库存金额分「成品 / 物料 / 合计」并给出成本未维护提示（口径见 utils/kpiFormula STOCK_AMOUNT）
+const stockProductValue = ref(0)
+const stockMaterialValue = ref(0)
+const stockAmountCaliber = ref('')
+const stockAmountMissing = ref(false)
 const stockPendingQty = ref(0)
 const stockDefectQty = ref(0)
 const whStockRows = ref<any[]>([])
@@ -1134,31 +1157,34 @@ async function loadStats() {
   } catch { /* ignore */}
   try {
     if (hasModule.stock) {
-      const [prodRes, whRes, stkRes] = await Promise.all([
+      const [prodRes, whRes, stkRes, amountRes] = await Promise.all([
         // F7-259：产品与库存行**分页取全**（原先各取 200 条 ⇒ 成本/安全库存查不到、合计少算）
         fetchAllRecords('/product/page'),
         request.get<any, any>('/warehouse/page', { params: { pageSize: 200 } }).catch(() => ({})),
         fetchAllRecords('/warehouse/stock/product-stock/page'),
+        // 2026-10-09：库存金额以后端汇总为准（含物料仓；口径与两个库存列表页、仓库详情页完全一致）
+        request.get<any, any>('/warehouse/stock/amount-summary').catch(() => ({})),
       ])
       productTotal.value = prodRes?.total || 0
       warehouseTotal.value = whRes?.total || 0
       const prodMap: Record<number, any> = {}
       ;(prodRes?.records || []).forEach((p: any) => { prodMap[p.id] = p })
       const rows = stkRes?.records || []
-      let totalQty = 0, totalValue = 0, pendingQty = 0, defectQty = 0
+      let totalQty = 0, pendingQty = 0, defectQty = 0
       const byWh: Record<number, { warehouseId: number, name: string, rows: number, qty: number, value: number }> = {}
       const low: any[] = []
       rows.forEach((r: any) => {
         const qtyA = Number(r.qtyA) || 0
         const qty = qtyA + (Number(r.qtyB) || 0) + (Number(r.qtyC) || 0) + (Number(r.qtyDefect) || 0) + (Number(r.qtyPending) || 0)
-        const cost = Number(prodMap[r.productId]?.costPrice) || 0
+        // 2026-10-09：单行金额改成用后端算好的 stockAmount（成本价 → 最近进价兜底；缺失时后端会标 costMissing），
+        // 不再前端 `qty × costPrice`（那样漏兜底、且成本缺失时静默按 0 计入合计）
+        const rowAmount = Number(r.stockAmount) || 0
         totalQty += qty
-        totalValue += qty * cost
         pendingQty += Number(r.qtyPending) || 0
         defectQty += Number(r.qtyDefect) || 0
         // warehouseId 保留在聚合结果里 → 首页"仓库库存分布"的仓库名可点击跳仓库详情（2026-09-14）
         const wh = byWh[r.warehouseId] || (byWh[r.warehouseId] = { warehouseId: Number(r.warehouseId), name: r.warehouseName || ('仓库#' + r.warehouseId), rows: 0, qty: 0, value: 0 })
-        wh.rows++; wh.qty += qty; wh.value += qty * cost
+        wh.rows++; wh.qty += qty; wh.value += rowAmount
         const safety = Number(prodMap[r.productId]?.safetyStock) || 0
         if (safety > 0 && qtyA <= safety) {
           // 保留 productId / warehouseId → 低库存预警的产品名与仓库名可点击跳详情（2026-09-14）
@@ -1170,7 +1196,14 @@ async function loadStats() {
         }
       })
       stockTotalQty.value = totalQty
-      stockTotalValue.value = Math.round(totalValue * 100) / 100
+      // 2026-10-09 用户口径（看板同期改）：金额卡片改用后端汇总 —— 原先只算成品（product-stock 行），
+      // 物料仓金额在首页完全看不见；现在给 成品 / 物料 / 合计，并明示"成本未维护"。
+      const amt: any = amountRes || {}
+      stockTotalValue.value = Number(amt.totalAmount || 0)
+      stockProductValue.value = Number(amt.productAmount || 0)
+      stockMaterialValue.value = Number(amt.materialAmount || 0)
+      stockAmountCaliber.value = String(amt.caliber || '')
+      stockAmountMissing.value = (Number(amt.productCostMissingQty || 0) + Number(amt.materialCostMissingQty || 0)) > 0
       stockPendingQty.value = pendingQty
       stockDefectQty.value = defectQty
       whStockRows.value = Object.values(byWh).sort((a: any, b: any) => b.value - a.value)

@@ -22,6 +22,14 @@
         <el-descriptions-item label="总库存">
           <strong>{{ fmt(totalOf(summary)) }}</strong>
         </el-descriptions-item>
+        <!-- 2026-10-09 用户口径：**成品库存详情的库存金额只算成品** ——
+             本页行全部是该产品在各成品仓的库存行（product-stock/page?productId= 只按 product_id 取数），
+             所以金额直接取各行 stockAmount 之和，天然不含物料；单价口径（成本价 → 最近进价 → 缺失明示）见 StockAmountBar。 -->
+        <el-descriptions-item label="库存金额">
+          <strong>{{ fmtMoney(stockAmount) }}</strong>
+          <el-tag v-if="anyCostMissing" size="small" type="warning" effect="plain" style="margin-left:6px"
+                  title="该产品存在未维护成本价/最近进价的仓库 ⇒ 这部分按 0 计，未计入本金额">成本未维护</el-tag>
+        </el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -96,10 +104,11 @@
 
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
+import { fmtMoney } from '@/utils/format'
 import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
@@ -110,6 +119,11 @@ const loading = ref(false)
 const tableLoading = ref(false)
 const summary = ref<any>(null)
 const rows = ref<any[]>([])
+
+// 2026-10-09：本页金额**只算成品** —— 直接汇总各行 stockAmount（后端按"数量 × 单价"算好；
+// 单价缺失的行后端已标 costMissing 且金额为 0）。不用页面自己乘成本价：那会漏掉"最近进价"兜底。
+const stockAmount = computed(() => rows.value.reduce((s, r) => s + (Number(r.stockAmount) || 0), 0))
+const anyCostMissing = computed(() => rows.value.some((r) => !!r.costMissing))
 
 // 数量一律整数（2026-09-16）
 function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }

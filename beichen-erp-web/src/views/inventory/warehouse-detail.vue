@@ -6,6 +6,7 @@ import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import PageShell from '@/components/PageShell.vue'
+import StockAmountBar from '@/components/StockAmountBar.vue'
 
 const route = useRoute(); const router = useRouter()
 const warehouseId = Number(route.params.id)
@@ -143,6 +144,10 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
   <!-- 统一骨架（2026-09-23 全站定稿口径）：页头左端「← 返回」→ 标题(取 meta)；本页只读（导出留在卡内工具栏） -->
   <PageShell :loading="loading" back-fallback="/inventory/warehouse">
     <el-card shadow="never">
+      <!-- 2026-10-09 用户需求：本仓库存金额。口径与两个库存列表页同源，**范围随仓库性质收敛**：
+           物料仓(AUXILIARY) 只看物料、成品仓(FINISHED) 只看成品 —— 与页面上的库存内容一致
+           （用户口径："成品库存详情的库存金额只算成品的"）。委外仓在 outsource/warehouse-detail 里同时看物料与退回成品。 -->
+      <StockAmountBar :warehouse-id="warehouseId" :mode="warehouse?.warehouseType === 'AUXILIARY' ? 'material' : 'product'" />
       <div class="toolbar">
         <el-button :icon="'Download'" @click="exportExcel">导出当前页签</el-button>
       </div>

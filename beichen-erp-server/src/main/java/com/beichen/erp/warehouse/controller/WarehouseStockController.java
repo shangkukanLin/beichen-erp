@@ -25,6 +25,7 @@ import com.beichen.erp.warehouse.mapper.WarehouseMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockLogMapper;
 import com.beichen.erp.warehouse.mapper.StagnantAnalysisMapper;
 import com.beichen.erp.warehouse.mapper.WarehouseStockMapper;
+import com.beichen.erp.warehouse.service.StockCosts;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
@@ -179,10 +180,13 @@ public class WarehouseStockController {
         Map<Long, String> pNameMap = new HashMap<>();
         Map<Long, String> pSkuMap = new HashMap<>();
         Map<Long, Long> pBrandMap = new HashMap<>();
+        // 2026-10-09 库存金额：本段是明细页（按 仓库×产品）的唯一补档点，顺手把单价解析出来，供行金额使用
+        Map<Long, BigDecimal> pUnitCostMap = new HashMap<>();
         if (!pIds.isEmpty()) {
             productMapper.selectBatchIds(pIds).forEach(p -> {
                 pNameMap.put(p.getId(), p.getName() != null ? p.getName() : "");
                 pSkuMap.put(p.getId(), p.getSku() != null ? p.getSku() : "");
+                pUnitCostMap.put(p.getId(), StockCosts.unitCost(p));
                 if (p.getBrandId() != null) pBrandMap.put(p.getId(), p.getBrandId());
             });
         }
@@ -203,6 +207,14 @@ public class WarehouseStockController {
             Long bid = pBrandMap.get(pid);
             row.put("brandId", bid);
             row.put("brandName", bid != null ? brandNameMap.getOrDefault(bid, "") : "");
+            // 2026-10-09 库存金额：行金额 = 本行总库存 × 单价；单价未维护时记 0 并明示（口径见 StockCosts）
+            BigDecimal rowQty = ((BigDecimal) row.get("qtyA")).add((BigDecimal) row.get("qtyB"))
+                    .add((BigDecimal) row.get("qtyC")).add((BigDecimal) row.get("qtyDefect"))
+                    .add((BigDecimal) row.get("qtyPending"));
+            BigDecimal unitCost = pUnitCostMap.get(row.get("productId"));
+            row.put("unitCost", unitCost);
+            row.put("stockAmount", StockCosts.amount(rowQty, unitCost));
+            row.put("costMissing", unitCost == null);
         }
 
         List<Map<String, Object>> list = new ArrayList<>(agg.values());
@@ -319,6 +331,11 @@ public class WarehouseStockController {
             row.put("totalQuantity", total);
             row.put("warehouseCount", whs.size());
             row.put("lowStock", lowStock);
+            // 2026-10-09 库存金额：本行 = 跨仓库总库存 × 单价（单价同 product-stock：成本价 → 最近进价）
+            BigDecimal pUnitCost = StockCosts.unitCost(p);
+            row.put("unitCost", pUnitCost);
+            row.put("stockAmount", StockCosts.amount(total, pUnitCost));
+            row.put("costMissing", pUnitCost == null);
 
             if (Boolean.TRUE.equals(onlyLowStock) && !lowStock) continue;
             list.add(row);
@@ -741,6 +758,12 @@ public class WarehouseStockController {
             BigDecimal g = (BigDecimal) row.get("qtyGood");
             BigDecimal d = (BigDecimal) row.get("qtyDefect");
             row.put("totalQuantity", g.add(d));
+            // 2026-10-09 库存金额：本行（仓库×物料）金额 = (良品+不良) × 单价。
+            // 刻意**不含** qtyRepairOnSite（送修在厂）：它不在本页"总库存"里，计入会让"金额 ÷ 数量"对不上。
+            BigDecimal mUnitCost = StockCosts.unitCost(m);
+            row.put("unitCost", mUnitCost);
+            row.put("stockAmount", StockCosts.amount(g.add(d), mUnitCost));
+            row.put("costMissing", mUnitCost == null);
         }
 
         List<Map<String, Object>> list = new ArrayList<>(agg.values());
@@ -837,6 +860,11 @@ public class WarehouseStockController {
             row.put("materialTypeSortOrder", mt != null && mt.getSortOrder() != null ? mt.getSortOrder() : 999);
             row.put("totalQuantity", g.add(d));
             row.put("warehouseCount", materialWarehouses.getOrDefault(mid, Collections.emptySet()).size());
+            // 2026-10-09 库存金额：本行（跨仓库汇总）金额 = 总库存 × 单价（同 material-stock 口径，不含送修在厂）
+            BigDecimal mUnitCost = StockCosts.unitCost(m);
+            row.put("unitCost", mUnitCost);
+            row.put("stockAmount", StockCosts.amount(g.add(d), mUnitCost));
+            row.put("costMissing", mUnitCost == null);
             list.add(row);
         }
 
@@ -854,6 +882,121 @@ public class WarehouseStockController {
         Page<Map<String, Object>> result = new Page<>(pageNum, pageSize, total);
         result.setRecords(new ArrayList<>(records));
         return R.ok(result);
+    }
+
+    /**
+     * 库存金额汇总（2026-10-09 · 用户需求「物料仓和成品仓库需要库存金额」）。
+     *
+     * <p>一次给出「成品 / 物料 / 合计」三档金额与数量、成本未维护的数量与 SKU 数，以及**按仓库**的明细，
+     * 供①成品库存列表与②物料库存列表的合计栏、③仓库详情页、④首页看板【库存金额】卡片共用
+     * —— 口径唯一来源见 {@link StockCosts}，避免各处自己写口径而说法不一。</p>
+     *
+     * <p>数量口径与列表页面「总库存」严格一致：成品取 A/B/C/不良/待整理；物料取常规形态下的良品/不良
+     * （「送修在厂」不计入）。范围含自有仓与委外仓（用户 2026-10-09 口径：都要做）。</p>
+     */
+    @GetMapping("/amount-summary")
+    public R<Map<String, Object>> amountSummary(
+            @RequestParam(required = false) Long warehouseId,
+            @RequestParam(required = false) List<Long> warehouseIds) {
+
+        Set<Long> whFilter = buildWarehouseFilter(warehouseId, warehouseIds);
+        List<WarehouseStock> all = stockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
+                .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter));
+
+        Set<Long> pIds = new HashSet<>();
+        Set<Long> mIds = new HashSet<>();
+        Set<Long> whIds = new HashSet<>();
+        for (WarehouseStock s : all) {
+            if (s.getProductId() != null) pIds.add(s.getProductId());
+            if (s.getMaterialId() != null) mIds.add(s.getMaterialId());
+            if (s.getWarehouseId() != null) whIds.add(s.getWarehouseId());
+        }
+        Map<Long, Product> pMap = new HashMap<>();
+        if (!pIds.isEmpty()) productMapper.selectBatchIds(pIds).forEach(p -> pMap.put(p.getId(), p));
+        Map<Long, OutsourceMaterial> mMap = new HashMap<>();
+        if (!mIds.isEmpty()) outsourceMaterialMapper.selectBatchIds(mIds).forEach(m -> mMap.put(m.getId(), m));
+        Map<Long, Warehouse> wMap = new HashMap<>();
+        if (!whIds.isEmpty()) warehouseMapper.selectBatchIds(whIds).forEach(w -> wMap.put(w.getId(), w));
+
+        BigDecimal productAmount = BigDecimal.ZERO;
+        BigDecimal materialAmount = BigDecimal.ZERO;
+        BigDecimal productQty = BigDecimal.ZERO;
+        BigDecimal materialQty = BigDecimal.ZERO;
+        BigDecimal productMissingQty = BigDecimal.ZERO;
+        BigDecimal materialMissingQty = BigDecimal.ZERO;
+        Set<Long> productMissingSkus = new HashSet<>();
+        Set<Long> materialMissingSkus = new HashSet<>();
+        Map<Long, Map<String, Object>> byWh = new LinkedHashMap<>();
+
+        for (WarehouseStock s : all) {
+            boolean isProduct = s.getProductId() != null;
+            boolean isMaterial = !isProduct && s.getMaterialId() != null;
+            if (!isProduct && !isMaterial) continue;
+
+            // 数量口径：与列表页「总库存」一致（未知/脏品质不静默计入，避免金额虚增）
+            if (isProduct) {
+                if (ProductQualityType.of(s.getQualityType()) == null) continue;
+            } else {
+                String form = s.getStockForm() != null && !s.getStockForm().isBlank()
+                        ? s.getStockForm() : WarehouseStock.FORM_MATERIAL;
+                if (!WarehouseStock.FORM_MATERIAL.equals(form)) continue;
+                String qt = s.getQualityType();
+                if (!QualityType.GOOD.getCode().equals(qt) && !QualityType.DEFECT.getCode().equals(qt)) continue;
+            }
+
+            BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+            BigDecimal unitCost = isProduct ? StockCosts.unitCost(pMap.get(s.getProductId()))
+                                            : StockCosts.unitCost(mMap.get(s.getMaterialId()));
+            BigDecimal amt = StockCosts.amount(q, unitCost);
+
+            Long whId = s.getWarehouseId() != null ? s.getWarehouseId() : -1L;
+            Map<String, Object> w = byWh.computeIfAbsent(whId, k -> {
+                Warehouse wh = wMap.get(k);
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("warehouseId", k == -1L ? null : k);
+                row.put("warehouseName", wh != null && wh.getWarehouseName() != null ? wh.getWarehouseName() : "");
+                row.put("warehouseCategory", wh != null ? wh.getWarehouseCategory() : null);
+                row.put("warehouseType", wh != null ? wh.getWarehouseType() : null);
+                row.put("factoryId", wh != null ? wh.getFactoryId() : null);
+                row.put("productAmount", BigDecimal.ZERO);
+                row.put("materialAmount", BigDecimal.ZERO);
+                row.put("totalAmount", BigDecimal.ZERO);
+                return row;
+            });
+
+            if (isProduct) {
+                productQty = productQty.add(q);
+                productAmount = productAmount.add(amt);
+                if (unitCost == null) {
+                    productMissingQty = productMissingQty.add(q);
+                    productMissingSkus.add(s.getProductId());
+                }
+                w.put("productAmount", ((BigDecimal) w.get("productAmount")).add(amt));
+            } else {
+                materialQty = materialQty.add(q);
+                materialAmount = materialAmount.add(amt);
+                if (unitCost == null) {
+                    materialMissingQty = materialMissingQty.add(q);
+                    materialMissingSkus.add(s.getMaterialId());
+                }
+                w.put("materialAmount", ((BigDecimal) w.get("materialAmount")).add(amt));
+            }
+            w.put("totalAmount", ((BigDecimal) w.get("productAmount")).add((BigDecimal) w.get("materialAmount")));
+        }
+
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("productAmount", StockCosts.scale(productAmount));
+        out.put("materialAmount", StockCosts.scale(materialAmount));
+        out.put("totalAmount", StockCosts.scale(productAmount.add(materialAmount)));
+        out.put("productQty", productQty);
+        out.put("materialQty", materialQty);
+        out.put("productCostMissingQty", productMissingQty);
+        out.put("materialCostMissingQty", materialMissingQty);
+        out.put("productCostMissingSkuCount", productMissingSkus.size());
+        out.put("materialCostMissingSkuCount", materialMissingSkus.size());
+        out.put("byWarehouse", new ArrayList<>(byWh.values()));
+        out.put("caliber", StockCosts.CALIBER);
+        return R.ok(out);
     }
 
     /** 仓库筛选：支持单值 warehouseId 与多选 warehouseIds，合并去重（warehouseId 保留向后兼容） */
@@ -1022,6 +1165,9 @@ public class WarehouseStockController {
         }
         Map<Long, String> materialNameMap = new HashMap<>();
         Map<Long, String> materialTypeNameMap = new HashMap<>();
+        // 2026-10-09 库存金额：本接口原来只留了物料名/类型名，金额需要物料对象（成本价/最近进价/手填单价）
+        Map<Long, OutsourceMaterial> materialObjMap = new HashMap<>();
+        Map<Long, Product> productObjMap = new HashMap<>();
         // F7-132（2026-09-20）：另需「物料ID → 类型ID / 类型 sortOrder」。原文只回类型名，导致前端只能用
         // **中文类型名**做排序优先级（`['玻璃','驱动IC']`，改名即静默失效）⇒ 这里把映射提到外层作用域，返回时一并补字段。
         Map<Long, Long> matMaterialTypeMap = new HashMap<>();
@@ -1030,6 +1176,7 @@ public class WarehouseStockController {
             List<OutsourceMaterial> materials = outsourceMaterialMapper.selectBatchIds(materialIds);
             for (OutsourceMaterial m : materials) {
                 materialNameMap.put(m.getId(), m.getMaterialName());
+                materialObjMap.put(m.getId(), m);
                 if (m.getMaterialTypeId() != null) matMaterialTypeMap.put(m.getId(), m.getMaterialTypeId());
             }
             // 批量查物料类型名称与排序
@@ -1059,6 +1206,7 @@ public class WarehouseStockController {
             productMapper.selectBatchIds(productIds).forEach(p -> {
                 productNameMap.put(p.getId(), p.getName() != null ? p.getName() : "");
                 productSkuMap.put(p.getId(), p.getSku() != null ? p.getSku() : "");
+                productObjMap.put(p.getId(), p);
             });
         }
 
@@ -1089,6 +1237,18 @@ public class WarehouseStockController {
                 m.put("materialTypeId", mtId);
                 m.put("materialTypeSortOrder", mtId != null ? btSortMap.getOrDefault(mtId, 999) : null);
             }
+            // 2026-10-09 库存金额：本接口是仓库详情（自有仓/委外仓共用）的取数口 —— 逐行给单价与行金额。
+            // 物料行只在常规形态（MATERIAL）下计量（与列表口径一致）；「送修在厂」等形态记 0 且不标"成本未维护"。
+            boolean matRow = s.getMaterialId() != null;
+            String rowForm = s.getStockForm() != null && !s.getStockForm().isBlank()
+                    ? s.getStockForm() : WarehouseStock.FORM_MATERIAL;
+            BigDecimal rowUnitCost = matRow ? StockCosts.unitCost(materialObjMap.get(s.getMaterialId()))
+                                            : StockCosts.unitCost(productObjMap.get(s.getProductId()));
+            boolean counted = !matRow || WarehouseStock.FORM_MATERIAL.equals(rowForm);
+            BigDecimal amtQty = counted && s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+            m.put("unitCost", rowUnitCost);
+            m.put("stockAmount", StockCosts.amount(amtQty, rowUnitCost));
+            m.put("costMissing", counted && rowUnitCost == null);
             list.add(m);
         }
         return R.ok(list);

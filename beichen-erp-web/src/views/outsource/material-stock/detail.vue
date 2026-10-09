@@ -11,6 +11,22 @@
         <el-descriptions-item label="总库存">
           <strong>{{ fmt(totalOf(summary)) }}</strong>
         </el-descriptions-item>
+        <!-- 2026-10-09：与成品库存详情对称 —— 本页金额**只算物料**（各行 stockAmount 之和）。
+             注意：本页「总库存」含「送修在厂」，而金额与各库存列表口径一致**不含送修在厂** ⇒ 两者基数不同，已在悬停说明。 -->
+        <el-descriptions-item label="库存金额">
+          <strong>{{ fmtMoney(stockAmount) }}</strong>
+          <el-tooltip placement="top" trigger="hover">
+            <template #content>
+              <div style="max-width:320px;line-height:1.6">
+                单价取现行移动加权成本价，缺失时回落「最近进价」→ 物料手填单价；三者全空记 0 并标「成本未维护」。<br>
+                数量口径与物料库存列表一致（良品+不良），<b>不含「送修在厂」</b>（本页「总库存」含它，故两者基数不同）。
+              </div>
+            </template>
+            <span style="cursor:help;color:#909399;margin-left:4px">ⓘ</span>
+          </el-tooltip>
+          <el-tag v-if="anyCostMissing" size="small" type="warning" effect="plain" style="margin-left:6px"
+                  title="该物料存在未维护成本价/最近进价/手填单价的仓库 ⇒ 这部分按 0 计，未计入本金额">成本未维护</el-tag>
+        </el-descriptions-item>
       </el-descriptions>
     </el-card>
 
@@ -73,10 +89,11 @@
 
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
+import { fmtMoney } from '@/utils/format'
 import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
@@ -87,6 +104,11 @@ const loading = ref(false)
 const tableLoading = ref(false)
 const summary = ref<any>(null)
 const rows = ref<any[]>([])
+
+// 2026-10-09：本页金额**只算物料** —— 汇总各行 stockAmount（后端口径：良品+不良，不含送修在厂；
+// 单价缺失的行金额为 0 且带 costMissing）。
+const stockAmount = computed(() => rows.value.reduce((s, r) => s + (Number(r.stockAmount) || 0), 0))
+const anyCostMissing = computed(() => rows.value.some((r) => !!r.costMissing))
 
 // 数量一律整数（与成品库存分布详情一致）；总库存含"送修在厂"（2026-09-25 物料形态化）
 function fmt(v?: number) { return v == null ? '0' : String(Math.round(Number(v))) }

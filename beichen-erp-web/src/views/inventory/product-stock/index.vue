@@ -43,6 +43,10 @@
           ⇒ 声明合计 **938** ✓（容器约 948；全部 min-width ⇒ 宽屏自动铺满）。
         ⚠️ 上列三处数值已被 2026-09-26 B6 记录更新（现值：SKU min98、品牌 min100、分布仓库 min82、声明合计 948 ≤ 容器 956）。
       -->
+      <!-- 2026-10-09 用户需求：成品仓库存金额。本表 12 列 colSum 已 = avail（余量 0），
+           再加一列必然横向滚动 ⇒ 这里用合计条（含成品/物料/合计 + 按仓库明细 + 成本未维护提示）；
+           逐行金额在「仓库分布」明细页与仓库详情页给出（那两处列宽够）。 -->
+      <StockAmountBar mode="product" />
       <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
         <!-- 2026-09-26 B6（实测）：SKU 是最长 10 位的业务编码（最长样本「SKU-000012」正文需 93px），
              min88 会把 10 行 SKU 全部省略 ⇒ min88→**98**（93 + 内边距 16 + 边框 1 的最省值再留 2px 余量）。 -->
@@ -125,6 +129,7 @@ import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import StagnantPanel from '@/components/StagnantPanel.vue'
+import StockAmountBar from '@/components/StockAmountBar.vue'
 
 const router = useRouter()
 
@@ -164,7 +169,8 @@ async function exportProductStock() {
     const res = await request.get<any, any>('/warehouse/stock/product-summary/page', { params })
     if (Array.isArray(res?.records)) data = res.records
   } catch { /* 拉取失败：退回当前页数据 */ }
-  const cols = ['SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待整理', '总库存', '安全库存', '分布仓库']
+  // 2026-10-09：导出也带「库存金额」（与后端同一口径；成本未维护的行为 0，页面上的合计条已明示该部分不计入合计）
+  const cols = ['SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待整理', '总库存', '库存金额', '安全库存', '分布仓库']
   const aoa: (string | number)[][] = [
     [`成品库存汇总（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
     [],
@@ -181,13 +187,14 @@ async function exportProductStock() {
       Number(r.qtyDefect ?? 0),
       Number(r.qtyPending ?? 0),
       Number(totalQty(r) ?? 0),
+      Number(r.stockAmount ?? 0),
       r.safetyStock ? Number(r.safetyStock) : '',
       Number(r.warehouseCount ?? 0),
     ])
   })
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
-  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 10 }]
+  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 10 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '成品库存汇总')
   XLSX.writeFile(wb, `成品库存汇总_${localDate()}.xlsx`)

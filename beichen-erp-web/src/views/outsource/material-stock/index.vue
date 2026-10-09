@@ -44,6 +44,9 @@
           ③ 物料没有 SKU ⇒ 不显示 SKU 列（物料名称即主标识），多一列「物料类型」。
         所有列统一用 min-width：Element Plus 按比例分摊剩余空间，窄屏刚好放下、宽屏自动铺满。
       -->
+      <!-- 2026-10-09 用户需求：物料仓库存金额。列宽够（本页 7 列，加一列仍 ≤ 容器）⇒ 直接加列；
+           成品库存主表 12 列余量为 0，那里改用同一个合计条组件（见 StockAmountBar 注释）。 -->
+      <StockAmountBar mode="material" />
       <el-table v-loading="loading" :data="rows" border stripe>
         <el-table-column prop="materialTypeName" label="物料类型" min-width="104" show-overflow-tooltip>
           <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
@@ -76,6 +79,9 @@
         <el-table-column label="总库存" min-width="86" align="right">
           <template #default="{ row }"><strong>{{ fmt(totalQty(row)) }}</strong></template>
         </el-table-column>
+        <el-table-column label="库存金额" min-width="112" align="right">
+          <template #default="{ row }"><StockAmountCell :row="row" /></template>
+        </el-table-column>
       </el-table>
       <div class="pagination">
         <el-pagination v-model:current-page="page.pageNum" v-model:page-size="page.pageSize"
@@ -92,6 +98,8 @@ import { reactive, ref, onMounted } from 'vue'
 import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
+import StockAmountBar from '@/components/StockAmountBar.vue'
+import StockAmountCell from '@/components/StockAmountCell.vue'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
