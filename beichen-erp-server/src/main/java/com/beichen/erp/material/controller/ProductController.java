@@ -8,10 +8,12 @@ import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.common.ProductQualityType;
 import com.beichen.erp.material.service.ProductService;
 import com.beichen.erp.dev.service.ProjectProductSyncService;
+import com.beichen.erp.exception.BusinessException;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.util.*;
 
 /**
@@ -95,6 +97,44 @@ public class ProductController {
         if (product.getSupplierId() == null) {
             service.clearSupplier(id);
         }
+        return R.ok();
+    }
+
+    /**
+     * 只改「安全库存」（2026-10-09 用户需求：成品库存详情列表里点安全库存直接弹框改）。
+     *
+     * <p><b>为什么单开端点</b>：{@link #update} 是**整实体**更新、且带**规格必填**校验
+     * （{@code ProductSpec.requireValid}）⇒ 只发 {@code {safetyStock}} 会被它拦下 ✗。
+     * 本端点 **只写 {@code product.safety_stock} 一列**（MyBatis-Plus 的 updateById 会跳过 null 字段 ⇒
+     * 传部分实体是安全的 ✓）。</p>
+     *
+     * <p><b>粒度提醒</b>：安全库存是**产品级**（一个产品一份，所有仓库共用）—— 这是表结构决定的
+     * （`warehouse_stock` 无该列），不是本端点引入的；页面弹框里已写明这一点 ✓。</p>
+     *
+     * <p>校验：非空、非负、**必须是整数**（列是 DECIMAL(18,0)，产品管理表单也是 :precision=0 ⇒ 口径一致）。
+     * 清空语义 = 填 0（0 与 null 在低库存判定里等价：都表示"未设置"）。</p>
+     */
+    @PutMapping("/{id}/safety-stock")
+    public R<Void> updateSafetyStock(@PathVariable Long id, @RequestBody(required = false) Map<String, Object> body) {
+        Object raw = body == null ? null : body.get("safetyStock");
+        if (raw == null || String.valueOf(raw).isBlank())
+            throw new BusinessException("安全库存不能为空（如需清空请填 0）");
+        BigDecimal val;
+        try {
+            val = new BigDecimal(String.valueOf(raw).trim());
+        } catch (Exception e) {
+            throw new BusinessException("安全库存格式不正确：" + raw);
+        }
+        if (val.compareTo(BigDecimal.ZERO) < 0)
+            throw new BusinessException("安全库存不能为负数：当前 " + val);
+        if (val.stripTrailingZeros().scale() > 0)
+            throw new BusinessException("安全库存必须是整数：当前 " + val);
+        if (service.getById(id) == null)
+            throw new BusinessException("产品不存在");
+        Product p = new Product();
+        p.setId(id);
+        p.setSafetyStock(val);
+        service.updateById(p);
         return R.ok();
     }
 

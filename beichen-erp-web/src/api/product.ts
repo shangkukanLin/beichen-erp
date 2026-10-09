@@ -97,6 +97,18 @@ export function deleteProduct(id: number | string) {
   return request.delete<void>(`/product/${id}`)
 }
 
+/**
+ * 只改「安全库存」（2026-10-09 用户需求：成品库存详情列表里点安全库存直接弹框改）。
+ *
+ * <p>为什么不复用 {@link updateProduct}：那个是**整实体**提交、且要求**规格必填**（产品管理表单用），
+ * 只发 `{ safetyStock }` 会被后端校验拦下 ✗。本端点是独立的最小写入口。</p>
+ * <p>落点仍是 `/api/product` 前缀 ⇒ 后端权限自动走 `base:product`（与产品管理页同码），
+ * 前端「product → productStock」域级联刷新（`dataFreshness.ts`）也会自动生效。</p>
+ */
+export function updateProductSafetyStock(id: number | string, safetyStock: number) {
+  return request.put<void>(`/product/${id}/safety-stock`, { safetyStock })
+}
+
 /** 品质等级选项 */
 export interface QualityOption {
   value: string

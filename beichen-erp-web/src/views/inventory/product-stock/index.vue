@@ -80,15 +80,20 @@
         <el-table-column label="总库存" min-width="72" align="right">
           <template #default="{ row }"><strong>{{ fmt(totalQty(row)) }}</strong></template>
         </el-table-column>
+        <!-- 2026-10-09 用户需求：安全库存**点一下就能改**（弹框）。
+             ① 只改 `product.safety_stock` 一列（独立端点，不复用整实体更新 ⇒ 不触发规格必填校验）；
+             ② 该值是**产品级**（一个产品一份、所有仓库共用）⇒ 弹框里向用户写明；
+             ③ 走"点击 → 弹框"而非列内输入框 ⇒ **列宽零变化**，不触碰 scan-table-overflow / scan-col-truncation；
+             ④ 无 base:product（产品写权限）的账号仍渲染为只读文本（体验层可点与否，真正边界在后端）；
+             ⑤ @click.stop：本表整行可点进详情（@row-click）⇒ 必须阻止冒泡，否则点一下弹框又跳页 ✗。 -->
         <el-table-column label="安全库存" min-width="80" align="right">
           <template #default="{ row }">
-            <span v-if="row.safetyStock" :style="{ color: row.lowStock ? '#f56c6c' : '#67c23a' }">
-              {{ fmt(row.safetyStock) }}
-              <el-tooltip v-if="row.lowStock" content="总库存低于安全库存" placement="top">
-                <el-icon style="vertical-align:-2px"><WarningFilled /></el-icon>
-              </el-tooltip>
+            <span :class="{ 'safety-edit': canEditSafety }" :style="safetyCellStyle(row)"
+                  :title="canEditSafety ? '点击修改安全库存（产品级，该产品所有仓库共用）' : ''"
+                  @click.stop="canEditSafety ? openSafety(row) : undefined">
+              <template v-if="row.safetyStock">{{ fmt(row.safetyStock) }}<el-icon v-if="row.lowStock" style="vertical-align:-2px"><WarningFilled /></el-icon></template>
+              <template v-else>未设置</template>
             </span>
-            <span v-else style="color:#999">未设置</span>
           </template>
         </el-table-column>
         <!-- 2026-09-26 B6：4 字表头需 56+16+1+2 = 75；74（或再分配后的 74）会让余量只剩 1px ⇒ min74→**82**，
@@ -115,16 +120,40 @@
     <StagnantPanel ref="stagnantRef"
       :brand-id="applied.brandId" :warehouse-ids="applied.warehouseIds" :product-name="applied.productName"
       @row-click="goDetail" @product-click="goProduct" />
+
+    <!-- 安全库存弹框（2026-10-09 用户需求：在成品库存详情列表里点安全库存直接改） -->
+    <el-dialog v-model="safetyDialog" :title="`修改安全库存 - ${safetyRow?.productName || ''}`" width="440px" append-to-body>
+      <el-form label-width="92px">
+        <el-form-item label="产品">
+          <span>{{ safetyRow?.sku ? safetyRow.sku + ' | ' : '' }}{{ safetyRow?.productName || '' }}</span>
+        </el-form-item>
+        <el-form-item label="安全库存">
+          <el-input-number v-model="safetyValue" :min="0" :precision="0" :step="1" style="width:100%" />
+        </el-form-item>
+      </el-form>
+      <!-- 粒度提醒（必须写清：这是**产品级**，不是按仓库） -->
+      <div style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.6">
+        安全库存是<b>产品级</b>设置：同一产品在<b>所有仓库</b>共用这一个值（不按仓库分别设置）。<br />
+        当前总库存 <b>{{ fmt(totalQty(safetyRow || {})) }}</b>；保存后「仅看低于安全库存」与低库存标记会按新值重算。填 0 表示未设置。
+      </div>
+      <template #footer>
+        <el-button @click="safetyDialog = false">取消</el-button>
+        <el-button type="primary" :loading="safetySaving" @click="saveSafety">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
 import { localDate } from '@/utils/date'
-import { reactive, ref, onMounted } from 'vue'
+import { reactive, ref, onMounted, computed } from 'vue'
 import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { WarningFilled } from '@element-plus/icons-vue'
+import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 import { WarehouseCategory, WarehouseType } from '@/api/enums'
+import { updateProductSafetyStock } from '@/api/product'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
@@ -211,6 +240,56 @@ function qtyClass(v: number, type: 'a' | 'b' | 'c' | 'defect' | 'pending') {
 function totalQty(row: any) {
   return (Number(row.qtyA) || 0) + (Number(row.qtyB) || 0) + (Number(row.qtyC) || 0)
     + (Number(row.qtyDefect) || 0) + (Number(row.qtyPending) || 0)
+}
+
+// ==================== 安全库存就地修改（2026-10-09 用户需求） ====================
+// ① 该字段是**产品级**（`product.safety_stock`）⇒ 改一个产品 = 改它所有仓库共用的那一个值（弹框里写明 ✓）；
+// ② 写接口 `PUT /product/{id}/safety-stock` 是独立的最小写入口（不复用整实体更新 ⇒ 不触发规格必填校验 ✓）；
+// ③ 保存成功后重拉本页；同时请求层按 URL 把 `product` 域置脏 ⇒ `productStock` 级联失效（其它页面的
+//    低库存标记也会跟着更新 ✓，见 utils/dataFreshness.ts 的 DOMAIN_DEPS）。
+const userStore = useUserStore()
+/** 只有持产品写权限（base:product）的账号才把安全库存渲染成"可点"；真正边界在后端 ApiPermGuard ✓ */
+const canEditSafety = computed(() => userStore.hasPerm('base:product'))
+
+const safetyDialog = ref(false)
+const safetySaving = ref(false)
+const safetyRow = ref<any>(null)
+const safetyValue = ref<number>(0)
+/** 目标产品 id：汇总行的产品 id 字段是 **productId**（后端聚合 key，见 WarehouseStockController 的 product-summary），
+ *  不是 row.id ✗ —— 用错会往 `/product/undefined/safety-stock` 发请求、静默失败（保存后列表仍是旧值 ✓ 很难发现）。 */
+const safetyProductId = ref<number | undefined>(undefined)
+
+/** 单元格样式：可改时给"可点"的视觉提示（虚线下划线 + 手型）；只读时维持原有配色 */
+function safetyCellStyle(row: any) {
+  const color = row.safetyStock ? (row.lowStock ? '#f56c6c' : '#67c23a') : '#999'
+  return canEditSafety.value
+    ? { color, cursor: 'pointer', borderBottom: '1px dashed currentColor' }
+    : { color }
+}
+
+function openSafety(row: any) {
+  safetyRow.value = row
+  safetyProductId.value = row.productId ?? row.id
+  safetyValue.value = Number(row.safetyStock) || 0
+  safetyDialog.value = true
+}
+
+async function saveSafety() {
+  const row = safetyRow.value
+  if (!row) return
+  const id = safetyProductId.value
+  if (id == null) { ElMessage.warning('未取到产品标识，无法保存（请刷新后重试）'); return }
+  const v = Number(safetyValue.value)
+  if (!Number.isFinite(v) || v < 0) { ElMessage.warning('安全库存必须是不小于 0 的整数'); return }
+  if (!Number.isInteger(v)) { ElMessage.warning('安全库存必须是整数'); return }
+  safetySaving.value = true
+  try {
+    await updateProductSafetyStock(id, v)
+    ElMessage.success(`安全库存已更新为 ${v}`)
+    safetyDialog.value = false
+    await load()
+  } catch { /* 提示由拦截器统一给出（缺 base:product 时会 403） */ }
+  finally { safetySaving.value = false }
 }
 
 async function load() {
