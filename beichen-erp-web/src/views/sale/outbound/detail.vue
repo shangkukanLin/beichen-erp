@@ -76,6 +76,9 @@ function removeItem(index: number) { items.value.splice(index, 1) }
 async function doSave() {
   if (!form.customerId) { ElMessage.warning('请选择客户'); return }
   if (!form.warehouseId) { ElMessage.warning('请选择出库仓库'); return }
+  // 2026-10-09（用户口径：本单是销售单的出库凭证）：草稿保存在后端同样会校验——必须挂已审核销售单、
+  // 且明细产品属于该单；这里先给一致的提示，避免"点了保存才报错"。
+  if (!head.value.orderId) { ElMessage.warning('本单未关联来源销售单，无法保存（销售出库须由销售单带入）'); return }
   if (items.value.length === 0) { ElMessage.warning('请至少保留一条明细'); return }
   saving.value = true
   try {

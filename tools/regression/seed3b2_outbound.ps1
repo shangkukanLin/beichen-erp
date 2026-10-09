@@ -34,9 +34,12 @@ foreach ($s in $auditedSo) {
     if (-not $soItems -or @($soItems).Count -eq 0) { $obFail++; $msgs += ('no items SO ' + $s.id); continue }
     $it0 = @($soItems)[0]
     $qty = [math]::Max(1, [math]::Floor([decimal]$it0.quantity / 2))
-    $ob = @{ saleOrderId = [int]$s.id; saleOrderCode = $s.code; customerId = [int]$det.customerId; warehouseId = [int]$det.warehouseId
+    # 2026-10-09（§7.27）：键名必须是后端真正读的 **orderId / orderItemId** ——
+    # 原先写 saleOrderId / saleOrderItemId，两个键在 parseOutbound/parseItems 里都不存在
+    # ⇒ 被静默丢弃（这正是历史数据里 sale_outbound_item.order_item_id 全为 NULL 的原因）。
+    $ob = @{ orderId = [int]$s.id; saleOrderCode = $s.code; customerId = [int]$det.customerId; warehouseId = [int]$det.warehouseId
              outboundDate = '2026-08-19'; status = 'DRAFT'; remark = 'seed outbound'
-             items = @(@{ saleOrderItemId = [int]$it0.id; productId = [int]$it0.productId; qualityType = 'A'; quantity = $qty; unitPrice = $it0.unitPrice; amount = [math]::Round($qty * [decimal]$it0.unitPrice, 2) }) }
+             items = @(@{ orderItemId = [int]$it0.id; productId = [int]$it0.productId; qualityType = 'A'; quantity = $qty; unitPrice = $it0.unitPrice; amount = [math]::Round($qty * [decimal]$it0.unitPrice, 2) }) }
     $r = Post '/inventory/outbound' $ob
     if ($r) {
         Start-Sleep -Milliseconds 250

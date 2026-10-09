@@ -14,6 +14,7 @@ import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.material.service.ProductService;
 import com.beichen.erp.sale.entity.SaleOrder;
+import com.beichen.erp.sale.entity.SaleOrderItem;
 import com.beichen.erp.sale.entity.SaleOutbound;
 import com.beichen.erp.sale.entity.SaleOutboundItem;
 import com.beichen.erp.sale.mapper.SaleOutboundMapper;
@@ -37,6 +38,8 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
     private final SaleOutboundMapper outboundMapper;
     private final SaleOutboundItemMapper itemMapper;
     private final SaleOrderMapper saleOrderMapper;
+    // 2026-10-09（用户口径「销售出库 = 销售单的出库凭证」）：校验明细产品必须属于来源销售单
+    private final com.beichen.erp.sale.mapper.SaleOrderItemMapper saleOrderItemMapper;
     private final CustomerMapper customerMapper;
     private final ProductMapper productMapper;
     private final ProductService productService;
@@ -98,9 +101,44 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         return items;
     }
 
+    /**
+     * 「销售出库 = 销售单的**出库凭证**」的硬约束（2026-10-09 用户口径：不允许开出与销售单对不上的单）。
+     *
+     * <p>① 必须挂**已审核**的销售单；② 明细不能为空；③ 每行必须有 `productId` 且**属于该销售单**；
+     * ④ 数量 &gt; 0；⑤ 客户/出库仓未填时用销售单兜底（带入后不必再手填 ✓）。</p>
+     *
+     * <p><b>为什么写在后端</b>：前端只是"引导"，绕过前端（直接调接口）就能造出对不上的单 ✗ ⇒
+     * 只有服务层硬挡才能保证凭证语义。守 {@code verify-ghost-field-fixes.ps1} 对这几条都有负例断言 ✓。</p>
+     */
+    private void validateAgainstOrder(SaleOutbound outbound, List<SaleOutboundItem> items) {
+        if (outbound.getOrderId() == null)
+            throw new BusinessException("销售出库必须从销售单带入（请先选择来源销售单）");
+        SaleOrder order = saleOrderMapper.selectById(outbound.getOrderId());
+        if (order == null) throw new BusinessException("来源销售单不存在：" + outbound.getOrderId());
+        if (!DocStatus.AUDITED.getCode().equals(order.getStatus()))
+            throw new BusinessException("来源销售单尚未审核（" + order.getCode() + "），不能据此出库");
+        if (items == null || items.isEmpty()) throw new BusinessException("出库明细不能为空");
+        Set<Long> allowed = saleOrderItemMapper.selectList(
+                        new LambdaQueryWrapper<SaleOrderItem>().eq(SaleOrderItem::getOrderId, order.getId()))
+                .stream().map(SaleOrderItem::getProductId).filter(Objects::nonNull).collect(Collectors.toSet());
+        for (SaleOutboundItem it : items) {
+            if (it.getProductId() == null)
+                throw new BusinessException("出库明细必须选择产品（请从销售单带入）");
+            if (!allowed.contains(it.getProductId()))
+                throw new BusinessException("出库明细的产品不属于来源销售单（productId=" + it.getProductId() + "）");
+            if (it.getQuantity() == null || it.getQuantity().compareTo(BigDecimal.ZERO) <= 0)
+                throw new BusinessException("出库数量必须大于 0");
+        }
+        if (outbound.getCustomerId() == null) outbound.setCustomerId(order.getCustomerId());
+        if (outbound.getWarehouseId() == null) outbound.setWarehouseId(order.getWarehouseId());
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void create(SaleOutbound outbound, List<SaleOutboundItem> items) {
+        // 2026-10-09（用户口径：本单是**销售单的出库凭证**）：先校验并兜底 —— 必须挂已审核销售单、
+        // 明细产品必须属于该单（客户/出库仓可由来源销售单兜底，避免"带入后还要手填"的摩擦）。
+        validateAgainstOrder(outbound, items);
         if (outbound.getCustomerId() == null) throw new BusinessException("客户不能为空");
         if (outbound.getWarehouseId() == null) throw new BusinessException("出库仓库不能为空");
         outbound.setCode(generateCode());
@@ -131,6 +169,8 @@ public class SaleOutboundServiceImpl implements SaleOutboundService {
         SaleOutbound old = outboundMapper.selectById(outbound.getId());
         if (old == null) throw new BusinessException("销售出库单不存在");
         if (!DocStatus.DRAFT.getCode().equals(old.getStatus())) throw new BusinessException("只有草稿状态可编辑");
+        // 2026-10-09：草稿改单同样要守住"凭证与销售单对得上"（明细产品必须属于来源销售单）
+        validateAgainstOrder(outbound, items);
         outbound.setCode(old.getCode());
         outboundMapper.updateById(outbound);
         itemMapper.delete(new LambdaQueryWrapper<SaleOutboundItem>().eq(SaleOutboundItem::getOutboundId, outbound.getId()));
