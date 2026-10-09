@@ -47,19 +47,27 @@ public class WarehouseController {
         return R.ok(stockTakeService.takeStatus(scope));
     }
 
-    /** 仓库分页查询，支持按名称、类别、类型过滤 */
+    /**
+     * 仓库分页查询，支持按名称、类别、类型、**所属供应商/加工厂**过滤。
+     *
+     * <p>2026-10-09（§7.26 幽灵字段）：补 `factoryId` —— 委外仓库管理页的「供应商」筛选一直把 `factoryId`
+     * 当查询参数发过来，而本方法原先**没有这个形参** ⇒ Spring 静默忽略未知请求参数 ⇒ 该筛选**完全无效**
+     * （列表看起来正常，因为 {@code toMap} 本来就回 {@code factoryId/factoryName}）。</p>
+     */
     @GetMapping("/page")
     public R<Page<Map<String, Object>>> page(
             @RequestParam(defaultValue = "1") Integer pageNum,
             @RequestParam(defaultValue = "10") Integer pageSize,
             @RequestParam(required = false) String warehouseName,
             @RequestParam(required = false) String warehouseCategory,
-            @RequestParam(required = false) String warehouseType) {
+            @RequestParam(required = false) String warehouseType,
+            @RequestParam(required = false) Long factoryId) {
         Page<Warehouse> mpPage = warehouseMapper.selectPage(new Page<>(pageNum, pageSize),
             new LambdaQueryWrapper<Warehouse>()
                 .like(warehouseName != null && !warehouseName.isBlank(), Warehouse::getWarehouseName, warehouseName)
                 .eq(warehouseCategory != null && !warehouseCategory.isBlank(), Warehouse::getWarehouseCategory, warehouseCategory)
                 .eq(warehouseType != null && !warehouseType.isBlank(), Warehouse::getWarehouseType, warehouseType)
+                .eq(factoryId != null, Warehouse::getFactoryId, factoryId)
                 .orderByDesc(Warehouse::getId));
 
         // 批量查询供应商名称

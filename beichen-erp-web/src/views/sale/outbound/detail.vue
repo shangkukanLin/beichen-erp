@@ -19,9 +19,10 @@ import {
  * 结构对齐其它单据详情：`head` 只读快照 + `form`/`items` 可编辑副本（仅草稿态）；
  * 字段、校验、payload 与列表弹窗**完全一致**：payload = `{ outbound: {...}, items: [...] }`。
  *
- * 一处**有意的收窄**（写清楚以免后人当成 bug）：明细支持改「数量/单价/规格/备注」与删除行，但**不提供新增物料行**
- * —— 新增物料要一整套"选物料 → 带出名称/规格/单位"的联动（列表弹窗里那套 `loadMaterials/onMaterialChange`），
- * 而给一张已存在的出库单临时加物料属于罕见操作（正常做法是重新建单）；保持一套联动入口可避免规则分叉。
+ * 一处**有意的收窄**（写清楚以免后人当成 bug）：明细支持改「数量/单价/备注」与删除行，但**不提供新增产品行**
+ * —— 新增产品要一整套"选产品 → 带出名称/SKU"的联动（列表弹窗里那套 `loadProducts/onProductChange`），
+ * 而给一张已存在的出库单临时加产品属于罕见操作（正常做法是重新建单）；保持一套联动入口可避免规则分叉。
+ * （2026-10-09 §7.26：本页明细的对象是**成品 product** —— 原注释写的"物料/规格/单位"是幽灵字段时代的残留。）
  */
 const route = useRoute()
 const router = useRouter()
@@ -83,8 +84,10 @@ async function doSave() {
         id: id(), orderId: head.value.orderId, customerId: form.customerId, warehouseId: form.warehouseId,
         outboundDate: form.outboundDate, remark: form.remark,
       },
+      // 2026-10-09（§7.26 幽灵字段）：明细发**产品**键（productId/orderItemId）—— 原发
+      // materialId/materialName/spec/unit 在实体里根本不存在，Jackson 静默丢弃 ⇒ product_id 恒 NULL。
       items: items.value.map((it) => ({
-        id: it.id, materialId: it.materialId, materialName: it.materialName, spec: it.spec, unit: it.unit,
+        id: it.id, productId: it.productId, orderItemId: it.orderItemId,
         qualityType: it.qualityType, quantity: Number(it.quantity) || 0, unitPrice: Number(it.unitPrice) || 0, remark: it.remark,
       })),
     } as any)
@@ -184,15 +187,15 @@ onActivated(() => {
       <template #header>
         <span style="font-weight:600">出库明细</span>
         <span v-if="isDraft" style="font-weight:normal;color:#909399;margin-left:8px">
-          数量/单价/规格/备注可直接改；本页不支持新增物料行（要加物料请重新建单，避免与列表弹窗的取数联动分叉）
+          数量/单价/备注可直接改；本页不支持新增产品行（要加产品请重新建单，避免与列表弹窗的取数联动分叉）
         </span>
       </template>
 
-      <!-- 草稿：可编辑 -->
+      <!-- 草稿：可编辑。2026-10-09（§7.26 幽灵字段）：明细对象是**成品** —— 列改 productName/sku。
+           原先读 materialName/spec/unit，而实体 SaleOutboundItem 没有这些字段 ⇒ 列恒空（或恒 `#undefined`）。 -->
       <el-table v-if="isDraft" :data="items" border size="small">
-        <el-table-column prop="materialName" label="物料名称" min-width="150"><template #default="{ row }">{{ row.materialName || ('#' + row.materialId) }}</template></el-table-column>
-        <el-table-column prop="spec" label="规格" width="100" show-overflow-tooltip />
-        <el-table-column prop="unit" label="单位" width="70" align="center" />
+        <el-table-column prop="productName" label="产品名称" min-width="150"><template #default="{ row }">{{ row.productName || ('#' + row.productId) }}</template></el-table-column>
+        <el-table-column prop="sku" label="SKU" width="130" show-overflow-tooltip />
         <el-table-column label="品质" width="96" align="center">
           <template #default="{ row }">
             <el-select v-model="row.qualityType" size="small" style="width:100%">
@@ -214,9 +217,8 @@ onActivated(() => {
       </el-table>
 
       <el-table v-else :data="items" border size="small">
-        <el-table-column prop="materialName" label="物料名称" min-width="150" />
-        <el-table-column prop="spec" label="规格" width="100" show-overflow-tooltip />
-        <el-table-column prop="unit" label="单位" width="70" align="center" />
+        <el-table-column prop="productName" label="产品名称" min-width="150" />
+        <el-table-column prop="sku" label="SKU" width="130" show-overflow-tooltip />
         <el-table-column prop="qualityType" label="品质" width="80" align="center" />
         <el-table-column prop="quantity" label="数量" width="90" align="right" />
         <el-table-column prop="unitPrice" label="单价" width="90" align="right"><template #default="{ row }">{{ fmt(row.unitPrice) }}</template></el-table-column>

@@ -1227,10 +1227,18 @@ public class WarehouseStockController {
             if (s.getProductId() != null) {
                 m.put("productName", productNameMap.getOrDefault(s.getProductId(), ""));
                 m.put("sku", productSkuMap.getOrDefault(s.getProductId(), ""));
+                // 2026-10-09（§7.26 幽灵字段）：补 unit —— 仓库详情页的「单位」列一直读 `m.unit`，
+                // 而本接口原先**不回传**该键（`row.put("unit", …)` 只写在其它几个兄弟端点里）
+                // ⇒ 委外仓详情的「单位」列恒空。口径与其它端点一致：取主数据的 unit，空则给空串。
+                Product pu = productObjMap.get(s.getProductId());
+                m.put("unit", pu != null && pu.getUnit() != null ? pu.getUnit() : "");
             }
             if (s.getMaterialId() != null) {
                 m.put("materialName", materialNameMap.getOrDefault(s.getMaterialId(), ""));
                 m.put("materialTypeName", materialTypeNameMap.getOrDefault(s.getMaterialId(), ""));
+                // 同上：物料行的「单位」取自 outsource_material.unit
+                OutsourceMaterial mu = materialObjMap.get(s.getMaterialId());
+                m.put("unit", mu != null && mu.getUnit() != null ? mu.getUnit() : "");
                 // F7-132（2026-09-20）：补类型 id 与 sortOrder，供前端做"优先类型置顶"排序，
                 // 不再依赖可改的中文类型名（纯新增字段，向后兼容）
                 Long mtId = matMaterialTypeMap.get(s.getMaterialId());

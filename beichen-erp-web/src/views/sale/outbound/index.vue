@@ -4,7 +4,6 @@ import { useDomainRefresh } from '@/utils/dataFreshness'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from 'element-plus'
 import request from '@/utils/request'
-import type { OutsourceMaterialOption } from '@/api/purchase'
 import { getQualityTypes, type QualityOption } from '@/api/product'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import { ADD_MARKER } from '@/composables/useSelectWithAdd'
@@ -14,6 +13,7 @@ const router = useRouter()
 const qualityOptions = ref<QualityOption[]>([])
 import {
   getSaleOutboundPage, createSaleOutbound, auditSaleOutbound, cancelSaleOutbound,
+  getSaleOutboundSaleOrderOptions, getSaleOutboundSaleOrderDetail,
   type SaleOutbound, type SaleOutboundItem
 } from '@/api/sale'
 
@@ -31,12 +31,17 @@ const statusOptions = [
 // Odoo 风格：下拉框展开/搜索时实时查库（不预缓存全量）
 const fetchCustomers = (kw: string) => request.get('/inventory/customer/page', { params: { pageSize: 500, name: kw } })
 const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
-const fetchMaterials = (kw: string) => request.get('/outsource/material/page', { params: { pageSize: 500, materialName: kw } })
+// 2026-10-09（§7.26 幽灵字段）：明细的对象是**成品（product）**，不是委外物料 —— 实体
+// `SaleOutboundItem` 只有 productId/productName/sku（没有 materialId/materialName/spec/unit），
+// 原先这里取 `/outsource/material/page` 并把值写进 `materialId` ⇒ Jackson 静默丢弃 ⇒ product_id 恒 NULL。
+const fetchProducts = (kw: string) => request.get('/product/page', { params: { pageSize: 500, name: kw } })
+// 来源销售单（走本页前缀，避免要求 sale:order 权限）
+const fetchSaleOrders = (kw: string) => getSaleOutboundSaleOrderOptions({ code: kw, pageSize: 200 })
 
 // 列表/详情显示与拼装用的本地轻量列表（组件内维护，不再依赖全局 optionsStore）
 const customers = ref<any[]>([])
 const warehouses = ref<any[]>([])
-const materialOptions = ref<OutsourceMaterialOption[]>([])
+const productOptions = ref<any[]>([])
 
 async function loadCustomers() { try { const r: any = await fetchCustomers(''); customers.value = r?.records || [] } catch { customers.value = [] } }
 async function loadWarehouses() { try { const r: any = await fetchWarehouses(''); warehouses.value = r?.records || [] } catch { warehouses.value = [] } }
@@ -55,7 +60,7 @@ const rules: FormRules = {
   warehouseId: [{ required: true, message: '请选择出库仓库', trigger: 'change' }]
 }
 
-async function loadMaterials(keyword?: string) { try { const res: any = await fetchMaterials(keyword || ''); materialOptions.value = res?.records || [] } catch { materialOptions.value = [] } }
+async function loadProducts(keyword?: string) { try { const res: any = await fetchProducts(keyword || ''); productOptions.value = res?.records || [] } catch { productOptions.value = [] } }
 
 async function loadData() {
   tableLoading.value = true
@@ -71,15 +76,44 @@ async function loadData() {
 }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.customerId = ''; query.status = ''; pagination.pageNum = 1; loadData() }
-function resetForm() { Object.assign(form, { id: undefined, orderId: undefined, customerId: undefined, warehouseId: undefined, outboundDate: '', remark: '' }); items.value = [] }
+function resetForm() { Object.assign(form, { id: undefined, orderId: undefined, customerId: undefined, warehouseId: undefined, outboundDate: '', remark: '' }); items.value = []; saleOrderId.value = undefined }
 function handleAdd() { resetForm(); dialogTitle.value = '新增销售出库'; dialogVisible.value = true; formRef.value?.clearValidate() }
 /* 2026-09-24（用户口径）：列表弹窗只保留「新增」；草稿编辑与撤销类的反审核都已收进详情页
    （/sale/outbound/detail/:id），故 handleEdit / handleUnAudit 一并删除。 */
-function addItem() { items.value.push({ materialId: undefined, qualityType: 'A', materialName: '', spec: '', unit: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
+
+// 2026-10-09（§7.26 幽灵字段）：明细对象改为**成品**（productId/productName/sku），与实体/后端一致
+function addItem() { items.value.push({ productId: undefined, qualityType: 'A', productName: '', sku: '', quantity: 0, unitPrice: 0, amount: 0, remark: '' }) }
 function removeItem(index: number) { items.value.splice(index, 1) }
-function onMaterialChange(val: number, row: SaleOutboundItem) {
-  const m = materialOptions.value.find(x => x.id === val)
-  if (m) { row.materialId = m.id as number; row.materialName = m.materialName; row.spec = m.spec; row.unit = m.unit }
+function onProductChange(val: number, row: SaleOutboundItem) {
+  const p = productOptions.value.find(x => x.id === val)
+  if (p) { row.productId = p.id as number; row.productName = p.name; row.sku = p.sku }
+}
+
+// ---- 来源销售单：「从销售单带入明细」（甲口径：明细=成品、可追溯到销售单行 orderItemId）----
+const saleOrderId = ref<number | undefined>(undefined)
+async function onPickSaleOrder(val: any) {
+  if (!val) return
+  try {
+    const r: any = await getSaleOutboundSaleOrderDetail(Number(val))
+    const o = r?.order || {}
+    const its: any[] = r?.items || []
+    if (!its.length) { ElMessage.warning('该销售单没有明细，无法带入'); return }
+    if (form.customerId && o.customerId && Number(form.customerId) !== Number(o.customerId)) {
+      const go = await ElMessageBox.confirm('该销售单的客户与已选客户不同，是否仍按销售单带入？', '提示', { type: 'warning' })
+        .then(() => true).catch(() => false)
+      if (!go) { saleOrderId.value = undefined; return }
+    }
+    form.orderId = o.id
+    form.customerId = o.customerId ?? form.customerId
+    // 出库仓：销售单上的仓只是"默认值"，实际出货仓可改 ⇒ 仅在未选时带入
+    if (o.warehouseId && !form.warehouseId) form.warehouseId = o.warehouseId
+    items.value = its.map((it: any) => ({
+      orderItemId: it.id, productId: it.productId, productName: it.productName, sku: it.sku,
+      qualityType: it.qualityType || 'A',
+      quantity: Number(it.quantity || 0), unitPrice: Number(it.unitPrice || 0), remark: it.remark || '',
+    }))
+    ElMessage.success('已从销售单带入 ' + items.value.length + ' 条明细')
+  } catch (e: any) { ElMessage.error(e?.msg || e?.message || '带入失败') }
 }
 function itemAmount(row: SaleOutboundItem) { const q = Number(row.quantity) || 0; const p = Number(row.unitPrice) || 0; return (q * p).toFixed(2) }
 
@@ -123,7 +157,7 @@ async function loadQualityTypes() { try { qualityOptions.value = await getQualit
 // 2026-09-30 P4：本页在 keep-alive 内，原先只挂 onMounted ⇒ 从销售单/别处返回后列表还是旧的。
 // 基础下拉（客户/仓库/物料/品质）仍只在挂载时拉一次；**列表**改由域门控。
 // 写 /inventory/outbound（本页建单/审核）与销售单相关接口都会 bump saleOrder 域（见 utils/dataFreshness.ts）。
-onMounted(() => { loadCustomers(); loadWarehouses(); loadMaterials(); loadQualityTypes() })
+onMounted(() => { loadCustomers(); loadWarehouses(); loadProducts(); loadQualityTypes() })
 useDomainRefresh('saleOrder', loadData)
 
 </script>
@@ -186,7 +220,7 @@ useDomainRefresh('saleOrder', loadData)
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-lg)" :close-on-click-modal="false" @open="loadMaterials()">
+    <el-dialog v-model="dialogVisible" :title="dialogTitle" width="var(--app-dialog-lg)" :close-on-click-modal="false" @open="loadProducts()">
       <el-form ref="formRef" :model="form" :rules="rules" label-width="90px">
         <el-row :gutter="16">
           <el-col :span="12">
@@ -216,18 +250,28 @@ useDomainRefresh('saleOrder', loadData)
         </el-row>
 
         <el-divider content-position="left">明细</el-divider>
-        <div style="margin-bottom:8px"><el-button type="primary" :icon="'Plus'" @click="addItem">添加明细</el-button></div>
+        <!-- 2026-10-09（甲口径：出库=出**成品**，并从销售单带入）：明细可选产品，也可先选「来源销售单」
+             一键带入（带入会写上 orderItemId ⇒ 出库行可追溯到销售单行）。 -->
+        <el-row :gutter="12" style="margin-bottom:8px">
+          <el-col :span="10">
+            <RemoteSelect v-model="saleOrderId" :fetch="fetchSaleOrders" label-key="code" placeholder="选择来源销售单（已审核）"
+              style="width:100%" @change="onPickSaleOrder" domain="saleOrder" />
+          </el-col>
+          <el-col :span="14">
+            <el-button type="primary" :icon="'Plus'" @click="addItem">手工添加明细</el-button>
+            <span style="margin-left:10px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">选销售单会带入其成品明细（数量/单价可改）；也可手工加行选产品</span>
+          </el-col>
+        </el-row>
         <el-table :data="items" border>
-          <el-table-column label="物料" min-width="180">
+          <el-table-column label="产品" min-width="200">
             <template #default="{ row }">
-              <RemoteSelect v-model="row.materialId" :fetch="fetchMaterials" label-key="materialName" placeholder="选择物料"
-                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.materialId = undefined; router.push('/product/add'); return } onMaterialChange(v, row) }" domain="material" >
+              <RemoteSelect v-model="row.productId" :fetch="fetchProducts" label-key="name" placeholder="选择产品"
+                style="width:100%" @change="(v: any) => { if (v === ADD_MARKER) { row.productId = undefined; router.push('/product/add'); return } onProductChange(v, row) }" domain="product" >
                 <el-option label="+ 新增" :value="ADD_MARKER" />
               </RemoteSelect>
             </template>
           </el-table-column>
-          <el-table-column prop="spec" label="规格" width="100" />
-          <el-table-column prop="unit" label="单位" width="70" />
+          <el-table-column prop="sku" label="SKU" width="120" show-overflow-tooltip />
           <el-table-column label="品质" width="90">
             <template #default="{ row }">
               <el-select v-model="row.qualityType" size="small" style="width:100%">

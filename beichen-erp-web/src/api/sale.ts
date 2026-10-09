@@ -54,15 +54,22 @@ export interface SaleOrder {
   items?: SaleOrderItem[]
 }
 
+/**
+ * 销售出库明细（2026-10-09 §7.26 订正）：对象是**成品 product** —— 实体 `SaleOutboundItem` 只有
+ * `productId/productName/sku`，原先这里写的是 `materialId/materialCode/materialName/spec/unit`
+ * （实体里根本不存在 ⇒ 前端发这些键会被 Jackson **静默丢弃** ⇒ `product_id` 恒 NULL、名称恒空）。
+ */
 export interface SaleOutboundItem {
   id?: number
   outboundId?: number
+  /** 来源销售单明细行 id（出库行据此可追溯到销售单行） */
   orderItemId?: number
-  materialId?: number
-  materialCode?: string
-  materialName?: string
-  spec?: string
-  unit?: string
+  /** 产品（成品）id */
+  productId?: number
+  /** 产品名称（后端按 productId 回填，非表字段） */
+  productName?: string
+  /** 产品 SKU（后端按 productId 回填，非表字段） */
+  sku?: string
   qualityType?: string
   quantity?: number
   unitPrice?: number
@@ -288,6 +295,19 @@ export function getSaleExchangeSourceOrder(saleOrderId: number) {
 }
 export function getSaleOutboundItems(id: number) {
   return request.get<SaleOutboundItem[]>(`/inventory/outbound/${id}/items`)
+}
+
+/**
+ * 销售出库页「来源销售单」下拉（2026-10-09）：**走出库页自身前缀** —— 与退货/换货页同款读隔离
+ * （直读 /inventory/sale 需 sale:order 权限，只被授予 sale:outbound 的用户会 403）。
+ * 只返回**已审核**销售单（草稿单不该出货）。
+ */
+export function getSaleOutboundSaleOrderOptions(params: { code?: string; pageSize?: number }) {
+  return request.get<any[]>(`/inventory/outbound/sale-order-options`, { params })
+}
+/** 销售单明细（供「从销售单带入明细」）：一次带回单据头 + 明细（含产品名/SKU/单位） */
+export function getSaleOutboundSaleOrderDetail(saleOrderId: number) {
+  return request.get<{ order: any; items: any[] }>(`/inventory/outbound/sale-order-items`, { params: { saleOrderId } })
 }
 export function createSaleOutbound(data: any) {
   return request.post<void>('/inventory/outbound', data)

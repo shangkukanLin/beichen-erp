@@ -22,21 +22,9 @@ const warehouse = ref<any>(null)
 const loading = ref(false)
 const matLoading = ref(false)
 const materials = ref<any[]>([])
-const projectMap = ref<Record<number, string>>({})
-
-function getProjectNames(projectIds: string): string {
-  if (!projectIds || !projectIds.trim()) return '-'
-  return projectIds.split(',').filter(Boolean).map(id => {
-    return projectMap.value[Number(id)] || `#${id}`
-  }).join('、')
-}
-
-async function loadProjects() {
-  const r = await request.get('/dev/project/page', { params: { pageSize: 9999, name: '' } })
-  const map: Record<number, string> = {}
-  ;(r?.records || []).forEach((p: any) => { map[p.id] = p.name })
-  projectMap.value = map
-}
+// 2026-10-09（§7.26 幽灵字段）：删除 projectMap / getProjectNames / loadProjects —— 它们只服务于
+// 「归属项目」，而该字段已随 OutsourceMaterial 下线（接口不再返回）⇒ 留着就是永远走不到的死代码 ✗。
+// （顺带少一次无用的 /dev/project/page 全量请求。）
 
 /**
  * F7-132（2026-09-20）：排序优先级原按**中文类型名**硬编码（`PRIORITY_TYPES = ['玻璃','驱动IC']`）
@@ -70,17 +58,14 @@ const productStocks = computed(() =>
  */
 const negativeItems = computed(() => materialRows.value.filter((m: any) => Number(m.quantity) < 0))
 
-// 排序：优先类型（sortOrder ≤ PRIORITY_SORT_ORDER_MAX）> 无归属项目 > 有归属项目；同档内按 sortOrder 稳定排
+// 排序：优先类型（sortOrder ≤ PRIORITY_SORT_ORDER_MAX）置顶，其余按 sortOrder 稳定排。
+// 2026-10-09（§7.26 幽灵字段）：原先还有"无归属项目 > 有归属项目"这一档，但 `projectIds` 已随
+// OutsourceMaterial 于 2026-09-21 下线、本接口也不再返回 ⇒ 该分支**恒落在同一档**（死逻辑），已删除。
 const sortedMaterials = computed(() => {
   const soOf = (m: any) => (m.materialTypeSortOrder != null ? Number(m.materialTypeSortOrder) : 999)
   return [...materialRows.value].sort((a, b) => {
-    const orderOf = (m: any) => {
-      const hasProject = !!(m.projectIds && m.projectIds.trim())
-      if (soOf(m) <= PRIORITY_SORT_ORDER_MAX) return 0
-      if (!hasProject) return 1
-      return 2
-    }
-    const diff = orderOf(a) - orderOf(b)
+    const tierOf = (m: any) => (soOf(m) <= PRIORITY_SORT_ORDER_MAX ? 0 : 1)
+    const diff = tierOf(a) - tierOf(b)
     return diff !== 0 ? diff : soOf(a) - soOf(b)
   })
 })
@@ -90,7 +75,8 @@ function exportExcel() {
   if (!info) return
 
   const now = new Date().toLocaleString('zh-CN')
-  const cols = ['物料类型', '物料名称', '单位', '质量类型', '库存数量', '归属项目', '备注']
+  // 2026-10-09（§7.26）：去掉「归属项目」列 —— 该字段已下线（接口不再返回，取值恒为 '-'）
+  const cols = ['物料类型', '物料名称', '单位', '质量类型', '库存数量', '备注']
   const rows: any[][] = [
     [`库存物料清单 - ${info.warehouseName || ''}`],
     [`仓库名称：${info.warehouseName || '-'}`],
@@ -102,12 +88,12 @@ function exportExcel() {
     cols,
   ]
   sortedMaterials.value.forEach(m => {
-    rows.push([m.materialTypeName || '', m.materialName || '', m.unit || '', QualityTypeLabel[m.qualityType] || '良品', m.quantity ?? 0, getProjectNames(m.projectIds), m.remark || ''])
+    rows.push([m.materialTypeName || '', m.materialName || '', m.unit || '', QualityTypeLabel[m.qualityType] || '良品', m.quantity ?? 0, m.remark || ''])
   })
 
   const ws = XLSX.utils.aoa_to_sheet(rows)
-  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 6 } }]
-  ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 24 }, { wch: 20 }]
+  ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 5 } }]
+  ws['!cols'] = [{ wch: 14 }, { wch: 22 }, { wch: 8 }, { wch: 8 }, { wch: 12 }, { wch: 20 }]
 
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '库存物料')
@@ -137,7 +123,7 @@ async function loadMaterials() {
 
 
 
-onMounted(() => { loadWarehouse(); loadMaterials(); loadProjects() })
+onMounted(() => { loadWarehouse(); loadMaterials() })
 </script>
 
 <template>
