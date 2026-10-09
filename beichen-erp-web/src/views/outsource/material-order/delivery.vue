@@ -39,7 +39,7 @@ import PageShell from '@/components/PageShell.vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
-import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, DefectHandleTypeLabel, OrderType, OrderTypeLabel, QualityType, QualityTypeLabel, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
+import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, DeliveryType, DeliveryTypeLabel, DefectHandleTypeLabel, OrderType, OrderTypeLabel, QualityType, QualityTypeLabel, WarehouseCategory, WarehouseType, OUTSOURCE_MATERIAL_ORDER_DIRTY_KEY } from '@/api/enums'
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { invalidate } from '@/utils/dataFreshness'
@@ -77,7 +77,27 @@ const canReturn = computed(() => order.status === MaterialOrderStatus.RECEIVING 
 const canFinish = computed(() => order.status === MaterialOrderStatus.PENDING || order.status === MaterialOrderStatus.RECEIVING)
 const canReopen = computed(() => order.status === MaterialOrderStatus.FINISHED)
 
-const fetchWarehouses = (kw: string) => request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw } })
+/**
+ * 收货仓库可选范围（2026-10-08 用户口径「选择仓库应该只有加工厂和我们自有物料仓才对」）：
+ *   ① 加工厂委外仓：warehouse_category = OUTSOURCE
+ *   ② 我们自有物料仓：warehouse_category = INVENTORY 且 仓型 = AUXILIARY
+ *      （WarehouseType.AUXILIARY 的注释原文即「辅料仓（自有物料仓：物料仓库 → 自有物料仓）」）
+ * 并只取**启用**仓（status = 1）。
+ *
+ * 原实现是 `/warehouse/page{warehouseName}` —— **没有任何范围过滤** ⇒ 把全部 11 个仓库都列出来
+ * （其中 7 个是已停用的外厂委外仓），既冗长又容易选错仓。
+ * 本口径与「物料库存盘点」(StockTakePanel.vue) 的**物料侧完全同源**，差异只是这里额外支持关键字搜索。
+ */
+const fetchWarehouses = async (kw: string) => {
+  const [os, aux] = await Promise.all([
+    request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.OUTSOURCE } }).catch(() => ({})),
+    request.get('/warehouse/page', { params: { pageSize: 500, warehouseName: kw, warehouseCategory: WarehouseCategory.INVENTORY, warehouseType: WarehouseType.AUXILIARY } }).catch(() => ({}))
+  ])
+  return [
+    ...((os?.records || []).filter((w: any) => w.status === 1)),
+    ...((aux?.records || []).filter((w: any) => w.status === 1))
+  ]
+}
 
 async function loadAll() {
   loading.value = true

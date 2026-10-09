@@ -15,7 +15,8 @@ import { useUnsavedGuard } from '@/composables/usePageBack'
 const route = useRoute(); const router = useRouter()
 const id = Number(route.params.id)
 const loading = ref(true)
-const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', createTime: '', finishTime: '', finisherName: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any, createByName: '', auditorName: '' })
+// 2026-10-08（用户口径：物料订单与加工单一致）：含税 / 税率 / 税额 / 总金额
+const order = reactive({ id: 0, code: '', status: '', orderType: OrderType.PURCHASE as string, supplierId: undefined as any, supplierName: '', deliveryDate: '', createTime: '', finishTime: '', finisherName: '', remark: '', attachUrl: '', targetWarehouseId: undefined as any, createByName: '', auditorName: '', taxIncluded: 0, taxRate: '', taxAmount: '', totalAmount: '' })
 const items = ref<any[]>([])
 const activeTab = ref('detail')
 const saving = ref(false)
@@ -62,7 +63,7 @@ async function handleSaveAttach() {
   try {
     const fd = new FormData(); fd.append('file', uploadFile.value)
     const res = await request.post<any, string>('/dev/file/upload', fd)
-    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, attachUrl: res as unknown as string, items: items.value })
+    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, taxIncluded: order.taxIncluded, taxRate: order.taxRate, attachUrl: res as unknown as string, items: items.value })
     ElMessage.success('合同文件已保存'); uploadFile.value = null; await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error('保存失败: ' + (e?.message || '未知错误')) } finally { attachSaving.value = false }
 }
@@ -79,7 +80,7 @@ async function loadAll() {
     // 收货/退货记录已移到独立菜单页「物料收退」加载，本页不再拉 /deliveries
     const o = await request.get<any, any>(`/outsource/material-order/${id}`)
     if (o) {
-      Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || OrderType.PURCHASE, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '' })
+      Object.assign(order, { id: o.id, code: o.code, status: o.status, orderType: o.orderType || OrderType.PURCHASE, supplierId: o.supplierId, supplierName: o.supplierName, deliveryDate: o.deliveryDate || '', finishTime: o.finishTime || '', remark: o.remark || '', attachUrl: o.attachUrl || '', taxIncluded: o.taxIncluded || 0, taxRate: o.taxRate ?? '', taxAmount: o.taxAmount ?? '', totalAmount: o.totalAmount ?? '' })
     }
     items.value = o?.items || []
     loadOptions()
@@ -101,9 +102,13 @@ function goPurchaseComponent(comp: any, parentItem: any) {
 }
 
 async function handleSave() {
+  // 2026-10-08：与新增页同口径 —— 逐行校验"必须选中物料"（本页待审核态可直接改明细，
+  // 漏选同样会落 outsource_material_id = NULL ⇒ 详情页名称空白）
+  const badRow = items.value.findIndex((it: any) => it.materialId == null || it.materialId === '')
+  if (badRow >= 0) { ElMessage.warning(`第 ${badRow + 1} 行未选择物料，请先选择物料`); return }
   saving.value = true
   try {
-    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, items: items.value })
+    await request.put(`/outsource/material-order/${id}`, { orderType: order.orderType, supplierId: order.supplierId, targetWarehouseId: order.targetWarehouseId, deliveryDate: order.deliveryDate, remark: order.remark, taxIncluded: order.taxIncluded, taxRate: order.taxRate, items: items.value })
     ElMessage.success('已保存')
     await loadAll(); markOrderDirty()
   } catch (e: any) { ElMessage.error(e?.message || '保存失败') } finally { saving.value = false }
@@ -193,6 +198,12 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
               <RemoteSelect v-model="order.supplierId" add-route="/supplier/manage/add" :fetch="fetchSuppliers" style="width:100%" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="选择供应商" domain="supplier" />
             </el-form-item></el-col>
             <el-col :span="8"><el-form-item label="交期"><el-input v-model="order.deliveryDate" type="date" :disabled="order.status!==MaterialOrderStatus.PENDING" /></el-form-item></el-col>
+            <!-- 2026-10-08（用户口径：物料订单与加工单一致）：总金额 / 是否含税 / 税率 / 税额
+                 含税与税率仅在「待审核」可改（与页面其它字段同口径）；总金额与税额由后端按明细算，只读 -->
+            <el-col :span="8"><el-form-item label="总金额"><el-input :model-value="Number(order.totalAmount||0).toFixed(2)" readonly class="readonly-input" /></el-form-item></el-col>
+            <el-col :span="8"><el-form-item label="是否含税"><el-switch v-model="order.taxIncluded" :active-value="1" :inactive-value="0" :disabled="order.status!==MaterialOrderStatus.PENDING" @change="(v: any) => { order.taxRate = v ? (order.taxRate || '13') : '' }" /></el-form-item></el-col>
+            <el-col :span="8" v-if="order.taxIncluded"><el-form-item label="税率(%)"><el-input v-model="order.taxRate" :disabled="order.status!==MaterialOrderStatus.PENDING" placeholder="如13" /></el-form-item></el-col>
+            <el-col :span="8" v-if="order.taxIncluded"><el-form-item label="税额"><el-input :model-value="order.taxAmount" readonly class="readonly-input" /></el-form-item></el-col>
             <!-- 制单人 / 审核人（2026-09-23 用户口径：单据详情显示这两项；历史单据无记录显示 —） -->
             <el-col :span="8"><el-form-item label="制单人"><el-input :model-value="order.createByName || '—'" readonly class="readonly-input" /></el-form-item></el-col>
             <el-col :span="8"><el-form-item label="审核人"><el-input :model-value="order.auditorName || '—'" readonly class="readonly-input" /></el-form-item></el-col>

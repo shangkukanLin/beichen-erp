@@ -8,6 +8,7 @@ import com.beichen.erp.outsource.service.MaterialOrderService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
@@ -169,6 +170,19 @@ public class MaterialOrderController {
         if (dd != null && !dd.toString().isBlank()) o.setDeliveryDate(LocalDate.parse(dd.toString()));
         if (body.get("remark") != null) o.setRemark(body.get("remark").toString());
         if (body.get("attachUrl") != null) o.setAttachUrl(body.get("attachUrl").toString());
+        // 2026-10-08（用户口径：物料订单与加工单一致）——是否含税 / 税率。
+        // 兼容前端 el-switch 可能传来的 boolean（true/false）与数字（1/0）两种形态。
+        Object ti = body.get("taxIncluded");
+        if (ti != null) {
+            String s = ti.toString().trim();
+            if ("true".equalsIgnoreCase(s)) o.setTaxIncluded(1);
+            else if ("false".equalsIgnoreCase(s)) o.setTaxIncluded(0);
+            else if (!s.isEmpty()) o.setTaxIncluded(Integer.valueOf(s));
+        }
+        Object tr = body.get("taxRate");
+        if (tr != null && !tr.toString().isBlank()) {
+            try { o.setTaxRate(new BigDecimal(tr.toString().trim())); } catch (NumberFormatException ignore) { /* 非法税率按未填处理 */ }
+        }
         return o;
     }
 

@@ -28,6 +28,20 @@ public class MaterialOrder {
     private String status;
     private String remark;
     private String attachUrl;
+
+    /**
+     * 是否含税：0未含税 1含税（2026-10-08 用户口径：与加工单/采购单/销售单对齐）。
+     */
+    private Integer taxIncluded;
+
+    /** 税率（百分数，如 13 表示 13%）—— 仅当 taxIncluded=1 时参与税额拆分 */
+    private BigDecimal taxRate;
+
+    /** 税额（taxIncluded=1 时按税率从含税总额中拆出：total × rate/(100+rate)） */
+    private BigDecimal taxAmount;
+
+    /** 总金额（= 各明细金额合计；与明细一样是**含税**口径） */
+    private BigDecimal totalAmount;
     /** 制单人（ID + 姓名快照）—— 2026-09-23 全站单据口径：详情页显示「制单人」，由 MetaObjectHandler 自动填充 */
     @TableField(fill = FieldFill.INSERT)
     private Long createBy;

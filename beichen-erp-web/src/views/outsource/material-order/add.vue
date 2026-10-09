@@ -19,7 +19,8 @@ const isEdit = ref(false)
 const editId = route.params.id ? Number(route.params.id) : 0
 const saving = ref(false)
 
-const form = reactive({ orderType: OrderType.PURCHASE as string, supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '' })
+// 2026-10-08（用户口径：物料订单与加工单一致）：含税 / 税率
+const form = reactive({ orderType: OrderType.PURCHASE as string, supplierId: undefined as any, targetWarehouseId: undefined as any, deliveryDate: '', remark: '', taxIncluded: 0, taxRate: '' })
 const items = ref<any[]>([])
 /**
  * 未保存拦截（2026-09-23 统一模板）
@@ -85,13 +86,18 @@ async function handleSubmit() {
   if (items.value.length === 0) { ElMessage.warning('请添加物料'); return }
   const label = form.orderType === OrderType.OUTSOURCE ? '加工厂' : '供应商'
   if (!form.supplierId) { ElMessage.warning(`请选择${label}`); return }
+  // 2026-10-08：逐行校验"必须选中物料" —— 原实现只校验明细非空，于是「只选了类型、未选物料」的行
+  // 能照样保存 ⇒ 明细 outsource_material_id 落 NULL ⇒ 详情页物料名称永远空白
+  // （现网 MWO-20261008001 即此：建单时该物料还不存在，下拉里没有可选项）
+  const badRow = items.value.findIndex((it: any) => it.materialId == null || it.materialId === '')
+  if (badRow >= 0) { ElMessage.warning(`第 ${badRow + 1} 行未选择物料，请先选择物料`); return }
   saving.value = true
   try {
     if (isEdit.value) { await request.put(`/outsource/material-order/${editId}`, { ...form, items: items.value }); ElMessage.success('已更新') }
     else {
       await request.post('/outsource/material-order', { ...form, items: items.value }); ElMessage.success('已新增')
       // 重置表单，避免 keep-alive 缓存残留数据
-      Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
+      Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '', taxIncluded: 0, taxRate: '' })
       items.value = []
       onOrderTypeChange()
     }
@@ -145,7 +151,7 @@ async function initFromQuery() {
 
 // 重置为空白表单（供 keep-alive 缓存恢复时清空上次填写信息）
 function resetForm() {
-  Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '' })
+  Object.assign(form, { orderType: OrderType.PURCHASE, supplierId: undefined, targetWarehouseId: undefined, deliveryDate: '', remark: '', taxIncluded: 0, taxRate: '' })
   items.value = []
   addItem()
 }
@@ -199,6 +205,9 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
             </RemoteSelect>
           </el-form-item></el-col>
           <el-col :span="8"><el-form-item label="交期"><el-input v-model="form.deliveryDate" type="date" /></el-form-item></el-col>
+          <!-- 2026-10-08（用户口径：与加工单一致）：是否含税 + 税率（开关打开默认 13%） -->
+          <el-col :span="8"><el-form-item label="是否含税"><el-switch v-model="form.taxIncluded" :active-value="1" :inactive-value="0" @change="(v: any) => { form.taxRate = v ? (form.taxRate || '13') : '' }" /></el-form-item></el-col>
+          <el-col :span="8" v-if="form.taxIncluded"><el-form-item label="税率(%)"><el-input v-model="form.taxRate" placeholder="如13" /></el-form-item></el-col>
           <el-col :span="24"><el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item></el-col>
         </el-row>
       </el-form>

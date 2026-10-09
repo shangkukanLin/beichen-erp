@@ -33,6 +33,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -111,13 +112,22 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         o.setStatus(MaterialOrderStatus.PENDING.getCode());
         orderMapper.insert(o);
 
+        BigDecimal total = BigDecimal.ZERO;
         if (itemsRaw != null) {
             for (Map<String, Object> it : itemsRaw) {
                 MaterialOrderItem item = parseItem(it);
                 item.setOrderId(o.getId());
                 itemMapper.insert(item);
+                if (item.getAmount() != null) total = total.add(item.getAmount());
             }
         }
+        // 2026-10-08（用户口径：物料订单与加工单一致）：落「总金额 + 税额」。
+        // 总额 = 各明细金额合计（**含税**口径，与明细 amount 同源）；税额 = calcTaxAmount(...)。
+        MaterialOrder amountUpdate = new MaterialOrder();
+        amountUpdate.setId(o.getId());
+        amountUpdate.setTotalAmount(total);
+        amountUpdate.setTaxAmount(calcTaxAmount(total, o.getTaxIncluded(), o.getTaxRate()));
+        orderMapper.updateById(amountUpdate);
         return o.getId();
     }
 
@@ -152,10 +162,12 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             if (oi.getMaterialId() != null) byMaterial.put(oi.getMaterialId(), oi);
         }
         java.util.Set<Long> keptIds = new java.util.HashSet<>();
+        BigDecimal total = BigDecimal.ZERO;   // 2026-10-08：编辑后重算总金额/税额（与加工单同口径）
         if (itemsRaw != null) {
             for (Map<String, Object> it : itemsRaw) {
                 MaterialOrderItem item = parseItem(it);
                 item.setOrderId(id);
+                if (item.getAmount() != null) total = total.add(item.getAmount());
                 MaterialOrderItem exist = item.getMaterialId() == null ? null : byMaterial.get(item.getMaterialId());
                 if (exist != null) {
                     item.setId(exist.getId());   // 原地更新：保住行 id 与其下所有引用
@@ -178,6 +190,12 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             }
             itemMapper.deleteById(oi.getId());
         }
+        // 2026-10-08（用户口径：物料订单与加工单一致）：编辑后重算「总金额 + 税额」
+        MaterialOrder amountUpdate = new MaterialOrder();
+        amountUpdate.setId(id);
+        amountUpdate.setTotalAmount(total);
+        amountUpdate.setTaxAmount(calcTaxAmount(total, o.getTaxIncluded(), o.getTaxRate()));
+        orderMapper.updateById(amountUpdate);
     }
 
     @Override
@@ -432,7 +450,13 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             di.setMaterialTypeId(orderItem.getMaterialTypeId());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
-            di.setAmount(qty.multiply(orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO));
+            // 2026-10-08：**必须落单价**。原实现只写 amount（用订单单价算出来）却从不 setUnitPrice
+            // ⇒ 收货/退不良/退货明细的 unit_price 恒为库默认值 0（实测 DEL-20261008001：金额 208800 而单价 0）。
+            // 后果：审核时 CostService.applyMaterial 取 item.getUnitPrice() 做移动加权 ⇒ 物料成本价被写成 0、
+            // 毛利与库存金额失真（现网 MWO-20261008001 的成本价就是靠人工补数据修回 87 的）。
+            BigDecimal diUnitPrice = orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO;
+            di.setUnitPrice(diUnitPrice);
+            di.setAmount(qty.multiply(diUnitPrice));
             di.setQualityType(QualityType.GOOD.getCode());
             deliveryItemMapper.insert(di);
         }
@@ -609,7 +633,13 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             di.setMaterialTypeId(orderItem.getMaterialTypeId());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
-            di.setAmount(qty.multiply(orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO));
+            // 2026-10-08：**必须落单价**。原实现只写 amount（用订单单价算出来）却从不 setUnitPrice
+            // ⇒ 收货/退不良/退货明细的 unit_price 恒为库默认值 0（实测 DEL-20261008001：金额 208800 而单价 0）。
+            // 后果：审核时 CostService.applyMaterial 取 item.getUnitPrice() 做移动加权 ⇒ 物料成本价被写成 0、
+            // 毛利与库存金额失真（现网 MWO-20261008001 的成本价就是靠人工补数据修回 87 的）。
+            BigDecimal diUnitPrice = orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO;
+            di.setUnitPrice(diUnitPrice);
+            di.setAmount(qty.multiply(diUnitPrice));
             di.setQualityType(QualityType.DEFECT.getCode());
             di.setHandleType(handleType);
             deliveryItemMapper.insert(di);
@@ -699,7 +729,13 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
             di.setMaterialTypeId(orderItem.getMaterialTypeId());
             di.setUnit(orderItem.getUnit());
             di.setQuantity(qty);
-            di.setAmount(qty.multiply(orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO));
+            // 2026-10-08：**必须落单价**。原实现只写 amount（用订单单价算出来）却从不 setUnitPrice
+            // ⇒ 收货/退不良/退货明细的 unit_price 恒为库默认值 0（实测 DEL-20261008001：金额 208800 而单价 0）。
+            // 后果：审核时 CostService.applyMaterial 取 item.getUnitPrice() 做移动加权 ⇒ 物料成本价被写成 0、
+            // 毛利与库存金额失真（现网 MWO-20261008001 的成本价就是靠人工补数据修回 87 的）。
+            BigDecimal diUnitPrice = orderItem.getUnitPrice() != null ? orderItem.getUnitPrice() : BigDecimal.ZERO;
+            di.setUnitPrice(diUnitPrice);
+            di.setAmount(qty.multiply(diUnitPrice));
             di.setQualityType(QualityType.GOOD.getCode());
             deliveryItemMapper.insert(di);
         }
@@ -933,6 +969,11 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
         m.put("targetWarehouseId", o.getTargetWarehouseId());
         m.put("deliveryDate", o.getDeliveryDate()); m.put("status", o.getStatus());
         m.put("remark", o.getRemark()); m.put("createTime", o.getCreateTime());
+        // 2026-10-08（用户口径：物料订单与加工单一致）：含税 / 税率 / 税额 / 总金额
+        m.put("taxIncluded", o.getTaxIncluded() != null ? o.getTaxIncluded() : 0);
+        m.put("taxRate", o.getTaxRate());
+        m.put("taxAmount", o.getTaxAmount());
+        m.put("totalAmount", o.getTotalAmount());
         m.put("finishTime", o.getFinishTime());
         // 2026-09-27：结单人（「已结单」页签的「结单时间」列第二行小字 / 详情页「结单人」字段）
         m.put("finisherId", o.getFinisherId());
@@ -1065,7 +1106,16 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
 
     private MaterialOrderItem parseItem(Map<String, Object> it) {
         MaterialOrderItem item = new MaterialOrderItem();
-        if (it.get("materialId") != null) item.setMaterialId(Long.valueOf(it.get("materialId").toString()));
+        // 2026-10-08：**必须选择物料**。原实现在 materialId 为空时静默跳过 ⇒ 允许落一条
+        // outsource_material_id = NULL 的明细，而详情页的物料名称是"按 material_id 反查"得到的
+        // ⇒ 该行名称**永远空白**。现网 MWO-20261008001 即此情形：物料比订单晚建 13 分钟，
+        // 用户只选了「类型」没选物料，而前后端都没拦。这里做**服务端兜底** ——
+        // 前端那两处校验只防得住"点界面"，防不住直调接口与脚本导入。
+        Object rawMaterialId = it.get("materialId");
+        if (rawMaterialId == null || rawMaterialId.toString().isBlank()) {
+            throw new BusinessException("物料明细必须选择物料（存在只填了物料类型、未选物料的行，请先选择物料再保存）");
+        }
+        item.setMaterialId(Long.valueOf(rawMaterialId.toString()));
         if (it.get("materialTypeId") != null) item.setMaterialTypeId(Long.valueOf(it.get("materialTypeId").toString()));
         item.setUnit((String) it.get("unit"));
         if (it.get("orderQuantity") != null) item.setOrderQuantity(new BigDecimal(it.get("orderQuantity").toString()));
@@ -1101,6 +1151,23 @@ public class MaterialOrderServiceImpl implements MaterialOrderService {
     private OutsourceDelivery findLastDeliveryByOrder(Long orderId, String orderCode) {
         List<OutsourceDelivery> list = findDeliveriesByOrder(orderId, orderCode);
         return list.isEmpty() ? null : list.get(0);
+    }
+
+    /**
+     * 税额拆分（单价含税口径）—— 2026-10-08 用户口径「物料订单与加工单一致」，
+     * 与本项目 {@code OutsourceOrderServiceImpl.calcTaxAmount} **逐字同一算法**：
+     * 仅在 taxIncluded=1 且 taxRate&gt;0 时从含税总额中拆出税额 = total × rate/(100+rate)，否则为 0。
+     *
+     * @param total       含税总额（= 各明细金额合计）
+     * @param taxIncluded 0未含税 / 1含税
+     * @param taxRate     税率（百分数，如 13 表示 13%）
+     */
+    private BigDecimal calcTaxAmount(BigDecimal total, Integer taxIncluded, BigDecimal taxRate) {
+        if (!Integer.valueOf(1).equals(taxIncluded) || taxRate == null || taxRate.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal rate = taxRate.divide(new BigDecimal("100"), 6, RoundingMode.HALF_UP);
+        return total.multiply(rate).divide(BigDecimal.ONE.add(rate), 2, RoundingMode.HALF_UP);
     }
 
     /** 根据委外物料ID查询名称，用于展示回填（ID关联查询替代冗余name字段） */
