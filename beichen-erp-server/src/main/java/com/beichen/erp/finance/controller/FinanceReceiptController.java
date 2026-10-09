@@ -108,8 +108,16 @@ public class FinanceReceiptController {
     @PutMapping("/{id}/audit")
     public R<Void> audit(@PathVariable Long id) { service.audit(id); return R.ok(); }
 
+    /**
+     * 反审核（2026-10-09）：反审核＝把该笔钱从账户**冲回**，也是一次扣款 ⇒ 余额不足时**先**返回业务码 409
+     * （此时钱没动、单据仍是已审核），用户确认后带 {@code allowOverdraft=true} 重发同一个请求。
+     */
     @PutMapping("/{id}/un-audit")
-    public R<Void> unAudit(@PathVariable Long id) { service.unAudit(id); return R.ok(); }
+    public R<Void> unAudit(@PathVariable Long id,
+                           @RequestParam(defaultValue = "false") boolean allowOverdraft) {
+        service.unAudit(id, allowOverdraft);
+        return R.ok();
+    }
 
     @PutMapping("/{id}/cancel")
     public R<Void> cancel(@PathVariable Long id) { service.cancel(id); return R.ok(); }

@@ -10,6 +10,7 @@ import RemoteSelect from '@/components/RemoteSelect.vue'
 
 const router = useRouter()
 import { getReceiptPage, auditReceipt, cancelReceipt, unAuditReceipt, type FinanceReceipt } from '@/api/finance'
+import { isOverdraftNeedConfirm, confirmOverdraft } from '@/utils/overdraftConfirm'
 import { SubjectType, SubjectTypeLabel, SourceBillDetailRoute } from '@/api/enums'
 
 /**
@@ -110,10 +111,16 @@ async function handleCancel(row: FinanceReceipt) {
   try { await cancelReceipt(row.id as number); ElMessage.success('已作废'); loadData() }
   catch { /* 提示由拦截器统一给出 */ }
 }
-async function handleUnAudit(row: FinanceReceipt) {
+async function handleUnAudit(row: FinanceReceipt, allowOverdraft = false) {
   try { await ElMessageBox.confirm(`确认反审核收款单「${row.code}」？将冲销核销与账户余额`, '提示', { type: 'warning' }) } catch { return }
-  try { await unAuditReceipt(row.id as number); ElMessage.success('已反审核'); loadData() }
-  catch { /* 提示由拦截器统一给出 */ }
+  try { await unAuditReceipt(row.id as number, allowOverdraft); ElMessage.success('已反审核'); loadData() }
+  catch (e: any) {
+    // 2026-10-09：反审核＝把该笔钱从账户**冲回**，也是一次扣款 ⇒ 余额不足时后端返回业务码 409
+    // （**钱没动**、单据仍是已审核）⇒ 弹确认框；用户点「确认继续」后带 allowOverdraft 重发
+    // ⇒ 此时才真的冲回（账户可被冲成负数，后端在冲正流水备注里留痕）。
+    if (isOverdraftNeedConfirm(e) && await confirmOverdraft(e.msg)) return handleUnAudit(row, true)
+    // 其它失败：提示由拦截器统一给出
+  }
 }
 /** 详情改独立页（2026-09-23 用户要求：抽屉改独立界面）：点整行 / 行内「详情」都跳详情页 */
 function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/finance/receipt/detail/${row.id}`) }

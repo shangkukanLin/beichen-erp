@@ -25,6 +25,7 @@ import com.beichen.erp.finance.mapper.*;
 import com.beichen.erp.finance.service.FinanceReceiptService;
 import com.beichen.erp.finance.service.ReceivableHelper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -34,8 +35,12 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class FinanceReceiptServiceImpl implements FinanceReceiptService {
+
+    /** 反审核要逐账户"扣回"的一条腿（accountId / accountName / amount）：无分款明细时由主表账户+金额兜底成一条 */
+    private record ReverseLeg(Long accountId, String accountName, BigDecimal amount) { }
 
     private final FinanceReceiptMapper receiptMapper;
     private final FinanceReceiptItemMapper itemMapper;
@@ -662,9 +667,20 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void unAudit(Long id) {
+    public void unAudit(Long id) { unAudit(id, false); }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unAudit(Long id, boolean allowOverdraft) {
         FinanceReceipt receipt = receiptMapper.selectById(id);
         if (receipt == null) throw new BusinessException("收款单不存在");
+        // 2026-10-09（用户口径「扣款时余额不足 ⇒ 提示，用户确认后可通过」）：**反审核也是一次扣款** ——
+        // 它按分款明细逐账户把这笔收款**冲回**。改前这里**没有任何余额校验** ✗ ⇒ 收款已被花掉时反审核会
+        // **静默把账户冲成负数**（§7.29 记的边界②，用户已确认要补）。现与付款/费用同款两段式：
+        //   ① 不足且未确认 ⇒ 抛业务码 409；**校验放在任何写库之前（含下面的状态抢占）**
+        //      ⇒ "业务码非 200"就一定没动账（状态没回退、核销没释放、流水没写）；
+        //   ② 已确认 ⇒ 放行（账户可被冲成负数），并在冲正流水备注 + warn 日志留痕。
+        Map<Long, String> overdraftNotes = precheckReverseBalance(receipt, allowOverdraft);
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免重复反核销与重复冲正流水
         if (!DocStatusGuard.claim(receiptMapper, FinanceReceipt::getId, id, FinanceReceipt::getStatus,
                 DocStatus.AUDITED.getCode(), DocStatus.DRAFT.getCode()))
@@ -719,16 +735,66 @@ public class FinanceReceiptServiceImpl implements FinanceReceiptService {
         }
         // 4) 写冲正资金流水（保留审计轨迹，不删除原流水；账户余额由流水实时累计）
         //    2026-09-29 多账户：**按分款明细逐条冲正**，与审核时逐条入账严格对称（否则账户余额各差一截）
+        //    2026-10-09：若该账户是"余额不足已确认"后放行的 ⇒ 把留痕追加进它自己那条流水（多账户不误标）
         List<FinanceReceiptAccount> receiptAccounts = getAccounts(id);
         if (receiptAccounts.isEmpty()) {
             writeFlow(receipt.getAccountId(), receipt.getAccountName(), receipt.getAmount(), receipt,
-                    CashflowType.RECEIPT_REVERSE, "反审核冲正");
+                    CashflowType.RECEIPT_REVERSE, reverseRemark(overdraftNotes.get(receipt.getAccountId())));
         } else {
             for (FinanceReceiptAccount acc : receiptAccounts)
                 writeFlow(acc.getAccountId(), acc.getAccountName(), acc.getAmount(), receipt,
-                        CashflowType.RECEIPT_REVERSE, "反审核冲正");
+                        CashflowType.RECEIPT_REVERSE, reverseRemark(overdraftNotes.get(acc.getAccountId())));
         }
         FinanceReceipt u = new FinanceReceipt(); u.setId(id); u.setStatus(DocStatus.DRAFT.getCode()); receiptMapper.updateById(u);
+    }
+
+    /**
+     * 反审核前的**余额预检**（2026-10-09，与付款/费用侧同口径）：按分款明细逐账户加行锁 + 当前读余额
+     * （无分款明细 ⇒ 主表账户 + 金额兜底，与第 4 步写流水**同口径**，保证"校验的账户 = 扣钱的账户"）。
+     *
+     * <p>不足且未确认 ⇒ 抛 {@code BusinessException(409, …)}（**此时未写任何库** ✓）；
+     * 已确认 ⇒ 返回「账户 → 留痕文案」，由第 4 步写进该账户的冲正流水备注 ✓。</p>
+     */
+    private Map<Long, String> precheckReverseBalance(FinanceReceipt receipt, boolean allowOverdraft) {
+        Map<Long, String> notes = new HashMap<>();
+        List<ReverseLeg> legs = new ArrayList<>();
+        List<FinanceReceiptAccount> rows = getAccounts(receipt.getId());
+        if (rows.isEmpty()) {
+            legs.add(new ReverseLeg(receipt.getAccountId(), receipt.getAccountName(),
+                    receipt.getAmount() != null ? receipt.getAmount() : BigDecimal.ZERO));
+        } else {
+            for (FinanceReceiptAccount a : rows)
+                legs.add(new ReverseLeg(a.getAccountId(), a.getAccountName(),
+                        a.getAmount() != null ? a.getAmount() : BigDecimal.ZERO));
+        }
+        Long cid = CompanyContext.get();
+        if (cid != null && cid <= 0) cid = null;
+        for (ReverseLeg leg : legs) {
+            if (leg.accountId() == null) continue;
+            // 行锁 + 当前读：与付款/费用侧同款（F7-140：一致性读会读到旧快照 ⇒ 并发可透支）
+            if (accountMapper.selectForUpdate(leg.accountId(), cid) == null)
+                throw new BusinessException("收款账户不存在");
+            Map<String, Object> balRow = accountMapper.sumBalanceForUpdate(leg.accountId(), cid);
+            BigDecimal bal = (balRow == null || balRow.get("balance") == null)
+                    ? BigDecimal.ZERO : new BigDecimal(balRow.get("balance").toString());
+            BigDecimal need = leg.amount();
+            if (bal.subtract(need).compareTo(BigDecimal.ZERO) < 0) {
+                if (!allowOverdraft)
+                    throw new BusinessException(409, "账户「" + leg.accountName() + "」余额不足：当前余额 " + bal
+                            + "，本次反审核将冲回 " + need + "，冲回后余额将为 " + bal.subtract(need)
+                            + "。确认后将继续反审核（该账户将透支）。");
+                notes.put(leg.accountId(),
+                        "[余额不足已确认｜余额 " + bal + " → " + bal.subtract(need) + "]");
+                log.warn("收款反审核：账户余额不足已由用户确认，允许透支冲回 —— receiptCode={}, accountId={}, 余额={}, 冲回={}, 冲回后={}",
+                        receipt.getCode(), leg.accountId(), bal, need, bal.subtract(need));
+            }
+        }
+        return notes;
+    }
+
+    /** 冲正流水备注：默认为「反审核冲正」（与改造前一致 ✓），确认透支时追加留痕 */
+    private String reverseRemark(String note) {
+        return note == null || note.isBlank() ? "反审核冲正" : "反审核冲正｜" + note;
     }
 
     private String gen() {

@@ -155,6 +155,54 @@ if (-not $mat -or $mat -eq '') {
   Ok ((Bal $ACC) -eq 100) 'and the account is back to 100.0000 after the R&D fixture was undone'
 }
 
+Write-Host '--- (7) RECEIPT UN-AUDIT: reversing a receipt is a debit too (the previously unguarded path)'
+# 反审核＝把这笔收款从账户**冲回** ⇒ 也是一次扣款。改前这条路径**没有任何余额校验**（能静默把账户冲成负数）。
+# 场景：先收 150（100 → 250），再把钱**花掉 200**（→ 50），此时冲回 150 ⇒ 不足 ⇒ 必须 409 且钱没动。
+$cust = [long](SqlOne 'SELECT id FROM customer ORDER BY id LIMIT 1')
+if (-not $cust -or $cust -le 0) {
+  Skip 'no customer fixture -> the receipt-reverse path is not covered in this run'
+} else {
+  $null = Api 'POST' '/finance/receipt' @{ receipt = @{ customerId = $cust; subjectType = 'CUSTOMER'; receiptDate = $today; remark = $TAG + '-RCP' }
+                                           accounts = @(@{ accountId = $ACC; amount = 150 })
+                                           items = @() }
+  $rcId = [long](SqlOne "SELECT id FROM finance_receipt WHERE remark='$TAG-RCP' ORDER BY id DESC LIMIT 1")
+  $rcNo = SqlOne ("SELECT code FROM finance_receipt WHERE id=" + $rcId)
+  Ok (-not [string]::IsNullOrWhiteSpace($rcNo)) 'a 150.0000 receipt draft was created against the 100.0000 account'
+  $rcAudit = Api 'PUT' ("/finance/receipt/$rcId/audit") $null
+  Ok ($rcAudit.code -eq 200 -and (Bal $ACC) -eq 250) 'auditing the receipt credits the account (100.0000 -> 250.0000)'
+  $null = Api 'POST' '/finance/expense' @{ expenseType = 'OFFICE'; amount = 200; accountId = $ACC; expenseDate = $today; remark = $TAG + '-SPEND' }
+  $spId = [long](SqlOne "SELECT id FROM finance_expense WHERE remark='$TAG-SPEND' ORDER BY id DESC LIMIT 1")
+  $spAudit = Api 'PUT' ("/finance/expense/$spId/audit") $null
+  Ok ($spAudit.code -eq 200 -and (Bal $ACC) -eq 50) 'spending 200.0000 leaves only 50.0000 on the account'
+  $rr1 = Api 'PUT' ("/finance/receipt/$rcId/un-audit") $null
+  Write-Host ('  receipt un-audit WITHOUT confirm -> code=' + $rr1.code + ' msg=' + $rr1.msg)
+  Ok ($rr1.code -eq 409) 'un-auditing the receipt without confirmation answers 409 (this path used to be UNGUARDED)'
+  Ok ((SqlOne ("SELECT status FROM finance_receipt WHERE id=" + $rcId)) -eq 'AUDITED') 'the receipt is STILL audited (nothing was reversed)'
+  Ok ((Bal $ACC) -eq 50) 'the account balance did not move'
+  Ok ((SqlOne ("SELECT COUNT(*) FROM finance_cashflow WHERE related_bill_no='" + $rcNo + "' AND flow_type='RECEIPT_REVERSE'")) -eq '0') 'and no reverse cashflow row was written'
+  $rr2 = Api 'PUT' ("/finance/receipt/$rcId/un-audit?allowOverdraft=true") $null
+  Write-Host ('  receipt un-audit WITH confirm -> code=' + $rr2.code)
+  Ok ($rr2.code -eq 200) 'the confirmed un-audit is accepted'
+  Ok ((SqlOne ("SELECT status FROM finance_receipt WHERE id=" + $rcId)) -eq 'DRAFT') 'the receipt went back to DRAFT'
+  Ok ((Bal $ACC) -eq -100) 'and the account really went to -100.0000'
+  $rnote = SqlOne ("SELECT COUNT(*) FROM finance_cashflow WHERE related_bill_no='" + $rcNo + "' AND flow_type='RECEIPT_REVERSE' AND remark LIKE '%50.0000%' AND remark LIKE '%-100.0000%'")
+  Ok ("$rnote" -eq '1') 'the reverse cashflow keeps an auditable note (50.0000 -> -100.0000)'
+  # 负例：先把那 200 的费用反审核（钱回账户）⇒ 余额 100，再收 150 ⇒ 250 ⇒ 冲回 150 后仍有 100 ⇒ 无需确认
+  Ok ((Api 'PUT' ("/finance/expense/$spId/un-audit") $null).code -eq 200 -and (Bal $ACC) -eq 100) 'un-auditing the spent expense brings the account back to 100.0000'
+  $null = Api 'POST' '/finance/receipt' @{ receipt = @{ customerId = $cust; subjectType = 'CUSTOMER'; receiptDate = $today; remark = $TAG + '-RCP2' }
+                                           accounts = @(@{ accountId = $ACC; amount = 150 })
+                                           items = @() }
+  $rc2 = [long](SqlOne "SELECT id FROM finance_receipt WHERE remark='$TAG-RCP2' ORDER BY id DESC LIMIT 1")
+  Ok ((Api 'PUT' ("/finance/receipt/$rc2/audit") $null).code -eq 200 -and (Bal $ACC) -eq 250) 'the second receipt (+150) audits fine (-> 250.0000)'
+  $rr3 = Api 'PUT' ("/finance/receipt/$rc2/un-audit") $null
+  Ok ($rr3.code -eq 200 -and (Bal $ACC) -eq 100) 'with a SUFFICIENT balance the reverse needs no confirmation (negative control)'
+  # 收尾：两张收款都已回到草稿 ⇒ 作废即可（钱不再动）
+  $null = Api 'POST' ("/finance/receipt/$rcId/cancel")
+  $null = Api 'POST' ("/finance/receipt/$rc2/cancel")
+  Write-Host ('  after the receipt fixtures were undone: balance=' + (Bal $ACC))
+  Ok ((Bal $ACC) -eq 100) 'the account is back to 100.0000 (receipt fixtures undone, nothing left on the ledger)'
+}
+
 Write-Host '--- cleanup (fixtures only; failures here do not change the verdict)'
 foreach ($t in @('EXP', 'EXP-OK')) {
   $rid = SqlOne "SELECT id FROM finance_expense WHERE remark='$TAG-$t' ORDER BY id DESC LIMIT 1"
@@ -167,10 +215,14 @@ if ($prow -and $prow -ne 'NULL') { $null = Api 'PUT' ("/finance/payment/$prow/ca
 $cleanupSql = @(
   "DELETE FROM finance_cashflow WHERE related_bill_no IN (SELECT expense_no FROM finance_expense WHERE remark LIKE '$TAG%')",
   "DELETE FROM finance_cashflow WHERE related_bill_no IN (SELECT code FROM finance_payment WHERE remark LIKE '$TAG%')",
+  "DELETE FROM finance_cashflow WHERE related_bill_no IN (SELECT code FROM finance_receipt WHERE remark LIKE '$TAG%')",
   "DELETE FROM finance_cashflow WHERE account_id=$ACC",
   "DELETE FROM finance_payment_account WHERE payment_id IN (SELECT id FROM finance_payment WHERE remark LIKE '$TAG%')",
   "DELETE FROM finance_payable WHERE source_bill_type='ADVANCE_LEDGER' AND source_id IN (SELECT id FROM finance_payment WHERE remark LIKE '$TAG%')",
+  "DELETE FROM finance_receivable WHERE source_bill_type='ADVANCE_LEDGER' AND source_id IN (SELECT id FROM finance_receipt WHERE remark LIKE '$TAG%')",
+  "DELETE FROM finance_receipt_account WHERE receipt_id IN (SELECT id FROM finance_receipt WHERE remark LIKE '$TAG%')",
   "DELETE FROM finance_expense WHERE remark LIKE '$TAG%'",
+  "DELETE FROM finance_receipt WHERE remark LIKE '$TAG%'",
   "DELETE FROM finance_payment WHERE remark LIKE '$TAG%'",
   "DELETE FROM finance_account WHERE id=$ACC"
 ) -join '; '
@@ -178,6 +230,7 @@ $null = & $MYSQL --default-character-set=utf8mb4 -uroot -proot -D beichen_erp -N
 Write-Host ('  fixture rows left: account=' + (SqlOne "SELECT COUNT(*) FROM finance_account WHERE account_name='$ACC_NAME'") +
             ' expense=' + (SqlOne "SELECT COUNT(*) FROM finance_expense WHERE remark LIKE '$TAG%'") +
             ' payment=' + (SqlOne "SELECT COUNT(*) FROM finance_payment WHERE remark LIKE '$TAG%'") +
+            ' receipt=' + (SqlOne "SELECT COUNT(*) FROM finance_receipt WHERE remark LIKE '$TAG%'") +
             ' cashflow=' + (SqlOne "SELECT COUNT(*) FROM finance_cashflow WHERE account_id=$ACC"))
 
 Summary 'account balance overdraft: prompt first (409, no money moved), confirm to proceed (negative balance + audit note)'

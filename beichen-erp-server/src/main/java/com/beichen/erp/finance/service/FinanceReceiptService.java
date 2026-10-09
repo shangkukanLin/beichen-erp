@@ -30,6 +30,19 @@ public interface FinanceReceiptService {
      */
     List<FinanceReceipt> findBySource(String sourceBillType, Long sourceId);
     void audit(Long id);
-    /** 反审核：回退核销、账户余额、资金流水冲正、客户应收余额 */
+    /** 反审核：回退核销、账户余额、资金流水冲正、客户应收余额（**默认口径：把该笔钱从账户扣回去时，余额不足即拒**） */
     void unAudit(Long id);
+
+    /**
+     * 反审核（2026-10-09 用户口径「扣款时余额不足 ⇒ 提示，用户确认后可通过」；与付款/费用侧同款两段式）。
+     *
+     * <p>反审核**也是一次扣款**：它要按分款明细逐账户把这笔收款**冲回**。改前这里**没有任何余额校验** ✗ ⇒
+     * 收款已被花掉时反审核会**静默把账户冲成负数**。现纳入同一口径：</p>
+     * <ul>
+     *   <li>余额不足且 {@code allowOverdraft=false} ⇒ 抛 {@code BusinessException(409, …)}，报错带
+     *       「账户 / 当前余额 / 本次冲回 / 冲回后余额」；**抛错发生在任何写库之前** ⇒ 业务码非 200 就一定没动账 ✓；</li>
+     *   <li>{@code allowOverdraft=true}（= 用户已确认）⇒ 放行，允许冲成负数，并在冲正流水备注 + warn 日志留痕 ✓。</li>
+     * </ul>
+     */
+    void unAudit(Long id, boolean allowOverdraft);
 }

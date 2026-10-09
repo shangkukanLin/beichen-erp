@@ -177,7 +177,13 @@ export function createReceipt(data: any) { return request.post<void>('/finance/r
 export function updateReceipt(id: number, data: any) { return request.put<void>(`/finance/receipt/${id}`, data) }
 export function auditReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/audit`) }
 export function cancelReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/cancel`) }
-export function unAuditReceipt(id: number) { return request.put<void>(`/finance/receipt/${id}/un-audit`) }
+/**
+ * 反审核（2026-10-09）：反审核＝把这笔钱从账户**冲回**，也是一次扣款 ⇒ 余额不足时后端返回**业务码 409**
+ * （此时钱没动、单据仍是已审核）⇒ 调用方弹确认框，用户确认后带 `allowOverdraft=true` 重发同一个请求。
+ */
+export function unAuditReceipt(id: number, allowOverdraft = false) {
+  return request.put<void>(`/finance/receipt/${id}/un-audit`, null, { params: { allowOverdraft } })
+}
 
 export function getPaymentPage(params: any) { return request.get<PageResult<FinancePayment>>('/finance/payment/page', { params }) }
 export function getPaymentItems(id: number) { return request.get<FinancePaymentItem[]>(`/finance/payment/${id}/items`) }
