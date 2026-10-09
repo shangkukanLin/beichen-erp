@@ -73,8 +73,11 @@ public class RdExpenseServiceImpl implements RdExpenseService {
             }
             // 勾选路径的语义是"登记即审核"：原单若还是草稿（例如先前用列表行操作补登记、尚未去财务审核）
             // ⇒ 补审核，否则用户以为已扣款其实没扣。已审核的不再动账（幂等，绝不重复扣款）。
+            // 2026-10-09（用户口径「余额不足 ⇒ 提示，确认后可通过」）：`allowOverdraft=true` = 用户已在确认框里
+            // 点了"继续"（前端收到业务码 409 后重发本请求）⇒ 允许把账户扣成负数（留痕：流水备注 + warn 日志）；
+            // 不带 ⇒ 维持原口径：余额不足抛 409、**钱没动**（本方法同事务回滚，不留"建了单没扣款"的半成品）。
             if (autoAudit && !audited) {
-                financeExpenseService.audit(exists.getId());
+                financeExpenseService.audit(exists.getId(), asBool(b.get("allowOverdraft")));
                 audited = true;
                 log.info("来源 {}#{} 的研发支出 {} 原为草稿，本次按勾选口径补审核", sourceType.getCode(), sourceId, exists.getExpenseNo());
             }
@@ -130,7 +133,9 @@ public class RdExpenseServiceImpl implements RdExpenseService {
         if (autoAudit) {
             // 复用费用单 audit：原子抢状态 → 账户行锁 → 当前读余额校验 → 写「费用支出」流水 → 置 AUDITED。
             // 失败（如余额不足）抛 BusinessException ⇒ 连同上面刚插入的草稿一起回滚（用户可换账户重试）。
-            financeExpenseService.audit(e.getId());
+            // 2026-10-09：余额不足时**默认抛 409（钱没动）** ⇒ 前端弹确认框；用户确认后重发本请求并带
+            // `allowOverdraft=true` ⇒ 这里透传下去放行（账户可扣成负数，流水备注与日志留痕）。
+            financeExpenseService.audit(e.getId(), asBool(b.get("allowOverdraft")));
             res.put("audited", true);
         } else {
             // 列表行操作「补登记」路径：仍落草稿，由财务在费用管理页审核（钱此时不动）

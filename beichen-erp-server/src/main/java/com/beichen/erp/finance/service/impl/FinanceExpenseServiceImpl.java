@@ -18,6 +18,7 @@ import com.beichen.erp.finance.mapper.FinanceCashflowMapper;
 import com.beichen.erp.finance.mapper.FinanceExpenseMapper;
 import com.beichen.erp.finance.service.FinanceExpenseService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,6 +31,7 @@ import java.util.*;
  * 费用登记 Service：审核联动资金流水（模式与收款单一致——余额由流水实时累计，不维护快照）。
  */
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class FinanceExpenseServiceImpl implements FinanceExpenseService {
 
@@ -98,7 +100,11 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void audit(Long id) {
+    public void audit(Long id) { audit(id, false); }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void audit(Long id, boolean allowOverdraft) {
         FinanceExpense expense = expenseMapper.selectById(id);
         if (expense == null) throw new BusinessException("费用单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败，避免重复写支出流水
@@ -132,8 +138,20 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         // F7-140：用**当前读**取余额（见 accountBalanceForUpdate 的说明：一致性读会读到旧快照 ⇒ 并发可透支）
         BigDecimal balance = accountBalanceForUpdate(expense.getAccountId());
         BigDecimal amount = expense.getAmount() != null ? expense.getAmount() : BigDecimal.ZERO;
-        if (balance.subtract(amount).compareTo(BigDecimal.ZERO) < 0)
-            throw new BusinessException("账户余额不足：当前余额 " + balance + "，费用 " + amount);
+        boolean overdraft = false;
+        if (balance.subtract(amount).compareTo(BigDecimal.ZERO) < 0) {
+            // 2026-10-09（用户口径「扣款时余额不足 ⇒ 给用户提示，用户确认后可通过」）：
+            // ① **未确认** ⇒ 抛业务码 409（HTTP 仍 200，本仓业务码约定）。抛错发生在任何写库之前 ⇒
+            //    "业务码非 200"就一定**没动账**（脚本/守卫不会把"没执行"误当成功 ✗），前端据此弹确认框。
+            // ② **已确认**（allowOverdraft=true）⇒ 放行、允许扣成负数，但**必须留痕**（warn 日志 + 流水备注），
+            //    与委外「强制出库 ⇒ 允许负库存」同口径：不拦，但事后必须查得到"谁在什么时候把哪个账户扣成了多少"。
+            if (!allowOverdraft)
+                throw new BusinessException(409, "账户余额不足：当前余额 " + balance + "，费用 " + amount
+                        + "，扣款后余额将为 " + balance.subtract(amount) + "。确认后将继续扣款（该账户将透支）。");
+            overdraft = true;
+            log.warn("费用审核：余额不足已由用户确认，允许透支扣款 —— expenseNo={}, accountId={}, 余额={}, 费用={}, 扣后={}",
+                    expense.getExpenseNo(), expense.getAccountId(), balance, amount, balance.subtract(amount));
+        }
         // 写「费用支出」资金流水（账户余额由流水实时累计）
         FinanceCashflow cf = new FinanceCashflow();
         cf.setFlowNo(genFlowNo());
@@ -145,6 +163,11 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
         cf.setIncome(BigDecimal.ZERO);
         cf.setExpense(amount);
         if (expense.getRemark() != null && !expense.getRemark().isBlank()) cf.setRemark(expense.getRemark());
+        if (overdraft) {
+            // 留痕②（①是上面的 warn 日志）：资金流水备注里带一次，费用/资金流水页面直接可查
+            String note = "[余额不足已确认｜余额 " + balance + " → " + balance.subtract(amount) + "]";
+            cf.setRemark(cf.getRemark() == null || cf.getRemark().isBlank() ? note : cf.getRemark() + "｜" + note);
+        }
         cashflowMapper.insert(cf);
         FinanceExpense u = new FinanceExpense();
         u.setId(id);

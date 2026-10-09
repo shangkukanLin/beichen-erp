@@ -22,6 +22,7 @@ import com.beichen.erp.finance.service.PayableHelper;
 import com.beichen.erp.supplier.entity.Supplier;
 import com.beichen.erp.supplier.mapper.SupplierMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +32,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class FinancePaymentServiceImpl implements FinancePaymentService {
 
@@ -300,7 +302,10 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
     }
 
     @Override @Transactional(rollbackFor = Exception.class)
-    public void audit(Long id) {
+    public void audit(Long id) { audit(id, false); }
+
+    @Override @Transactional(rollbackFor = Exception.class)
+    public void audit(Long id, boolean allowOverdraft) {
         FinancePayment payment = paymentMapper.selectById(id);
         if (payment == null) throw new BusinessException("付款单不存在");
         // 原子抢占状态（P2-29）：并发/双击时只有一个请求能抢到，其余在此失败 —— 否则会重复核销应付、重复写核销与资金流水
@@ -327,6 +332,8 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         // 同一账户的审核串行化即可闭合；费用单（FinanceExpenseServiceImpl.audit）为同款写法，已一并加锁。
         // 2026-09-29：校验口径由「payment.amount」细化到**逐账户**（A 付 50 + B 付 100 ⇒ 各自要够），
         // 否则"总余额够、单账户不够"会被放过，写流水时该账户余额变负。
+        // 2026-10-09（用户口径「扣款时余额不足 ⇒ 提示，用户确认后可通过」）：记录"确认后仍透支"的账户 ⇒ 写进该账户那条流水备注留痕
+        Map<Long, String> overdraftNotes = new HashMap<>();
         for (FinancePaymentAccount acc : payAccounts) {
             lockAccount(acc.getAccountId());
             BigDecimal need = acc.getAmount() != null ? acc.getAmount() : BigDecimal.ZERO;
@@ -337,8 +344,20 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
             Map<String, Object> balRow = accountMapper.sumBalanceForUpdate(acc.getAccountId(), balCid);
             BigDecimal accountBal = (balRow == null || balRow.get("balance") == null)
                     ? BigDecimal.ZERO : new BigDecimal(balRow.get("balance").toString());
-            if (accountBal.subtract(need).compareTo(BigDecimal.ZERO) < 0)
-                throw new BusinessException("账户「" + acc.getAccountName() + "」余额不足：当前余额 " + accountBal + "，本次付款 " + need);
+            if (accountBal.subtract(need).compareTo(BigDecimal.ZERO) < 0) {
+                // ① **未确认** ⇒ 抛业务码 409。抛错在任何写库之前（状态未置 AUDITED、应付未核销、流水未写）
+                //    ⇒ "业务码非 200"就一定**钱没动**，前端据此弹确认框，脚本也不会把"没执行"误当成功。
+                // ② **已确认** ⇒ 放行（该账户可被扣成负数），但必须留痕（warn 日志 + 该账户那条流水备注），
+                //    与委外「强制出库 ⇒ 允许负库存」同口径：不拦，但事后必须查得到。
+                if (!allowOverdraft)
+                    throw new BusinessException(409, "账户「" + acc.getAccountName() + "」余额不足：当前余额 " + accountBal
+                            + "，本次付款 " + need + "，付款后余额将为 " + accountBal.subtract(need)
+                            + "。确认后将继续付款（该账户将透支）。");
+                overdraftNotes.put(acc.getAccountId(),
+                        "[余额不足已确认｜余额 " + accountBal + " → " + accountBal.subtract(need) + "]");
+                log.warn("付款审核：账户余额不足已由用户确认，允许透支付款 —— paymentCode={}, accountId={}, 余额={}, 本次付款={}, 付款后={}",
+                        payment.getCode(), acc.getAccountId(), accountBal, need, accountBal.subtract(need));
+            }
         }
         // 核销应付：更新台账 + 写入核销流水（双向可追溯），超额部分生成负数应付（预付）
         int rowNo = 0;
@@ -462,7 +481,9 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         // 写资金流水（账户余额由流水实时累计，不再维护余额快照）：2026-09-29 多账户 ⇒ **按分款明细逐条写**
         //（A 付 50 + B 付 100 ⇒ 两条流水，各自账户余额 -50/-100 —— 一条汇总流水会让两个账户都对不上账）
         for (FinancePaymentAccount acc : payAccounts)
-            writeFlow(acc.getAccountId(), acc.getAccountName(), acc.getAmount(), payment, CashflowType.PAYMENT, null);
+            // 2026-10-09：若该账户是"余额不足已确认"后放行的 ⇒ 把留痕写进它**自己那条**流水（多账户时不误标到别的账户）
+            writeFlow(acc.getAccountId(), acc.getAccountName(), acc.getAmount(), payment, CashflowType.PAYMENT,
+                    overdraftNotes.get(acc.getAccountId()));
         // 未核销余额 → 预付台账（2026-09-29 用户口径②）：核销开关关闭 ⇒ 全额；部分核销 ⇒ 差额
         BigDecimal paidSum = payment.getAmount() != null ? payment.getAmount() : BigDecimal.ZERO;
         BigDecimal unsettled = paidSum.subtract(settledTotal);
@@ -525,6 +546,9 @@ public class FinancePaymentServiceImpl implements FinancePaymentService {
         } else {
             cf.setIncome(BigDecimal.ZERO);
             cf.setExpense(amt);
+            // 2026-10-09：支出侧也支持备注 —— 用于「余额不足已确认 ⇒ 允许透支扣款」的留痕。
+            // 其它调用点传 null（含反审核的冲正走上面那条分支）⇒ 行为与改造前完全一致，普通付款流水不带备注。
+            if (remark != null) cf.setRemark(remark);
         }
         cashflowMapper.insert(cf);
     }

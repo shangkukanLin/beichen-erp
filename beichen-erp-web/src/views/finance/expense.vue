@@ -2,6 +2,7 @@
 import { localDate } from '@/utils/date'
 import { computed, reactive, ref } from 'vue'
 import { useDomainRefresh } from '@/utils/dataFreshness'
+import { isOverdraftNeedConfirm, confirmOverdraft } from '@/utils/overdraftConfirm'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
@@ -66,9 +67,13 @@ async function save() {
   if (!isNonCash.value && !form.accountId) { ElMessage.warning('请选择支出账户'); return }
   try { await createExpense(form); ElMessage.success('已新增'); dialog.value = false; loadData() } catch {}
 }
-async function audit(row: any) {
+async function audit(row: any, allowOverdraft = false) {
   try { await ElMessageBox.confirm(`确认审核费用单 ${row.expenseNo}？审核后将从「${row.accountName || '非资金（无账户）'}」${row.accountName ? '扣款' : '入账'} ${row.amount} 元`, '审核确认', { type: 'warning' }) } catch { return }
-  try { await auditExpense(row.id); ElMessage.success('已审核'); loadData() } catch {}
+  try { await auditExpense(row.id, allowOverdraft); ElMessage.success('已审核'); loadData() }
+  catch (e: any) {
+    // 2026-10-09：余额不足 ⇒ 后端返回业务码 409（**钱没动**）⇒ 弹确认框；用户确认后带标志重发（账户可透支，流水留痕）
+    if (isOverdraftNeedConfirm(e) && await confirmOverdraft(e.msg)) return audit(row, true)
+  }
 }
 /* 2026-09-24（用户口径）：反审核已移入详情页 —— 它会生成「费用冲正」流水把资金冲回账户（撤销类操作，
    风险高、原因只在单据上下文里说得清），列表只保留高频的审核。 */

@@ -3,6 +3,7 @@ import { localDate } from '@/utils/date'
 import { reactive, ref, onMounted, watch, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { isOverdraftNeedConfirm, confirmOverdraft } from '@/utils/overdraftConfirm'
 import { DevMaterialStatus, DevMaterialStatusLabel, DevMaterialTypeLabel, codeLabelOptions } from '@/api/enums'
 // 资金账户（支出账户下拉）：属共享主数据（GET 放行），研发支出登记用
 import { getAccountPage, type FinanceAccount } from '@/api/finance'
@@ -142,7 +143,7 @@ async function handleSubmit() {
  * **余额不足时后端整体回滚**（不留半成品），错误信息会带出当前余额，用户可换账户重试。
  * 提示文案必须说清"已扣款"（或兜底时的"尚未审核"），否则用户对钱的状态会误判。</p>
  */
-async function createRdExpense(materialId: number) {
+async function createRdExpense(materialId: number, allowOverdraft = false) {
   const payload = {
     amount: rdForm.amount,
     accountId: rdForm.accountId,
@@ -151,7 +152,9 @@ async function createRdExpense(materialId: number) {
     // 2026-10-09（V7 含税）：开关与税率一起提交；后端按 金额×税率/(100+税率) 落税（**不改金额**）
     taxIncluded: rdForm.taxIncluded,
     taxRate: rdForm.taxRate,
-    autoAudit: true
+    autoAudit: true,
+    // 2026-10-09：用户已在「余额不足」确认框里点过"确认继续"（后端会因此放行、允许账户被扣成负数）
+    allowOverdraft
   }
   try {
     const r: any = await request.post(`/dev/purchase-item/${materialId}/rd-expense`, payload)
@@ -166,6 +169,12 @@ async function createRdExpense(materialId: number) {
       ElMessage.warning(`${r?.existing ? '该研发物料已登记过研发支出' : '研发支出已登记'}${no}，尚未扣款（请在「财务管理 → 费用管理」审核后扣款）`)
     }
   } catch (e: any) {
+    // 2026-10-09（用户口径「扣款时余额不足 ⇒ 提示，确认后可通过」）：余额不足 ⇒ 后端在**动账之前**返回业务码 409
+    // （钱没动，且刚插入的草稿随事务一起回滚 ⇒ 没有半成品）⇒ 弹确认框；用户确认后带 allowOverdraft 重发同一个请求。
+    if (isOverdraftNeedConfirm(e)) {
+      if (await confirmOverdraft(e.msg)) await createRdExpense(materialId, true)
+      return
+    }
     let retry = false
     try {
       await ElMessageBox.confirm(`研发支出未登记成功：${e?.message || '未知错误'}。是否重试？`, '研发支出登记失败', { type: 'warning', confirmButtonText: '重试', cancelButtonText: '稍后处理' })

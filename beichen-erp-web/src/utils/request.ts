@@ -55,6 +55,15 @@ http.interceptors.response.use(
       ElMessage.error(res.msg || '无权限访问')
       return Promise.reject(new Error(res.msg || '无权限访问'))
     }
+    // 2026-10-09：409 = 「账户余额不足，需用户确认后才继续」（后端在**动账之前**拦下，故业务码 409 ⇒ 钱没动）。
+    // 这里**不弹通用提示**（由调用方弹确认框，避免"toast + 确认框"重复），但把业务码挂到 error 上 ——
+    // 本仓此前的 reject 只带 message，调用方拿不到 code，无法区分"需确认"与"真失败"。
+    if (res.code === 409) {
+      const err: any = new Error(res.msg || '账户余额不足，需确认')
+      err.code = 409
+      err.msg = res.msg
+      return Promise.reject(err)
+    }
     ElMessage.error(res.msg || '请求失败')
     return Promise.reject(new Error(res.msg || '请求失败'))
   },

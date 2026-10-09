@@ -63,8 +63,15 @@ public class FinanceExpenseController {
     }
 
     // E1 口径（2026-09-12）：审核族统一 PUT（旧 POST 保留为别名）；反审核统一 /un-audit（旧 /unAudit 保留为别名）
+    // 2026-10-09（用户口径「余额不足 ⇒ 提示，确认后可通过」）：`allowOverdraft=true` = 用户已确认"允许把账户扣成负数"。
+    // 余额不足时后端**先**返回业务码 409、**一分钱没动**；前端弹确认框后带此参数**重发同一个请求**。
+    // 不带 ⇒ 维持原口径（余额不足即拒）。
     @RequestMapping(value = "/{id}/audit", method = {RequestMethod.PUT, RequestMethod.POST})
-    public R<Void> audit(@PathVariable Long id) { service.audit(id); return R.ok(); }
+    public R<Void> audit(@PathVariable Long id,
+                         @RequestParam(defaultValue = "false") boolean allowOverdraft) {
+        service.audit(id, allowOverdraft);
+        return R.ok();
+    }
 
     @RequestMapping(value = {"/{id}/un-audit", "/{id}/unAudit"}, method = {RequestMethod.PUT, RequestMethod.POST})
     public R<Void> unAudit(@PathVariable Long id) { service.unAudit(id); return R.ok(); }

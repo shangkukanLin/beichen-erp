@@ -147,7 +147,13 @@ export function getExpensePage(params?: any) { return request.get<PageResult<Fin
 export function getExpense(id: number) { return request.get<FinanceExpense>(`/finance/expense/${id}`) }
 export function createExpense(data: any) { return request.post<void>('/finance/expense', data) }
 export function updateExpense(data: any) { return request.put<void>('/finance/expense', data) }
-export function auditExpense(id: number) { return request.put<void>(`/finance/expense/${id}/audit`) }
+/**
+ * 审核（2026-10-09 用户口径「余额不足 ⇒ 提示，确认后可通过」）：
+ * 余额不足时后端返回**业务码 409**（此时钱**没动**）⇒ 调用方弹确认框，用户确认后带 `allowOverdraft=true` 重发同一个请求。
+ */
+export function auditExpense(id: number, allowOverdraft = false) {
+  return request.put<void>(`/finance/expense/${id}/audit`, null, { params: { allowOverdraft } })
+}
 export function unAuditExpense(id: number) { return request.put<void>(`/finance/expense/${id}/un-audit`) }
 export function cancelExpense(id: number) { return request.post<void>(`/finance/expense/${id}/cancel`) }
 
@@ -184,7 +190,10 @@ export function getPaymentAccounts(id: number) { return request.get<FinancePayme
 export function createPayment(data: any) { return request.post<void>('/finance/payment', data) }
 /** 草稿就地修改（2026-09-29）：payload 与建单一致，分款/核销明细整体替换 */
 export function updatePayment(id: number, data: any) { return request.put<void>(`/finance/payment/${id}`, data) }
-export function auditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/audit`) }
+/** 审核（2026-10-09：余额不足 ⇒ 后端返回业务码 409，此时钱没动；`allowOverdraft=true` = 用户已确认可透支） */
+export function auditPayment(id: number, allowOverdraft = false) {
+  return request.put<void>(`/finance/payment/${id}/audit`, null, { params: { allowOverdraft } })
+}
 export function cancelPayment(id: number) { return request.put<void>(`/finance/payment/${id}/cancel`) }
 export function unAuditPayment(id: number) { return request.put<void>(`/finance/payment/${id}/un-audit`) }
 

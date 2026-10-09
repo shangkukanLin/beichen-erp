@@ -109,8 +109,16 @@ public class FinancePaymentController {
         return R.ok();
     }
 
+    /**
+     * 审核。{@code allowOverdraft=true} = 用户已确认"允许把账户扣成负数"（2026-10-09 用户口径）：
+     * 余额不足时后端**先**返回业务码 409（此时没动账），前端弹确认框后带此参数重发同一个请求。
+     */
     @PutMapping("/{id}/audit")
-    public R<Void> audit(@PathVariable Long id) { service.audit(id); return R.ok(); }
+    public R<Void> audit(@PathVariable Long id,
+                         @RequestParam(defaultValue = "false") boolean allowOverdraft) {
+        service.audit(id, allowOverdraft);
+        return R.ok();
+    }
 
     @PutMapping("/{id}/un-audit")
     public R<Void> unAudit(@PathVariable Long id) { service.unAudit(id); return R.ok(); }

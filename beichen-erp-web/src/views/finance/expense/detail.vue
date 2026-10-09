@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { isOverdraftNeedConfirm, confirmOverdraft } from '@/utils/overdraftConfirm'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 import { localDate } from '@/utils/date'
@@ -103,14 +104,18 @@ async function doSave() {
   } catch (e: any) { ElMessage.error(e?.msg || e?.message || '保存失败') } finally { saving.value = false }
 }
 
-async function doAudit() {
+async function doAudit(allowOverdraft = false) {
   try {
     await ElMessageBox.confirm(`确认审核费用单 ${head.value.expenseNo}？审核后将从「${head.value.accountName}」扣款 ${fmt(head.value.amount)} 元`, '审核确认', { type: 'warning' })
   } catch { return }
   acting.value = true
   // F7-237：接口调用补 catch（原先仅 finally ⇒ 失败无局部兜底、产生未处理 rejection）
-  try { await auditExpense(id()); ElMessage.success('已审核'); await loadData() }
-  catch { /* 提示由拦截器统一给出 */ }
+  try { await auditExpense(id(), allowOverdraft); ElMessage.success('已审核'); await loadData() }
+  catch (e: any) {
+    // 2026-10-09：余额不足 ⇒ 业务码 409（**钱没动**）⇒ 弹确认框；用户确认后带标志重发（账户可扣成负数，流水留痕）
+    if (isOverdraftNeedConfirm(e) && await confirmOverdraft(e.msg)) { acting.value = false; return doAudit(true) }
+    // 其它失败：提示由拦截器统一给出
+  }
   finally { acting.value = false }
 }
 
@@ -144,7 +149,9 @@ onActivated(() => { loadData(); loadAccounts() })
       <!-- 草稿：保存(主) + 审核 + 作废（2026-09-24 用户口径：草稿态就地编辑）
            F7-235：四个动作按 finance:expense|finance:cashflow（后端同源两码任一）显示 -->
       <el-button type="primary" v-if="isDraft && canExpense" :loading="saving" @click="doSave">保存</el-button>
-      <el-button type="success" v-if="isDraft && canExpense" :loading="acting" @click="doAudit">审核</el-button>
+      <!-- 2026-10-09：必须显式调用（不能直接写 `@click="doAudit"` —— 那样 MouseEvent 会落到 allowOverdraft 参数上、
+           真值 ⇒ **绕过余额不足确认框直接放行** ✗；vue-tsc 当场报 TS2322 抓到的就是这个） -->
+      <el-button type="success" v-if="isDraft && canExpense" :loading="acting" @click="doAudit()">审核</el-button>
       <el-button type="danger" v-if="isDraft && canExpense" :loading="acting" @click="doCancel">作废</el-button>
       <!-- 反审核：生成「费用冲正」流水把钱冲回账户（撤销类操作，2026-09-24 从列表移入详情） -->
       <el-button type="warning" v-if="isAudited && canExpense" :loading="acting" @click="doUnAudit">反审核</el-button>

@@ -3,6 +3,7 @@ import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
+import { isOverdraftNeedConfirm, confirmOverdraft } from '@/utils/overdraftConfirm'
 import { localDate } from '@/utils/date'
 import { DevMaterialTypeLabel, DevMaterialStatusLabel, DEV_MATERIAL_DIRTY_KEY } from '@/api/enums'
 import MaterialFormDialog from '@/components/dev/MaterialFormDialog.vue'
@@ -94,15 +95,21 @@ function handleRdExpense(row: any) {
   loadRdAccounts()
   rdDialog.value = true
 }
-async function submitRdExpense() {
+async function submitRdExpense(allowOverdraft = false) {
   if (!rdRowForm.amount || Number(rdRowForm.amount) <= 0) { ElMessage.warning('研发支出金额必须大于 0'); return }
   if (!rdRowForm.accountId) { ElMessage.warning('研发支出必须选择支出账户'); return }
   rdSubmitting.value = true
   try {
-    const r: any = await request.post(`/dev/purchase-item/${rdRow.value.id}/rd-expense`, { ...rdRowForm })
+    // 2026-10-09：这条路径落的是**草稿**（钱此时不动），余额不足不会在这里报 409（审核时才校验）；
+    // 仍带上 allowOverdraft 是为了与「勾选即审核」入口同口径 —— 若后端将来在此路径直接审核，行为一致。
+    const r: any = await request.post(`/dev/purchase-item/${rdRow.value.id}/rd-expense`, { ...rdRowForm, allowOverdraft })
     const no = r?.expenseNo ? `（单号 ${r.expenseNo}）` : ''
     ElMessage.success(`${r?.existing ? '该研发物料已登记过研发支出' : '研发支出已存为草稿'}${no}，请在「财务管理 → 费用管理」审核后才扣款`)
     rdDialog.value = false
+  } catch (e: any) {
+    // 余额不足（409，钱没动）⇒ 弹确认框；用户确认后带 allowOverdraft 重发（后端放行，允许账户透支，流水留痕）
+    if (isOverdraftNeedConfirm(e) && await confirmOverdraft(e.msg)) { rdSubmitting.value = false; return submitRdExpense(true) }
+    // 其它失败：提示由拦截器统一给出
   } finally { rdSubmitting.value = false }
 }
 
@@ -210,7 +217,8 @@ onMounted(() => { loadProjectOptions(); loadList() })
         <el-form-item label="费用备注"><el-input v-model="rdRowForm.remark" placeholder="留空自动填「研发支出：物料名」" /></el-form-item>
       </el-form>
       <div style="color:var(--app-text-secondary);font-size:var(--app-font-xs);line-height:1.5">保存为草稿费用单，需在「财务管理 → 费用管理」审核后才扣款；同一研发物料只会保留一张研发支出。</div>
-      <template #footer><el-button @click="rdDialog=false">取消</el-button><el-button type="primary" :loading="rdSubmitting" @click="submitRdExpense">确定</el-button></template>
+      <!-- `submitRdExpense()` 必须显式调用：直接写函数名会把 MouseEvent 当 allowOverdraft 传进去（真值 ⇒ 绕过确认框） -->
+      <template #footer><el-button @click="rdDialog=false">取消</el-button><el-button type="primary" :loading="rdSubmitting" @click="submitRdExpense()">确定</el-button></template>
     </el-dialog>
   </div>
 </template>

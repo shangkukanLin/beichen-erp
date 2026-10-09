@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
 import { useDomainRefresh } from '@/utils/dataFreshness'
+import { isOverdraftNeedConfirm, confirmOverdraft } from '@/utils/overdraftConfirm'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -80,10 +81,16 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
  * 原先两者在同一 try/catch 里，用户点「取消」也走 catch，与"接口失败"混同。现在照 payable-transfer/*
  * 与 receipt.vue 的口径写：取消即 `return`，接口失败静默（提示由 request 拦截器统一弹出）。
  */
-async function handleAudit(row: FinancePayment) {
+async function handleAudit(row: FinancePayment, allowOverdraft = false) {
   try { await ElMessageBox.confirm(`确认审核付款单「${row.code}」？将核销应付（如有核销明细）、按各账户扣减余额并写资金流水；未核销差额作为预付挂账`, '提示', { type: 'warning' }) } catch { return }
-  try { await auditPayment(row.id as number); ElMessage.success('已审核：已核销应付、按账户写入资金流水'); loadData() }
-  catch { /* 提示由拦截器统一给出 */ }
+  try { await auditPayment(row.id as number, allowOverdraft); ElMessage.success('已审核：已核销应付、按账户写入资金流水'); loadData() }
+  catch (e: any) {
+    // 2026-10-09（用户口径「扣款时余额不足 ⇒ 给用户提示，用户确认后可通过」）：后端**在动账之前**返回业务码 409
+    // （钱没动、单据仍是草稿）⇒ 弹确认框（文案用后端原文，带当前余额 / 本次付款 / 付款后余额）；
+    // 用户点「确认继续」后带 allowOverdraft 重发**同一个请求** ⇒ 此时才真的扣款（可把账户扣成负数，流水备注留痕）。
+    if (isOverdraftNeedConfirm(e) && await confirmOverdraft(e.msg)) return handleAudit(row, true)
+    // 其它失败：提示由拦截器统一给出
+  }
 }
 async function handleCancel(row: FinancePayment) {
   try { await ElMessageBox.confirm(`确认作废付款单「${row.code}」？`, '提示', { type: 'warning' }) } catch { return }
