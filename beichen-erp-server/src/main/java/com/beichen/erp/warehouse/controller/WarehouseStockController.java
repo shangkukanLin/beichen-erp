@@ -495,11 +495,12 @@ public class WarehouseStockController {
             Product p = productMap.get(pid);
             LocalDate ls = lastSale.get(pid);
             LocalDate li = lastIn.get(pid);
-            // 停滞天数 = 今天 − max(最后销售日, 最近来货日)：
-            //   · 来货会重置时钟 ⇒ "新到的货 15 天没卖出去"照样算滞销（用户 2026-10-09 口径）；
-            //   · 卖了之后又 15 天没动 ⇒ 同样算滞销（保留 2026-10-02 原口径的灵敏度）。
-            // 两个日期都没有（既没有白名单来货、也从没卖出过）⇒ null：库里压着、一天都没动 ⇒ 一律算滞销。
-            LocalDate ref = (ls == null) ? li : (li == null || ls.isAfter(li) ? ls : li);
+            // 停滞天数 = 今天 − 起算点。起算点（用户 2026-10-09 第二次口径，覆盖同日第一次的"取较晚者"）：
+            //   · **有销售记录** ⇒ 用**最后销售日**（回落到 2026-10-02 的原口径 ✓）；
+            //   · **没有销售记录**（从未卖出过）⇒ 用**最近来货日**（白名单见 StagnantAnalysisMapper.INBOUND_TYPES）；
+            //   · 两者都没有 ⇒ null：库里压着、一天都没动 ⇒ 一律算滞销（停滞天数显示 —）。
+            // ⚠️ 注意"来货"**不再**重置时钟：卖过一次之后，即使之后又来货，仍按最后销售日算。
+            LocalDate ref = (ls != null) ? ls : li;
             Long stagnantDays = ref == null ? null : ChronoUnit.DAYS.between(ref, today);
             LocalDate fi = firstIn.get(pid);
             Long stockAgeDays = fi == null ? null : ChronoUnit.DAYS.between(fi, today);

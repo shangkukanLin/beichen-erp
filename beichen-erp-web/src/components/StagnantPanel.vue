@@ -13,8 +13,9 @@
  * 再插 4 列必然出现横向滚动条，而"所有列表一行显示、不许左右滑动"是本仓用户口径
  * （`tools/regression/scan-table-overflow.ps1` 的 margin &lt; -2 直接判 FAIL）。故本组件自成一张表。</p>
  *
- * <p><b>现在只有一个天数（2026-10-09 用户口径变更）</b>：`noSaleDays`（默认 15）是**滞销判定线** ——
- * 含义为「距**最近一次来货（采购入库 / 委外加工回货）或最后销售**的天数」，二者取较晚者（来货会重置时钟）。
+ * <p><b>现在只有一个天数（2026-10-09 用户口径变更，同一天两次）</b>：`noSaleDays`（默认 15）是**滞销判定线** ——
+ * 含义为「距**最后销售日**超过此天数没有销售」；**从未有过销售记录**的产品改按**最近来货日**
+ * （采购入库 / 委外加工回货）起算，两者都没有的一律算滞销。
  * 原先独立的「统计窗口（默认 90 天，可选 30/60/90/180）」按用户「90 天这个不要」⇒ 连同「期间销量 / 周转天数」
  * 两列一并移除；阈值仍由后端随响应回传（`threshold`），本组件文案一律用回传值，不写死。</p>
  *
@@ -229,16 +230,24 @@ defineExpose({ reload })
       <div class="st-head">
         <span class="st-title">{{ props.title }}</span>
         <span class="st-hint">
-          口径：有库存 × **距「最近一次来货（采购入库 / 委外回货）」或「最后销售」**超过阈值没有销售 = 滞销。
+          口径：有库存 × **距「最后销售日」**超过阈值没有销售 = 滞销；**从未有过销售记录**的按**最近来货日**起算。
           最后销售日 = 已审核销售单的**建单日**；移仓 / 品质重分类 / 退货出库 / 反审核都不算"卖过"（否则会漏报）
         </span>
       </div>
     </template>
     <div class="st-controls">
-      <span class="st-label">滞销判定</span>
+      <!-- 2026-10-09：两个天数并排、且都没有说明，正是用户两次追问的来源 ⇒ 这里补上 tooltip ✓ -->
+      <el-tooltip placement="top">
+        <template #content>
+          距 <b>最后销售日</b> 超过此天数没有销售 ⇒ 滞销。<br />
+          <b>从未有过销售记录</b>的产品，改按 <b>最近来货日</b>（采购入库 / 委外加工回货）起算；<br />
+          两者都没有的（既无销售也无来货）一律算滞销。
+        </template>
+        <span class="st-label" style="cursor:help;border-bottom:1px dashed currentColor">滞销判定</span>
+      </el-tooltip>
       <el-input-number v-model="st.noSaleDays" :min="1" :max="3650" :step="5" controls-position="right"
                        size="small" style="width:118px" @change="onFilterChange" />
-      <span class="st-label">天无来货或销售</span>
+      <span class="st-label">天没有销售</span>
       <el-checkbox v-model="st.onlyStagnant" label="仅看滞销" @change="onFilterChange" />
       <el-checkbox v-model="st.onlySevere" label="仅看严重滞销（>180 天）" @change="onFilterChange" />
       <el-checkbox v-model="st.includeDiscontinued" label="含停售产品" @change="onFilterChange" />
@@ -264,7 +273,7 @@ defineExpose({ reload })
     </div>
     <!-- 列宽合计 ≈ 864（SKU98/名称130/品牌84/最后销售日100/最近来货100/停滞92/库存76/金额116/状态68
          ≤ 内容区 ~948）。2026-10-09：随「统计窗口」取消，「期间销量」「周转天数」两列删除（原各 92/84），
-         新增「最近来货」——滞销时钟的另一个起点，用户要能看见"为什么它被算成滞销"。 -->
+         新增「最近来货」——**从未有过销售记录**的产品靠它起算，用户要能看见"为什么它被算成滞销"。 -->
     <el-table v-loading="loading" :data="rows" border stripe @row-click="(r: any) => emit('row-click', r)">
       <el-table-column prop="sku" label="SKU" min-width="98" show-overflow-tooltip />
       <el-table-column label="产品名称" min-width="130" show-overflow-tooltip>
@@ -284,18 +293,18 @@ defineExpose({ reload })
       <el-table-column label="最近来货" min-width="100" align="center">
         <template #default="{ row }">
           <span v-if="row.lastInDate" title="最近一次来货：采购入库（成品购入）或委外收货入库（委外加工回货）">{{ row.lastInDate }}</span>
-          <el-tooltip v-else content="没有采购入库 / 委外收货入库流水 ⇒ 滞销时钟只看最后销售日" placement="top">
+          <el-tooltip v-else content="没有采购入库 / 委外收货入库流水 ⇒ 起算点只看最后销售日（两者都没有的，一律算滞销）" placement="top">
             <span class="never">无来货</span>
           </el-tooltip>
         </template>
       </el-table-column>
       <el-table-column label="停滞天数" min-width="92" align="right">
         <template #default="{ row }">
-          <span title="距「最近一次来货」或「最后销售」的天数（取较晚者）"
+          <span title="滞销起算点 = 最后销售日；从未有过销售记录的按最近来货日算"
                 :style="{ color: row.severe ? '#f56c6c' : (row.stagnant ? '#e6a23c' : ''), fontWeight: (row.severe || row.stagnant) ? 600 : 400 }">
             {{ row.stagnantDays == null ? '—' : row.stagnantDays }}
           </span>
-          <el-tooltip v-if="row.severe" content="严重滞销：距最近一次来货或销售超过 180 天（从未销售且无来货的按在库已超 180 天判定）" placement="top">
+          <el-tooltip v-if="row.severe" content="严重滞销：距起算点超过 180 天（从未销售且无来货的按在库已超 180 天判定）" placement="top">
             <el-icon style="vertical-align:-2px"><WarningFilled /></el-icon>
           </el-tooltip>
         </template>
