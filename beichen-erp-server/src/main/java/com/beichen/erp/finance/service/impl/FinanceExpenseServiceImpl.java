@@ -227,6 +227,37 @@ public class FinanceExpenseServiceImpl implements FinanceExpenseService {
             throw new BusinessException("支出账户不能为空");
         }
         if (expense.getExpenseDate() == null) expense.setExpenseDate(LocalDate.now());
+        normalizeTax(expense);
+    }
+
+    /**
+     * 含税口径归一化（2026-10-09 V7；算法与采购单 {@code PurchaseOrderServiceImpl}、委外单
+     * {@code OutsourceOrderServiceImpl} 的税额拆分**同源**，故写在这一处、供全部入口共用 ——
+     * 研发物料「研发支出」登记（{@code RdExpenseServiceImpl}）与费用管理手工登记都走本方法，不再各写一份）：
+     *
+     * <p>① **未含税**（{@code taxIncluded != 1}）⇒ 税率与税额一律归 0
+     * （用户关掉开关后残留的税率不得留在库里；存量单默认即此分支 ⇒ 语义不变）；
+     * ② **含税** ⇒ 校验税率 0~100，并按 {@code 金额 × 税率/(100+税率)} 重算税额（HALF_UP、2 位小数）。</p>
+     *
+     * <p>⚠️ **金额本身绝不改写**：费用单的 amount 是"真正从账户扣款、进利润表"的那个数，
+     * 「是否含税」只影响税额的拆分展示 ⇒ 加这个开关**不改变任何钱的口径**。</p>
+     */
+    private void normalizeTax(FinanceExpense expense) {
+        boolean included = expense.getTaxIncluded() != null && expense.getTaxIncluded() == 1;
+        if (!included) {
+            expense.setTaxIncluded(0);
+            expense.setTaxRate(BigDecimal.ZERO);
+            expense.setTaxAmount(BigDecimal.ZERO);
+            return;
+        }
+        BigDecimal rate = expense.getTaxRate() == null ? BigDecimal.ZERO : expense.getTaxRate();
+        if (rate.compareTo(BigDecimal.ZERO) < 0 || rate.compareTo(new BigDecimal("100")) > 0)
+            throw new BusinessException("税率应在 0~100 之间：" + rate);
+        // 与采购/委外单同式：含税总额 × 税率/(100+税率)
+        BigDecimal tax = expense.getAmount().multiply(rate)
+                .divide(new BigDecimal("100").add(rate), 2, java.math.RoundingMode.HALF_UP);
+        expense.setTaxRate(rate);
+        expense.setTaxAmount(tax);
     }
 
     private void fillAccountName(FinanceExpense expense) {

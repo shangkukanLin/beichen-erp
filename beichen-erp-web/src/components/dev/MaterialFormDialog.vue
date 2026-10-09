@@ -39,7 +39,9 @@ const lockedProject = computed(() => props.defaultProjectId != null)
 // 落库走 `POST /api/dev/purchase-item/{id}/rd-expense`：勾选路径 `autoAudit=true` ⇒ 建单即审核当场扣款，
 // 无「费用管理」审核权限的账号由后端**降级为草稿**（不越权动钱）；同一研发物料已登记过则后端幂等回原单。
 // 金额默认带出本表单的「金额」字段（可改）；账户必填（下拉取资金账户主数据）。
-const rdForm = reactive({ enabled: false, amount: undefined as any, accountId: undefined as any, expenseDate: localDate(), remark: '' })
+// 2026-10-09（V7 含税）：口径与采购/销售单**同款** —— 开关关闭 = 未含税（默认，与 DB 默认 0 一致），
+// 打开时税率默认 13%；金额口径**跟随开关**（含税时用户填的就是含税总额）。
+const rdForm = reactive({ enabled: false, amount: undefined as any, accountId: undefined as any, expenseDate: localDate(), remark: '', taxIncluded: 0, taxRate: 0 })
 const rdAccounts = ref<FinanceAccount[]>([])
 async function loadRdAccounts() {
   try {
@@ -51,6 +53,20 @@ async function loadRdAccounts() {
 function onRdToggle(v: any) {
   if (v && rdForm.amount == null && form.amount) rdForm.amount = form.amount
 }
+/** 含税开关：开 ⇒ 税率默认 13；关 ⇒ 清 0（与后端 normalizeTax 同口径：关掉后不得留税率） */
+function onRdTaxSwitch(v: any) {
+  rdForm.taxIncluded = v ? 1 : 0
+  rdForm.taxRate = v ? (rdForm.taxRate || 13) : 0
+}
+// 税额仅用于**就地提示**（与后端 normalizeTax 同式、HALF_UP 2 位）：税额 = 金额×税率/(100+税率)。
+// 落库口径以后端为准 —— 前端算得再准都不算事实，守卫一律以 DB 为准。
+const rdTaxAmount = computed(() => {
+  if (rdForm.taxIncluded !== 1) return 0
+  const a = Number(rdForm.amount || 0); const r = Number(rdForm.taxRate || 0)
+  if (!(a > 0) || !(r > 0)) return 0
+  return Math.round((a * r) / (100 + r) * 100) / 100
+})
+const rdNetAmount = computed(() => Math.max(0, Number(rdForm.amount || 0) - rdTaxAmount.value))
 
 function resetForm() {
   Object.assign(form, {
@@ -59,7 +75,7 @@ function resetForm() {
     purchaseDate: todayStr, amount: 0, status: DevMaterialStatus.GOOD, remark: ''
   })
   // 研发支出（仅新增）：每次打开都重置为未勾选，并备好支出账户下拉
-  Object.assign(rdForm, { enabled: false, amount: undefined, accountId: undefined, expenseDate: localDate(), remark: '' })
+  Object.assign(rdForm, { enabled: false, amount: undefined, accountId: undefined, expenseDate: localDate(), remark: '', taxIncluded: 0, taxRate: 0 })
   loadRdAccounts()
   isEdit.value = false
 }
@@ -132,6 +148,9 @@ async function createRdExpense(materialId: number) {
     accountId: rdForm.accountId,
     expenseDate: rdForm.expenseDate,
     remark: rdForm.remark || '',
+    // 2026-10-09（V7 含税）：开关与税率一起提交；后端按 金额×税率/(100+税率) 落税（**不改金额**）
+    taxIncluded: rdForm.taxIncluded,
+    taxRate: rdForm.taxRate,
     autoAudit: true
   }
   try {
@@ -209,6 +228,18 @@ onMounted(() => { if (props.visible) open() })
         </el-col>
         <template v-if="!isEdit && rdForm.enabled">
           <el-col :span="12"><el-form-item required label="支出金额"><el-input-number v-model="rdForm.amount" :precision="2" :min="0.01" controls-position="right" style="width:100%" placeholder="默认取物料金额" /></el-form-item></el-col>
+          <!-- 2026-10-09（V7 含税）：与采购/销售单同款交互（关闭=未含税、打开默认 13%）。
+               含税时"支出金额"填的就是含税总额；税额只做拆分展示，**扣款金额不变**。 -->
+          <el-col :span="12">
+            <el-form-item label="是否含税">
+              <el-switch :model-value="rdForm.taxIncluded === 1" @change="onRdTaxSwitch" />
+              <el-input-number v-model="rdForm.taxRate" :min="0" :max="100" :precision="2" :controls="false"
+                :disabled="rdForm.taxIncluded !== 1" style="width:92px;margin-left:8px" placeholder="税率%" />
+            </el-form-item>
+            <div v-if="rdForm.taxIncluded === 1" style="margin:-8px 0 8px 80px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+              税额 {{ rdTaxAmount.toFixed(2) }}，不含税 {{ rdNetAmount.toFixed(2) }}（支出金额按含税口径填，扣款仍为 {{ Number(rdForm.amount || 0).toFixed(2) }}）
+            </div>
+          </el-col>
           <el-col :span="12"><el-form-item required label="支出账户">
             <el-select v-model="rdForm.accountId" placeholder="请选择" style="width:100%">
               <el-option v-for="a in rdAccounts" :key="a.id" :label="`${a.accountName}（余额 ${Number((a as any).balance ?? 0).toFixed(2)}）`" :value="a.id ?? ''" />

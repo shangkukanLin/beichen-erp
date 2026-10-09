@@ -18,7 +18,20 @@ const data = ref<FinanceExpense[]>([])
 const accounts = ref<FinanceAccount[]>([])
 const dialog = ref(false)
 const dialogTitle = ref('新增费用')
-const form = reactive<FinanceExpense>({ id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: localDate(), accountId: undefined, remark: '' })
+// 2026-10-09（V7 含税）：手工登记的费用单与研发支出**同一口径** —— 默认未含税；打开开关税率默认 13%；
+// 金额口径跟随开关（含税时金额即含税总额），**扣款与利润表口径不变**（税额只做拆分展示）。
+const form = reactive<FinanceExpense>({ id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: localDate(), accountId: undefined, remark: '', taxIncluded: 0, taxRate: 0 })
+function onTaxSwitch(v: any) {
+  form.taxIncluded = v ? 1 : 0
+  form.taxRate = v ? (form.taxRate || 13) : 0
+}
+const taxAmount = computed(() => {
+  if (form.taxIncluded !== 1) return 0
+  const a = Number(form.amount || 0); const r = Number(form.taxRate || 0)
+  if (!(a > 0) || !(r > 0)) return 0
+  return Math.round((a * r) / (100 + r) * 100) / 100
+})
+const netAmount = computed(() => Math.max(0, Number(form.amount || 0) - taxAmount.value))
 
 async function loadData() {
   loading.value = true
@@ -31,7 +44,7 @@ async function loadData() {
   } catch { data.value = [] } finally { loading.value = false }
 }
 async function loadAccounts() { try { const r = await getAccountPage({pageSize:200}); accounts.value = (r?.records || []).filter((a:any)=>a.status===1) } catch { accounts.value = [] } }
-function handleAdd() { Object.assign(form, { id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: localDate(), accountId: undefined, remark: '' }); dialogTitle.value = '新增费用'; dialog.value = true }
+function handleAdd() { Object.assign(form, { id: undefined, expenseType: 'OFFICE', amount: undefined, expenseDate: localDate(), accountId: undefined, remark: '', taxIncluded: 0, taxRate: 0 }); dialogTitle.value = '新增费用'; dialog.value = true }
 /** 详情（2026-09-24 新增）：草稿态在详情页就地改+存，撤销类的反审核也在那里 */
 function goDetail(row: FinanceExpense) { router.push(`/finance/expense/detail/${row.id}`) }
 /* 2026-09-24（用户口径）：列表弹窗只保留「新增」；草稿编辑已收进详情页 ⇒ handleEdit / updateExpense 分支一并删除
@@ -128,6 +141,16 @@ useDomainRefresh('expense', () => { loadData(); loadAccounts() })
           <el-select v-model="form.expenseType" style="width:100%"><el-option v-for="(lb, code) in EXPENSE_TYPE_LABELS" :key="code" :label="lb" :value="code"/></el-select>
         </el-form-item>
         <el-form-item required label="金额"><el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%"/></el-form-item>
+        <!-- 2026-10-09（V7 含税）：与研发支出登记同口径（关闭=未含税、打开默认 13%）。
+             含税时"金额"填的就是含税总额；税额只做拆分展示，**扣款与利润表口径不变**。 -->
+        <el-form-item label="是否含税">
+          <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
+          <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :controls="false"
+            :disabled="form.taxIncluded !== 1" style="width:92px;margin-left:8px" placeholder="税率%"/>
+          <span v-if="form.taxIncluded === 1" style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+            税额 {{ taxAmount.toFixed(2) }}，不含税 {{ netAmount.toFixed(2) }}（金额按含税口径填，扣款仍为 {{ Number(form.amount || 0).toFixed(2) }}）
+          </span>
+        </el-form-item>
         <el-form-item label="费用日期"><el-date-picker v-model="form.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%"/></el-form-item>
         <!-- F7-232 配套：报损损失非资金 ⇒ 不要求、也不允许选支出账户（后端同口径拒绝带账户的 LOSS） -->
         <el-form-item :required="!isNonCash" label="支出账户">

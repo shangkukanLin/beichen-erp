@@ -38,7 +38,23 @@ const userStore = useUserStore()
 const canExpense = computed(() => userStore.hasPerm('finance:expense') || userStore.hasPerm('finance:cashflow'))
 
 /** 可编辑副本（白名单：单号/状态/账户名回显/制单人 不回传；金额与账户由后端复核） */
-const form = reactive({ expenseType: 'OFFICE', amount: undefined as number | undefined, expenseDate: localDate(), accountId: undefined as any, remark: '' })
+const form = reactive({ expenseType: 'OFFICE', amount: undefined as number | undefined, expenseDate: localDate(), accountId: undefined as any, remark: '', taxIncluded: 0 as number, taxRate: 0 as number })
+
+// 2026-10-09（V7 含税）：与研发支出登记/采购单同口径 —— 关闭 = 未含税（默认）；打开时税率默认 13%；
+// **金额本身不变**（含税时金额即含税总额，扣款就是这个数），税额只做拆分展示。
+function onTaxSwitch(v: any) {
+  form.taxIncluded = v ? 1 : 0
+  form.taxRate = v ? (form.taxRate || 13) : 0
+}
+const taxAmount = computed(() => {
+  if (form.taxIncluded !== 1) return 0
+  const a = Number(form.amount || 0); const r = Number(form.taxRate || 0)
+  if (!(a > 0) || !(r > 0)) return 0
+  return Math.round((a * r) / (100 + r) * 100) / 100
+})
+const netAmount = computed(() => Math.max(0, Number(form.amount || 0) - taxAmount.value))
+/** 只读态直接展示库里存的税额（含税时才显示；未含税视为 0） */
+const headTax = computed(() => (head.value.taxIncluded === 1 ? Number(head.value.taxAmount || 0) : 0))
 
 const accounts = ref<FinanceAccount[]>([])
 async function loadAccounts() {
@@ -55,6 +71,9 @@ async function loadData() {
     form.expenseDate = head.value.expenseDate ? String(head.value.expenseDate).slice(0, 10) : localDate()
     form.accountId = head.value.accountId ?? undefined
     form.remark = head.value.remark || ''
+    // 2026-10-09（V7）：含税口径按库里现状回填（未含税 ⇒ 开关关闭、税率 0）
+    form.taxIncluded = head.value.taxIncluded === 1 ? 1 : 0
+    form.taxRate = Number(head.value.taxRate || 0)
   } catch { head.value = {} }
   // F7-237（2026-09-29 审核批 C）：原先**只有 finally 没有 catch** ⇒ 详情加载失败会成为未处理的
   // Promise rejection，页面状态半新半旧（消息由拦截器弹出，但页面无兜底）。
@@ -76,6 +95,8 @@ async function doSave() {
     await updateExpense({
       id: id(), expenseType: form.expenseType, amount: form.amount,
       expenseDate: form.expenseDate, accountId: form.accountId, remark: form.remark,
+      // 2026-10-09（V7 含税）：开关与税率随草稿一起保存；税额由后端重算（金额不变）
+      taxIncluded: form.taxIncluded, taxRate: form.taxRate,
     } as FinanceExpense)
     ElMessage.success('已保存')
     await loadData()
@@ -148,6 +169,18 @@ onActivated(() => { loadData(); loadAccounts() })
               <el-input-number v-model="form.amount" :min="0.01" :precision="2" controls-position="right" style="width:100%" />
             </el-form-item>
           </el-col>
+          <!-- 2026-10-09（V7 含税）：草稿态可就地改含税口径（与研发支出登记/费用新增同款交互）；
+               税额由后端重算，**金额与扣款口径不变**。 -->
+          <el-col :span="8">
+            <el-form-item label="是否含税">
+              <el-switch :model-value="form.taxIncluded === 1" @change="onTaxSwitch" />
+              <el-input-number v-model="form.taxRate" :min="0" :max="100" :precision="2" :controls="false"
+                :disabled="form.taxIncluded !== 1" style="width:92px;margin-left:8px" placeholder="税率%" />
+            </el-form-item>
+            <div v-if="form.taxIncluded === 1" style="margin:-8px 0 8px 80px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+              税额 {{ taxAmount.toFixed(2) }}，不含税 {{ netAmount.toFixed(2) }}（金额按含税口径填，扣款仍为 {{ Number(form.amount || 0).toFixed(2) }}）
+            </div>
+          </el-col>
           <el-col :span="8">
             <el-form-item label="费用日期">
               <el-date-picker v-model="form.expenseDate" type="date" value-format="YYYY-MM-DD" style="width:100%" />
@@ -175,6 +208,10 @@ onActivated(() => { loadData(); loadAccounts() })
           <el-tag size="small">{{ EXPENSE_TYPE_LABELS[head.expenseType || ''] || head.expenseType }}</el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="金额"><span style="color:var(--app-color-danger);font-weight:600">{{ fmt(head.amount) }}</span></el-descriptions-item>
+        <!-- 2026-10-09（V7 含税）：只读态只在**含税**时显示这一行（默认未含税 ⇒ 不显示，避免噪声/误导） -->
+        <el-descriptions-item v-if="head.taxIncluded === 1" label="含税情况">
+          含税 · 税率 {{ Number(head.taxRate || 0) }}% · 税额 {{ headTax.toFixed(2) }} · 不含税 {{ Math.max(0, Number(head.amount || 0) - headTax).toFixed(2) }}
+        </el-descriptions-item>
         <el-descriptions-item label="费用日期">{{ fmtDate(head.expenseDate) }}</el-descriptions-item>
         <el-descriptions-item label="支出账户">{{ head.accountName || '—' }}</el-descriptions-item>
         <el-descriptions-item label="状态">

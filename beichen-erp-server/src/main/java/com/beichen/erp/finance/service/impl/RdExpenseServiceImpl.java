@@ -61,6 +61,16 @@ public class RdExpenseServiceImpl implements RdExpenseService {
         FinanceExpense exists = financeExpenseService.findActiveBySource(sourceType.getCode(), sourceId);
         if (exists != null) {
             boolean audited = DocStatus.AUDITED.getCode().equals(exists.getStatus());
+            // 2026-10-09（V7 含税）：原单仍是**草稿**时，用本次提交的含税口径覆写它 ——
+            // 否则用户在弹窗里勾了「含税」，却因为"该物料已登记过"而被静默丢弃（典型假成功）。
+            // 只覆盖含税三列（金额/账户/来源不动 ⇒ 不改变任何"钱"的口径）；**已审核的单子绝不改**（账已动）。
+            if (!audited && (b.containsKey("taxIncluded") || b.containsKey("taxRate"))) {
+                applyTax(exists, b);
+                financeExpenseService.update(exists);
+                log.info("来源 {}#{} 的研发支出 {} 为草稿，含税口径按本次提交更新（taxIncluded={} rate={}）",
+                        sourceType.getCode(), sourceId, exists.getExpenseNo(),
+                        exists.getTaxIncluded(), exists.getTaxRate());
+            }
             // 勾选路径的语义是"登记即审核"：原单若还是草稿（例如先前用列表行操作补登记、尚未去财务审核）
             // ⇒ 补审核，否则用户以为已扣款其实没扣。已审核的不再动账（幂等，绝不重复扣款）。
             if (autoAudit && !audited) {
@@ -108,6 +118,9 @@ public class RdExpenseServiceImpl implements RdExpenseService {
         e.setRemark(remark);
         e.setSourceBillType(sourceType.getCode());
         e.setSourceId(sourceId);
+        // 2026-10-09（V7 含税）：与其它单据同口径 —— 未提供开关即"未含税"；税额由
+        // FinanceExpenseServiceImpl.validate → normalizeTax 统一计算（金额本身绝不改写）。
+        applyTax(e, b);
         // 复用费用单 create：校验金额/账户 → 回填账户名 → 生成 FY 单号 → 置 DRAFT → 落库（不回填则无法拿到单号）
         financeExpenseService.create(e);
 
@@ -139,6 +152,24 @@ public class RdExpenseServiceImpl implements RdExpenseService {
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * 含税口径（2026-10-09 V7，与其它单据同款入参）：开关取 {@code 1 / true / "true"}；
+     * 税率取数值。**未提供即"未含税"**（与 DB 默认 0 一致）；税额由费用单侧统一计算，这里只落开关与税率。
+     */
+    private void applyTax(FinanceExpense e, Map<String, Object> b) {
+        e.setTaxIncluded(asBool(b.get("taxIncluded")) ? 1 : 0);
+        e.setTaxRate(asDecimal(b.get("taxRate")));
+    }
+
+    /** 数值容错解析（后端不信任前端：可能传 13 / "13" / 13.0 / 空） */
+    private BigDecimal asDecimal(Object v) {
+        if (v == null) return BigDecimal.ZERO;
+        String s = String.valueOf(v).trim();
+        if (s.isEmpty()) return BigDecimal.ZERO;
+        try { return new BigDecimal(s); }
+        catch (Exception ex) { throw new BusinessException("税率格式不正确：" + v); }
     }
 
     /** body 里布尔值的容错解析（后端不信任前端：可能传 true / "true" / 1） */

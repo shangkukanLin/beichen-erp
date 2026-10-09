@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, onMounted, onActivated } from 'vue'
+import { reactive, ref, computed, onMounted, onActivated } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import request from '@/utils/request'
@@ -64,7 +64,9 @@ async function handleDelete(row: any) {
 const rdDialog = ref(false)
 const rdSubmitting = ref(false)
 const rdRow = ref<any>(null)
-const rdRowForm = reactive({ amount: undefined as any, accountId: undefined as any, expenseDate: localDate(), remark: '' })
+// 2026-10-09（V7 含税）：与新增弹窗/采购单同款 —— 默认未含税，打开开关税率默认 13%；
+// 金额口径跟随开关（含税时即含税总额），**扣款口径不变**（税额只做拆分展示）。
+const rdRowForm = reactive({ amount: undefined as any, accountId: undefined as any, expenseDate: localDate(), remark: '', taxIncluded: 0, taxRate: 0 })
 const rdAccounts = ref<FinanceAccount[]>([])
 async function loadRdAccounts() {
   try {
@@ -72,10 +74,23 @@ async function loadRdAccounts() {
     rdAccounts.value = (r?.records || []).filter((a: any) => a.status === 1)
   } catch { rdAccounts.value = [] }
 }
+/** 含税开关：开 ⇒ 税率默认 13；关 ⇒ 清 0（与后端 normalizeTax 同口径） */
+function onRdRowTaxSwitch(v: any) {
+  rdRowForm.taxIncluded = v ? 1 : 0
+  rdRowForm.taxRate = v ? (rdRowForm.taxRate || 13) : 0
+}
+// 就地提示用（与后端同式、HALF_UP 2 位）；落库口径以后端为准，守卫一律以 DB 为准
+const rdRowTaxAmount = computed(() => {
+  if (rdRowForm.taxIncluded !== 1) return 0
+  const a = Number(rdRowForm.amount || 0); const r = Number(rdRowForm.taxRate || 0)
+  if (!(a > 0) || !(r > 0)) return 0
+  return Math.round((a * r) / (100 + r) * 100) / 100
+})
+const rdRowNetAmount = computed(() => Math.max(0, Number(rdRowForm.amount || 0) - rdRowTaxAmount.value))
 function handleRdExpense(row: any) {
   rdRow.value = row
-  // 金额默认带出研发物料金额（可改）；账户每次重置，避免沿用上一次的选择
-  Object.assign(rdRowForm, { amount: row?.amount || undefined, accountId: undefined, expenseDate: localDate(), remark: '' })
+  // 金额默认带出研发物料金额（可改）；账户与含税口径每次重置，避免沿用上一次的选择
+  Object.assign(rdRowForm, { amount: row?.amount || undefined, accountId: undefined, expenseDate: localDate(), remark: '', taxIncluded: 0, taxRate: 0 })
   loadRdAccounts()
   rdDialog.value = true
 }
@@ -174,6 +189,16 @@ onMounted(() => { loadProjectOptions(); loadList() })
       <el-form :model="rdRowForm" label-width="90px">
         <el-form-item label="研发物料"><span style="font-weight:600">{{ rdRow?.name }}</span></el-form-item>
         <el-form-item required label="支出金额"><el-input-number v-model="rdRowForm.amount" :precision="2" :min="0.01" controls-position="right" style="width:100%" placeholder="默认取物料金额" /></el-form-item>
+        <!-- 2026-10-09（V7 含税）：与采购/销售单同款交互（关闭=未含税、打开默认 13%）。
+             含税时"支出金额"填的就是含税总额；税额只做拆分展示，**扣款金额不变**。 -->
+        <el-form-item label="是否含税">
+          <el-switch :model-value="rdRowForm.taxIncluded === 1" @change="onRdRowTaxSwitch" />
+          <el-input-number v-model="rdRowForm.taxRate" :min="0" :max="100" :precision="2" :controls="false"
+            :disabled="rdRowForm.taxIncluded !== 1" style="width:92px;margin-left:8px" placeholder="税率%" />
+          <span v-if="rdRowForm.taxIncluded === 1" style="margin-left:8px;color:var(--app-text-secondary);font-size:var(--app-font-xs)">
+            税额 {{ rdRowTaxAmount.toFixed(2) }}，不含税 {{ rdRowNetAmount.toFixed(2) }}（支出金额按含税口径填，扣款仍为 {{ Number(rdRowForm.amount || 0).toFixed(2) }}）
+          </span>
+        </el-form-item>
         <el-form-item required label="支出账户">
           <el-select v-model="rdRowForm.accountId" placeholder="请选择" style="width:100%">
             <el-option v-for="a in rdAccounts" :key="a.id" :label="`${a.accountName}（余额 ${Number((a as any).balance ?? 0).toFixed(2)}）`" :value="a.id ?? ''" />

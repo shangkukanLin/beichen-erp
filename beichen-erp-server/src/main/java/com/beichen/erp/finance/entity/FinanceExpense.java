@@ -45,8 +45,28 @@ public class FinanceExpense {
      */
     private String expenseType;
 
-    /** 费用金额 */
+    /**
+     * 费用金额。
+     * <p><b>口径跟随 {@link #taxIncluded}（2026-10-09 V7）</b>：含税 ⇒ 这里是**含税总额**；未含税 ⇒ 就是不含税金额。
+     * 本项目**不做价税分离** ⇒ 本字段始终是"真正从账户扣款、进利润表"的那个数，
+     * 「是否含税」只影响税额的**拆分展示**，绝不改写本字段。</p>
+     */
     private BigDecimal amount;
+
+    /**
+     * 是否含税（2026-10-09 V7 新增；口径与 V4 的四个单据 purchase/sale/outsource/outsource_material **一致**）：
+     * 0=未含税（默认，与存量数据同义）1=含税。
+     *
+     * <p>归一化统一由 {@code FinanceExpenseServiceImpl.normalizeTax} 负责：未含税 ⇒ 税率/税额强制归 0；
+     * 含税 ⇒ 按 {@code 金额 × 税率/(100+税率)} 重算税额（HALF_UP、2 位小数）。</p>
+     */
+    private Integer taxIncluded;
+
+    /** 税率(%)；未含税时恒为 0（详见 {@link #taxIncluded}） */
+    private BigDecimal taxRate;
+
+    /** 税额 = 金额 × 税率/(100+税率)（含税总额拆税）；**仅展示/统计，不改 amount** */
+    private BigDecimal taxAmount;
 
     /** 费用日期（利润表按此归月） */
     private LocalDate expenseDate;
@@ -65,8 +85,11 @@ public class FinanceExpense {
     /**
      * 来源类型 / 来源对象ID / 来源单号（2026-09-27 新增；命名与 {@code finance_receivable} 的来源三列一致）。
      *
-     * <p>只用于"**由别的业务对象带出来的**"费用单：目前唯一来源是物料信息管理页「新增物料 → 同时登记研发支出」
-     * （{@code source_bill_type=RD_MATERIAL}、{@code source_id=outsource_material.id}）。</p>
+     * <p>只用于"**由别的业务对象带出来的**"费用单。当前来源是**研发管理的研发物料**「研发支出」登记
+     * （{@code source_bill_type=RD_DEV_MATERIAL}、{@code source_id=dev_purchase_item.id}，见
+     * {@code RdExpenseServiceImpl}）；{@code RD_MATERIAL} 是**已下线的物料信息管理入口**留下的存量类型
+     * （{@code source_id=outsource_material.id}）—— 2026-10-09 订正注释：原文写"唯一来源是物料信息管理页"
+     * 与该功能 2026-09-28 迁到研发物料之后的事实不符。</p>
      * <p>作用：① **幂等** —— 同一物料不得重复建研发支出（见 FinanceExpenseService.findActiveBySource）；
      * ② 可追溯 —— 费用管理详情可显示"来源：物料 XXX"；③ 后续"按物料/类型汇算研发支出"有抓手。</p>
      * <p>手工在费用管理页登记的费用单，这三列均为 NULL（与历史数据一致）。</p>
