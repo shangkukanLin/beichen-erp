@@ -12,6 +12,7 @@ import com.beichen.erp.dev.mapper.MaterialTypeMapper;
 import com.beichen.erp.dev.mapper.PhaseTemplateMapper;
 import com.beichen.erp.outsource.entity.ContractTemplate;
 import com.beichen.erp.outsource.mapper.ContractTemplateMapper;
+import com.beichen.erp.system.common.SystemConstants;
 import com.beichen.erp.system.entity.Role;
 import com.beichen.erp.system.entity.UserRole;
 import com.beichen.erp.system.mapper.MenuMapper;
@@ -140,6 +141,47 @@ public class DataInitializer {
     }
 
     /**
+     * 启动期**角色归属体检**（2026-10-08 · 「角色管理里角色不见了」事故的兜底）。
+     *
+     * <p><b>背景</b>：角色按 {@code company_id = 当前公司} 隔离查询（见 {@code RoleServiceImpl.listEnabled} /
+     * {@code RoleController.page}），若某角色的 company_id 既不是平台哨兵 {@code 0}、又不是任何真实公司，
+     * 则它在**任何公司视角下都查不到** —— 表现为「角色不见了」。其中 NULL 那一类已由
+     * {@code V3__sys_role_company_not_null.sql} 的 {@code NOT NULL} 焊死；这里再兜住"指向了不存在的公司"
+     * （正常路径不会产生：删公司会连角色一起删，故只可能出自手工 SQL / 导库）。</p>
+     *
+     * <p><b>刻意只 error 日志、不阻断启动</b>：这是**数据异常**而非结构缺失 —— 它不影响系统可用性，
+     * 而让整个服务起不来（全站不可用）的代价远大于"某个角色看不见"。修复 SQL 已直接打进日志，照抄即可。
+     * （对比：{@link #assertSchemaReady()} 缺表缺列会直接抛异常，那属于"代码与库结构不匹配"，
+     * 必然全线报错，必须拦。）</p>
+     */
+    private void checkRoleOwnership() {
+        try {
+            List<Long> orphanIds = jdbcTemplate.queryForList(
+                    "SELECT id FROM sys_role WHERE company_id IS NULL OR (company_id <> ? "
+                            + "AND company_id NOT IN (SELECT id FROM sys_company)) ORDER BY id",
+                    Long.class, SystemConstants.PLATFORM_COMPANY_ID);
+            if (orphanIds.isEmpty()) {
+                return;
+            }
+            StringBuilder ids = new StringBuilder();
+            for (Long id : orphanIds) {
+                if (ids.length() > 0) {
+                    ids.append(',');
+                }
+                ids.append(id);
+            }
+            log.error("[角色归属体检] {} 个角色的 company_id 既不是平台哨兵 {}、也不是任何真实公司（id={}）"
+                            + " —— 这些角色在**所有公司视角下都不可见**（表现为「角色管理里角色不见了」）。"
+                            + "诊断：SELECT * FROM sys_role WHERE id IN ({});"
+                            + " 修复（归入平台模板）：UPDATE sys_role SET company_id = {} WHERE id IN ({}); 修复后重启生效。",
+                    orphanIds.size(), SystemConstants.PLATFORM_COMPANY_ID, orphanIds,
+                    ids, SystemConstants.PLATFORM_COMPANY_ID, ids);
+        } catch (Exception e) {
+            log.warn("[角色归属体检] 跳过（查询失败）：{}", e.getMessage());
+        }
+    }
+
+    /**
      * 启动初始化入口。F8-20（2026-09-30 批 E 修复）：由 {@code ApplicationRunner} 改为
      * {@code @PostConstruct} ⇒ 在 Web 容器**放行端口之前**跑完整套种子 + 迁移，
      * 从结构上消除"端口已开、DDL 还在跑 ⇒ 请求事务撞 MySQL 1412"的竞态。
@@ -162,6 +204,8 @@ public class DataInitializer {
         initContractTemplates();
         backfillCompanyDefaults();
         initScreenModels();
+        // 2026-10-08：种子全部就绪后再做一次「角色归属」体检（只告警不阻断，见方法注释）
+        checkRoleOwnership();
     }
 
     /**

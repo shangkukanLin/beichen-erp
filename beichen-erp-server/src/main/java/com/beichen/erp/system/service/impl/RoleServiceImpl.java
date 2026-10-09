@@ -78,6 +78,15 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
         Role stamp = new Role();
         stamp.setId(roleId);
         stamp.setCustomizedMenu(1);
+        // 2026-10-08（现网「角色不见了」直因）：**必须带上 companyId**。
+        // 2026-10-09：下面提到的"Role.companyId 误标 INSERT_UPDATE"**已在实体上从根修正**（现为 INSERT，见 Role.java），
+        // 但本处 setCompanyId(role.getCompanyId()) **继续保留** —— 它让本方法不依赖实体标注，更稳。
+        // Role.companyId 标了 @TableField(fill = FieldFill.INSERT_UPDATE)，MyBatis-Plus 对"带更新填充的
+        // 字段"会**无条件**拼进 UPDATE 的 SET（不做 null 判断）⇒ 只用 {id, customizedMenu} 打标，
+        // 会把该角色原有的公司归属**写成 NULL**；公司视角按 company_id = 当前公司 过滤 ⇒ 角色立刻隐身。
+        // 实测：公司 1 的「跟单专员」(id=63) 在「角色管理 → 分配权限」保存后 company_id 变 NULL，
+        // 界面表现为"跟单员不显示了"。（role 已在上面加载，直接沿用其归属）
+        stamp.setCompanyId(role.getCompanyId());
         this.updateById(stamp);
         // 删除旧关联
         roleMenuMapper.delete(new LambdaQueryWrapper<RoleMenu>()
@@ -121,8 +130,14 @@ public class RoleServiceImpl extends ServiceImpl<RoleMapper, Role> implements Ro
             return;
         }
         Long roleCompany = role.getCompanyId();
-        // 平台级共享角色（companyId 为空或等于哨兵值）仅超管可操作，普通租户不可改/删/授权
-        if (roleCompany == null || roleCompany.equals(SystemConstants.PLATFORM_COMPANY_ID)) {
+        // 平台级共享角色（companyId 为空或等于哨兵值）仅超管可操作，普通租户不可改/删/授权。
+        // 2026-10-08：把「companyId 为 null」与「等于哨兵 0」的提示**拆开** —— 前者属**数据异常**
+        // （V3__sys_role_company_not_null.sql 起数据库已 NOT NULL，正常不会再产生），笼统报
+        // "无权限操作平台级共享角色"会把排查方向引到权限上，而真正该查的是数据（该角色隐身）。
+        if (roleCompany == null) {
+            throw new BusinessException(403, "该角色未归属任何公司（数据异常：sys_role.company_id 为空，请联系管理员核查）");
+        }
+        if (roleCompany.equals(SystemConstants.PLATFORM_COMPANY_ID)) {
             throw new BusinessException(403, "无权限操作平台级共享角色");
         }
         if (!roleCompany.equals(currentCompany)) {
