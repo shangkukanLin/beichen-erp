@@ -54,42 +54,7 @@ export interface SaleOrder {
   items?: SaleOrderItem[]
 }
 
-/**
- * 销售出库明细（2026-10-09 §7.26 订正）：对象是**成品 product** —— 实体 `SaleOutboundItem` 只有
- * `productId/productName/sku`，原先这里写的是 `materialId/materialCode/materialName/spec/unit`
- * （实体里根本不存在 ⇒ 前端发这些键会被 Jackson **静默丢弃** ⇒ `product_id` 恒 NULL、名称恒空）。
- */
-export interface SaleOutboundItem {
-  id?: number
-  outboundId?: number
-  /** 来源销售单明细行 id（出库行据此可追溯到销售单行） */
-  orderItemId?: number
-  /** 产品（成品）id */
-  productId?: number
-  /** 产品名称（后端按 productId 回填，非表字段） */
-  productName?: string
-  /** 产品 SKU（后端按 productId 回填，非表字段） */
-  sku?: string
-  qualityType?: string
-  quantity?: number
-  unitPrice?: number
-  amount?: number
-  remark?: string
-}
-
-export interface SaleOutbound {
-  id?: number
-  code?: string
-  orderId?: number
-  customerId?: number
-  customerName?: string
-  warehouseId?: number
-  outboundDate?: string
-  status?: string
-  totalAmount?: number
-  remark?: string
-  items?: SaleOutboundItem[]
-}
+// 2026-10-09：销售出库模块整体下线 ⇒ SaleOutboundItem / SaleOutbound 两个接口类型已移除（见报告 §7.28）
 
 export interface PageResult<T> {
   records: T[]
@@ -136,13 +101,6 @@ export function checkSaleOrderStock(data: { warehouseId?: number; items: SaleOrd
   )
 }
 
-// 2026-09-24：补单取（后端 GET /inventory/outbound/{id} 早已存在，前端此前没包）—— 销售出库详情页要用
-export function getSaleOutbound(id: number) {
-  return request.get<SaleOutbound>(`/inventory/outbound/${id}`)
-}
-export function getSaleOutboundPage(params: any) {
-  return request.get<PageResult<SaleOutbound>>('/inventory/outbound/page', { params })
-}
 // ==================== 销售退货单（售后：只退不换） ====================
 /** 销售退货单状态：DRAFT=草稿 AUDITED=已审核 CANCELLED=已作废（与后端 DocStatus 一致） */
 export const SaleReturnStatus = {
@@ -293,35 +251,6 @@ export function getSaleExchangeSaleOrders(customerId: number) {
 export function getSaleExchangeSourceOrder(saleOrderId: number) {
   return request.get<any>(`/sale/exchange/source-order`, { params: { saleOrderId } })
 }
-export function getSaleOutboundItems(id: number) {
-  return request.get<SaleOutboundItem[]>(`/inventory/outbound/${id}/items`)
-}
-
-/**
- * 销售出库页「来源销售单」下拉（2026-10-09）：**走出库页自身前缀** —— 与退货/换货页同款读隔离
- * （直读 /inventory/sale 需 sale:order 权限，只被授予 sale:outbound 的用户会 403）。
- * 只返回**已审核**销售单（草稿单不该出货）。
- */
-export function getSaleOutboundSaleOrderOptions(params: { code?: string; pageSize?: number }) {
-  return request.get<any[]>(`/inventory/outbound/sale-order-options`, { params })
-}
-/** 销售单明细（供「从销售单带入明细」）：一次带回单据头 + 明细（含产品名/SKU/单位） */
-export function getSaleOutboundSaleOrderDetail(saleOrderId: number) {
-  return request.get<{ order: any; items: any[] }>(`/inventory/outbound/sale-order-items`, { params: { saleOrderId } })
-}
-export function createSaleOutbound(data: any) {
-  return request.post<void>('/inventory/outbound', data)
-}
-export function updateSaleOutbound(id: number, data: any) {
-  return request.put<void>(`/inventory/outbound/${id}`, data)
-}
-export function auditSaleOutbound(id: number) {
-  return request.put<void>(`/inventory/outbound/${id}/audit`)
-}
-export function cancelSaleOutbound(id: number) {
-  return request.put<void>(`/inventory/outbound/${id}/cancel`)
-}
-export function unAuditSaleOutbound(id: number) {
-  return request.put<void>(`/inventory/outbound/${id}/un-audit`)
-}
+// 2026-10-09：销售出库模块整体下线 ⇒ 原 8 个出库相关请求（明细/来源销售单下拉/来源明细/增删改审作废反审）
+// 已随模块一并移除（见报告 §7.28）
 

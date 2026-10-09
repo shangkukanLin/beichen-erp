@@ -182,9 +182,7 @@ public class ApiPermGuard {
         rule("/api/inventory/purchase-return", "purchase:return");
         rule("/api/inventory/purchase", "purchase:order");
         // ===== 销售业务 =====
-        // F7-105（2026-09-20）：销售出库单原先**未登记**（⇒ 登录即可调用，见报告 §37）。它语义上是
-        // 销售单的出库凭证，故复用销售单页面码 sale:order（系统内无 sale:outbound 码）。
-        rule("/api/inventory/outbound", "sale:order");
+        // 2026-10-09：销售出库模块整体下线 ⇒ 其路径规则 /api/inventory/outbound 一并移除（见报告 §7.28）
         rule("/api/sale/exchange", "sale:exchange");
         rule("/api/sale/return", "sale:return");
         rule("/api/inventory/sale", "sale:order");

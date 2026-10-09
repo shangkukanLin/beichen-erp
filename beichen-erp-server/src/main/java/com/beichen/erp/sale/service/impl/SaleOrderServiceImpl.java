@@ -522,8 +522,8 @@ public class SaleOrderServiceImpl implements SaleOrderService {
                     .set(SaleOrder::getSettleAmount, null));
         }
         // ⚠️ F7-108（2026-09-20）：这里是"全删重插"⇒ **明细 id 会全部变化**。
-        // 当前安全：只有**草稿**可编辑，而引用 sale_order_item.id 的只有 sale_outbound_item.orderItemId，
-        // 出库单又要求挂**已审核**销售单 ⇒ 草稿阶段不可能存在引用。
+        // 当前安全：只有**草稿**可编辑，且系统内已无任何按 sale_order_item.id 引用销售明细的表
+        // （2026-10-09 销售出库模块下线后，原先唯一的引用方 sale_outbound_item.orderItemId 已不存在）。
         // **若将来允许编辑已审核单，或新增任何"按 item.id 引用销售明细"的功能（如批次/序列号追溯），
         // 必须改为按 id 差量更新**，否则那些引用会静默悬空。
         // 2026-09-30：分款明细同样"先删后插"（与明细同一策略；只有草稿可编辑，无外部引用）

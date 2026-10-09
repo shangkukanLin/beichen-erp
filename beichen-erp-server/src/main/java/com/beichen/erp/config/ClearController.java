@@ -109,7 +109,6 @@ public class ClearController {
             "DELETE FROM purchase_order_item WHERE company_id = ?",
             "DELETE FROM purchase_return_item WHERE company_id = ?",
             "DELETE FROM purchase_exchange_item WHERE company_id = ?",            // F8-16 新增（采购换货，113/114 行）
-            "DELETE FROM sale_outbound_item WHERE company_id = ?",
             "DELETE FROM sale_order_settle_account WHERE company_id = ?",
             "DELETE FROM sale_order_item WHERE company_id = ?",
             "DELETE FROM sale_return_item WHERE company_id = ?",
@@ -167,7 +166,6 @@ public class ClearController {
             "DELETE FROM purchase_return WHERE company_id = ?",
             "DELETE FROM purchase_exchange WHERE company_id = ?",                 // F8-16 新增
             // === 销售主表 ===
-            "DELETE FROM sale_outbound WHERE company_id = ?",
             "DELETE FROM sale_order WHERE company_id = ?",
             "DELETE FROM sale_return WHERE company_id = ?",
             "DELETE FROM sale_exchange WHERE company_id = ?",

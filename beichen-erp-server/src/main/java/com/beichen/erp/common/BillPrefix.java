@@ -20,8 +20,6 @@ public final class BillPrefix {
     public static final String SALE = "XS-";
     /** 销售订单（历史前缀，CommonController 解析兜底） */
 
-    /** 销售出库 */
-    public static final String SALE_OUTBOUND = "CK-";
     /** 销售退货 */
     public static final String SALE_RETURN = "XTH-";
     /** 付款单 */

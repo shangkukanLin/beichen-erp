@@ -354,7 +354,6 @@ public class BillProductItemService {
             case INVENTORY_STOCK_LOSS, OUTSOURCE_STOCK_LOSS -> "该来源是「" + t.getLabel() + "」：按报损单金额入账，无销售/采购明细";
             case ADVANCE_LEDGER -> "该来源是「预收/预付台账」：多收/多付的挂账，没有对应的业务单明细";
             case PAYABLE_TRANSFER -> "该来源是「应付转应收」：由应付转入的扣款，明细在被转入的那张应付上";
-            case SALE_OUTBOUND -> "该来源是「销售出库」：与同号销售单同源，请对照该销售单的明细";
             case PURCHASE_INBOUND -> "该来源是「采购入库」：与同号采购单同源，请对照该采购单的明细";
             case OUTSOURCE_DELIVERY, OUTSOURCE_MATERIAL_DELIVERY, OUTSOURCE_RETURN, OUTSOURCE_RETURN_CHARGE,
                  OUTSOURCE_REPAIR_CHARGE, OUTSOURCE_MATERIAL_RETURN, OUTSOURCE_MATERIAL_REPAIR_FEE,

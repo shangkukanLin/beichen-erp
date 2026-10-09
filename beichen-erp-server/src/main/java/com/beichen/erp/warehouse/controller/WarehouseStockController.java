@@ -16,8 +16,6 @@ import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.common.QualityType;
-import com.beichen.erp.sale.entity.SaleOutbound;
-import com.beichen.erp.sale.mapper.SaleOutboundMapper;
 import com.beichen.erp.warehouse.entity.Warehouse;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
 import com.beichen.erp.warehouse.entity.WarehouseStockLog;
@@ -52,7 +50,6 @@ public class WarehouseStockController {
     private final OutsourceMaterialMapper outsourceMaterialMapper;
     private final MaterialTypeMapper materialTypeMapper;
     private final BrandMapper brandMapper;
-    private final SaleOutboundMapper saleOutboundMapper;
     private final StagnantAnalysisMapper stagnantAnalysisMapper;
 
     /** 滞销判定默认阈值：多少天没有销售算滞销（用户 2026-10-02 口径：默认 15 天，页面可调） */
@@ -1113,15 +1110,12 @@ public class WarehouseStockController {
                     log.setProductName(nameMap.getOrDefault(log.getProductId(), ""));
                 }
                 // 2026-09-14：变动类型/关联单据类型的中文改由前端按 code 映射（StockChangeTypeLabel / RelatedBillTypeLabel）
-                // 详情跳转目标ID：销售出库单无独立详情页，映射为其关联销售单ID；其余类型直接用单据ID
+                // 详情跳转目标ID = 关联单据ID。
+                // 2026-10-09：销售出库模块已下线，原「出库单 → 其关联销售单」的特例随之移除
+                // （该特例本就无数据：全库 related_bill_type='SALE_OUTBOUND' 的流水 0 条，删掉不改变任何现存流水的跳转行为）
                 Long billId = log.getRelatedBillId();
                 if (billId != null) {
-                    Long detailId = billId;
-                    if ("SALE_OUTBOUND".equals(log.getRelatedBillType())) {
-                        SaleOutbound ob = saleOutboundMapper.selectById(billId);
-                        if (ob != null && ob.getOrderId() != null) detailId = ob.getOrderId();
-                    }
-                    log.setRelatedBillDetailId(detailId);
+                    log.setRelatedBillDetailId(billId);
                 }
             }
 

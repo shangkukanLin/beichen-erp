@@ -149,7 +149,6 @@ const URL_DOMAIN: Array<[RegExp, Domain]> = [
   // 新增域或接口后请务必重跑该 audit 脚本。
   [/^\/inventory\/sale\/check-stock(\/|$)/, 'saleOrder'],
   [/^\/inventory\/sale(\/|$)/, 'saleOrder'],
-  [/^\/inventory\/outbound(\/|$)/, 'saleOrder'],
   [/^\/inventory\/customer(\/|$)/, 'customer'],
   [/^\/inventory\/purchase-exchange(\/|$)/, 'purchaseExchange'],
   [/^\/outsource\/contract-template(\/|$)/, 'outsourceContract'],

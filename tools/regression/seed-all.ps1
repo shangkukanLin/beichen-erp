@@ -34,14 +34,14 @@ $steps = @(
   @{ s = 'seed0_master.ps1';          d = '主数据：品牌/客户/供应商/产品/委外物料+BOM/研发项目/仓库' },
   @{ s = 'seed1_master.ps1';          d = '汇总主数据 ID 到 seed_ids.json（覆盖为完整版）' },
   @{ s = 'seed2_purchase.ps1';        d = '采购：采购单+审核、采购退货、仓间调拨、其他出入库' },
-  @{ s = 'seed3_sale.ps1';            d = '销售：销售单+审核、销售出库、销售退货' },
+  @{ s = 'seed3_sale.ps1';            d = '销售：销售单+审核、销售退货' },
   # RETIRED 2026-09-24：seed4_outsource / seed4b / seed4d_fix 依赖已下线的「手工物料收发单」
   #   （POST /api/outsource/delivery 发料/调拨），已移入 tools/regression/retired/ 不再参与套件。
   #   替代：物料移仓（/api/inventory/material-move）；若后续发现下游缺"发料形态"的库存数据，
   #   再补一个 seed4-material-move.ps1（TODO）。
   @{ s = 'seed4e_deliveries.ps1';     d = '成品入仓单去重并审核' },
   @{ s = 'seed2b_return.ps1';         d = '采购退货（/items 端点变体）' },
-  @{ s = 'seed3b2_outbound.ps1';      d = '销售出库修正（/inventory/outbound）' },
+  # RETIRED 2026-10-09：seed3b2_outbound.ps1（销售出库造数）随**销售出库模块整体下线**一并删除（报告 §7.28）。
   # seed6_aftersale.ps1 已失效（2026-09-14 实测）：其调用的 /outsource/after-sale/return-defect 端点后端已不存在
   # （脚本已标注 OBSOLETE，保留作历史参考）。其"造出售后待整理原料"的原意由 seed8 用现行 API 重写实现：
   # 对已审核销售单建「待整理(PENDING)」销售退货并审核 → 售后仓出现 PENDING 库存 + after_sale_pending 批次。

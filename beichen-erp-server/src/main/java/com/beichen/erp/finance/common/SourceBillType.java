@@ -9,8 +9,6 @@ package com.beichen.erp.finance.common;
  */
 public enum SourceBillType {
 
-    /** 销售出库 */
-    SALE_OUTBOUND("销售出库"),
     /** 销售单 */
     SALE_ORDER("销售单"),
     /** 采购单 */

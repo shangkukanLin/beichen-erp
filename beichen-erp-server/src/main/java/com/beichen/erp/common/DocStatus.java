@@ -4,7 +4,7 @@ package com.beichen.erp.common;
  * 通用单据状态枚举（草稿/已审核/已作废）
  * <p>
  * 覆盖以下表的 status 字段：purchase_inbound（采购入库单）、sale_order（销售单）、
- * sale_outbound（销售出库单）、inventory_warehouse_move（成品移仓单）、
+ * inventory_warehouse_move（成品移仓单）、
  * inventory_other_io（其他出入库）、finance_receipt（收款单）、
  * finance_payment（付款单）。
  * </p>

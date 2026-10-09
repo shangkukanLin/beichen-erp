@@ -244,9 +244,7 @@ const routes: RouteRecordRaw[] = [
       { path: 'sale/return', name: 'SaleReturn', component: () => import('@/views/sale/return/index.vue'), meta: { title: '销售退货单', requiresAuth: true } },
       { path: 'sale/return/add', name: 'SaleReturnAdd', component: () => import('@/views/sale/return/add.vue'), meta: { title: '新增销售退货单', requiresAuth: true, operate: true } },
       { path: 'sale/return/detail/:id', name: 'SaleReturnDetail', component: () => import('@/views/sale/return/detail.vue'), meta: { title: '销售退货单详情', requiresAuth: true, operate: true } },
-      // 销售出库详情（2026-09-24 新增：草稿态在详情页改+存；列表的「编辑」与原只读详情抽屉随之收进本页）。
-      // 注：列表页 /sale/outbound 本身走菜单动态路由，这里只静态补详情页（与 sale/return/detail 同构）。
-      { path: 'sale/outbound/detail/:id', name: 'SaleOutboundDetail', component: () => import('@/views/sale/outbound/detail.vue'), meta: { title: '销售出库详情', requiresAuth: true, operate: true } },
+      // 2026-10-09：销售出库模块整体下线 ⇒ 原 sale/outbound/detail 静态路由已移除（见报告 §7.28）
       // 销售换货（同品换货，强关联销售单：退回入售后仓 + 换出从成品仓扣减）
       { path: 'sale/exchange', name: 'SaleExchange', component: () => import('@/views/sale/exchange/index.vue'), meta: { title: '销售换货单', requiresAuth: true } },
       { path: 'sale/exchange/add', name: 'SaleExchangeAdd', component: () => import('@/views/sale/exchange/add.vue'), meta: { title: '新增/编辑销售换货单', requiresAuth: true, operate: true } },

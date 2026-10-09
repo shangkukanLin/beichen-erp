@@ -13,7 +13,7 @@ $tables = @(
   # outsource
   'outsource_material_order','outsource_material_order_item','outsource_order','outsource_order_product','outsource_order_material','outsource_delivery','outsource_delivery_item','outsource_order_delivery','outsource_order_close_report','outsource_order_close_report_item','outsource_return_order','outsource_return_order_item','outsource_return_order_product','outsource_return_order_repair','outsource_material_return','outsource_material_return_item','outsource_material_return_repair','outsource_other_io','outsource_other_io_item','outsource_stock_loss','outsource_stock_loss_item',
   # sale
-  'sale_order','sale_order_item','sale_outbound','sale_outbound_item','sale_return','sale_return_item','sale_exchange','sale_exchange_item','return_sort','return_sort_item','after_sale_pending',
+  'sale_order','sale_order_item','sale_return','sale_return_item','sale_exchange','sale_exchange_item','return_sort','return_sort_item','after_sale_pending',
   # stock
   'warehouse_stock','warehouse_stock_log','inventory_other_io','inventory_other_io_item','inventory_stock_reclass','inventory_stock_reclass_item','product_reclassify','product_reclassify_item','inventory_warehouse_move','inventory_warehouse_move_item','inventory_stock_take','inventory_stock_take_item','inventory_stock_loss','inventory_stock_loss_item','cost_inbound_log',
   # finance

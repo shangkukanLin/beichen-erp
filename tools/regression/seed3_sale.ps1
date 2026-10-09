@@ -48,32 +48,8 @@ foreach ($s in $drafts) {
 }
 Write-Output ('sale audited=' + $auOk + ' fail=' + $auFail)
 
-# 3) sale outbound for some audited orders
-$allSo = GetP '/api/inventory/sale/page?pageSize=200'
-$auditedSo = @(@($allSo.records) | Where-Object { $_.status -eq 'AUDITED' } | Select-Object -First 6)
-$obOk = 0; $obFail = 0
-foreach ($s in $auditedSo) {
-  $base = '/api/inventory/sale/' + $s.id
-  $det = GetP $base
-  $soItems = GetP ($base + '/items')
-  if (-not $soItems -or $soItems.Count -eq 0) { $obFail++; $msgs += ('no items SO ' + $s.id); continue }
-  $it0 = $soItems[0]
-  $qty = [math]::Max(1, [math]::Floor([decimal]$it0.quantity / 2))
-  $ob = @{ saleOrderId = [int]$s.id; saleOrderCode = $s.code; customerId = [int]$det.customerId; warehouseId = [int]$det.warehouseId
-           outboundDate = '2026-08-19'; status = 'DRAFT'; remark = 'seed outbound'
-           items = @(@{ saleOrderItemId = [int]$it0.id; productId = [int]$it0.productId; qualityType = 'A'; quantity = $qty; unitPrice = $it0.unitPrice; amount = [math]::Round($qty * [decimal]$it0.unitPrice, 2) }) }
-  $r = Post '/api/inventory/sale-outbound' $ob
-  if ($r -and $r.code -eq 200) {
-    Start-Sleep -Milliseconds 250
-    $allOb = GetP '/api/inventory/sale-outbound/page?pageSize=200'
-    $new = @(@($allOb.records) | Where-Object { $_.status -eq 'DRAFT' } | Sort-Object { [int]$_.id } -Descending | Select-Object -First 1)
-    if ($new.Count) {
-      $ra = PutM ('/api/inventory/sale-outbound/' + $new[0].id + '/audit') 'PUT'
-      if ($ra -and $ra.code -eq 200) { $obOk++ } else { $obFail++; $msgs += ('SOB audit: ' + $ra.code + ' ' + $ra.msg) }
-    }
-  } else { $obFail++; $msgs += ('SOB create: ' + $r.code + ' ' + $r.msg) }
-}
-Write-Output ('sale outbound ok=' + $obOk + ' fail=' + $obFail)
+# 3) 销售出库段已移除（2026-10-09）：销售出库模块整体下线（报告 §7.28）。
+#    原段还对早已不存在的 `/api/inventory/sale-outbound` 端点发请求（路径与现行 /inventory/outbound 不符 ⇒ 恒失败）
 
 # 4) sale returns (to after-sale warehouse)
 $allSo = GetP '/api/inventory/sale/page?pageSize=200'

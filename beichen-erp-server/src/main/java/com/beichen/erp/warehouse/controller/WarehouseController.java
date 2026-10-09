@@ -219,10 +219,6 @@ public class WarehouseController {
         if (cnt > 0) associations.put("销售订单", cnt);
 
         cnt = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM sale_outbound WHERE warehouse_id = ?", Integer.class, id);
-        if (cnt > 0) associations.put("销售出库单", cnt);
-
-        cnt = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM warehouse_stock WHERE warehouse_id = ?", Integer.class, id);
         if (cnt > 0) associations.put("库存记录", cnt);
 

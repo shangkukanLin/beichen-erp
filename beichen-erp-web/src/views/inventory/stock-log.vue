@@ -215,7 +215,7 @@ const billDetailRouteMap: Record<string, string> = {
   // 采购/销售/出入库 → 独立详情页
   PURCHASE_ORDER: '/inventory/purchase/detail', PURCHASE_INBOUND: '/inventory/purchase/detail',
   PURCHASE_RETURN: '/inventory/purchase-return/detail',
-  SALE_ORDER: '/inventory/sale/detail', SALE_OUTBOUND: '/inventory/sale/detail',
+  SALE_ORDER: '/inventory/sale/detail',
   SALE_RETURN: '/sale/return/detail', SALE_EXCHANGE: '/sale/exchange/detail',
   OTHER_IO: '/inventory/other-io/detail',
   // 委外模块独立详情页
@@ -229,8 +229,9 @@ const billDetailRouteMap: Record<string, string> = {
   SUPPLIER_SETTLEMENT: '/supplier/manage',
 }
 /**
- * 详情目标ID：默认取 relatedBillId；
- * 销售出库单（SALE_OUTBOUND）的 relatedBillId 指出库单，后端已映射为关联销售单ID（relatedBillDetailId）
+ * 详情目标ID：默认取 relatedBillId。
+ * 注：2026-10-09 销售出库模块已下线 ⇒ 原先「出库单跳其关联销售单」的后端映射（relatedBillDetailId）特例一并移除；
+ * 本函数保留 `relatedBillDetailId ?? relatedBillId` 的兜底（后端仍在回填该字段）。
  */
 function billTargetId(row: any): number | undefined {
   return row?.relatedBillDetailId ?? row?.relatedBillId

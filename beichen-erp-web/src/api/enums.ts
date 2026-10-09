@@ -399,7 +399,7 @@ export const WarehouseCategoryLabel: Record<string, string> = {
 
 /** 应付/应收来源单据类型（对应后端 SourceBillType 枚举） */
 export const SourceBillTypeLabel: Record<string, string> = {
-  SALE_OUTBOUND: '销售出库', SALE_ORDER: '销售单',
+  SALE_ORDER: '销售单',
   PURCHASE_ORDER: '采购单', PURCHASE_INBOUND: '采购入库',
   PURCHASE_RETURN: '采购退货单', SALE_RETURN: '销售退货',
   OUTSOURCE_DELIVERY: '委外加工收货', OUTSOURCE_MATERIAL_DELIVERY: '委外物料收发',
@@ -437,7 +437,7 @@ export function sourceBillTypeLabel(code?: string) { return code ? (SourceBillTy
  * ⚠️ 新增来源类型时两处都要补（缺失时 `sourceBillTypeShortLabel` 回落全称）。
  */
 export const SourceBillTypeShortLabel: Record<string, string> = {
-  SALE_ORDER: '销售单', SALE_OUTBOUND: '销售出库', SALE_RETURN: '销售退货',
+  SALE_ORDER: '销售单', SALE_RETURN: '销售退货',
   SALE_RETURN_CHARGE: '销退收费', SALE_EXCHANGE_CHARGE: '销换收费',
   PURCHASE_ORDER: '采购单', PURCHASE_INBOUND: '采购入库', PURCHASE_RETURN: '采购退货',
   PURCHASE_RETURN_CHARGE: '采退付费', PURCHASE_EXCHANGE_RETURN: '换货退回',
@@ -521,7 +521,6 @@ export const SourceBillDetailRoute: Record<string, string> = {
   // 2026-09-26 B9 修复：这两个前缀原先指向**不存在的列表路径**（/sale/order、/sale/outbound），
   // 消费方又按 `${base}/${id}` 拼 ⇒ 点「来源单号」实际落到 404。改为真正的详情路由。
   SALE_ORDER: '/inventory/sale/detail',
-  SALE_OUTBOUND: '/sale/outbound/detail',
   SALE_RETURN: '/sale/return/detail',
   // F7-54（2026-09-19）：补 4 个跳转前缀 —— 缺键时 goSourceDetail 遇 !base 直接 return，
   // 表现为"来源单号"点不动（不是 404）。4 个路由均已在 router/index.ts 核实存在。
@@ -1028,7 +1027,7 @@ export function stockChangeTypeTag(code?: string): 'success' | 'danger' | 'info'
 export const RelatedBillType = {
   PURCHASE_ORDER: 'PURCHASE_ORDER', PURCHASE_INBOUND: 'PURCHASE_INBOUND', PURCHASE_RETURN: 'PURCHASE_RETURN',
   PURCHASE_EXCHANGE: 'PURCHASE_EXCHANGE',
-  SALE_ORDER: 'SALE_ORDER', SALE_OUTBOUND: 'SALE_OUTBOUND', SALE_RETURN: 'SALE_RETURN', SALE_EXCHANGE: 'SALE_EXCHANGE',
+  SALE_ORDER: 'SALE_ORDER', SALE_RETURN: 'SALE_RETURN', SALE_EXCHANGE: 'SALE_EXCHANGE',
   WAREHOUSE_MOVE: 'WAREHOUSE_MOVE', WAREHOUSE_MOVE_UN_AUDIT: 'WAREHOUSE_MOVE_UN_AUDIT',
   OTHER_IO: 'OTHER_IO',
   OUTSOURCE_DELIVERY: 'OUTSOURCE_DELIVERY', OUTSOURCE_RETURN: 'OUTSOURCE_RETURN', OUTSOURCE_ORDER: 'OUTSOURCE_ORDER',
@@ -1046,7 +1045,6 @@ export const RelatedBillTypeLabel: Record<string, string> = {
   [RelatedBillType.PURCHASE_RETURN]: '采购退货单',
   [RelatedBillType.PURCHASE_EXCHANGE]: '采购换货单',
   [RelatedBillType.SALE_ORDER]: '销售单',
-  [RelatedBillType.SALE_OUTBOUND]: '销售出库',
   [RelatedBillType.SALE_RETURN]: '销售退货单',
   [RelatedBillType.SALE_EXCHANGE]: '销售换货单',
   [RelatedBillType.WAREHOUSE_MOVE]: '移仓单',
