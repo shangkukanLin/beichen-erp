@@ -248,9 +248,11 @@ public class WarehouseStockService {
             } else {
                 // 允许负数的原子加减：updateMaterialQuantity 的 SQL 带 quantity+delta>=0 护栏，这里不能复用。
                 // ⚠️ 这里按**行 ID** 更新（不是按 仓+物料 定位）⇒ 天然不会跨形态累加，无需补形态条件。
+                // 2026-10-08：available_quantity 与 quantity 同步（口径见 insertMaterialStock 的注释）。
                 warehouseStockMapper.update(null, new LambdaUpdateWrapper<WarehouseStock>()
                         .eq(WarehouseStock::getId, exist.getId())
-                        .setSql("quantity = IFNULL(quantity, 0) + (" + quantity.toPlainString() + ")"));
+                        .setSql("quantity = IFNULL(quantity, 0) + (" + quantity.toPlainString() + "), "
+                                + "available_quantity = IFNULL(available_quantity, 0) + (" + quantity.toPlainString() + ")"));
             }
         } else {
             int rows = warehouseStockMapper.updateMaterialQuantity(warehouseId, materialId, stockForm, companyId, quantity);
@@ -441,6 +443,10 @@ public class WarehouseStockService {
         s.setQualityType(QualityType.GOOD.getCode());
         s.setStockForm(stockForm);   // 2026-09-25 P0-2：显式落形态（默认值仅为兼容存量，不能依赖）
         s.setQuantity(quantity);
+        // 2026-10-08：**可用数量必须与 quantity 同步**。schema 列注释写明「可用数量(预留,目前等于quantity)」、
+        // WarehouseStockController 也按"恒等于 quantity"实现；物料侧原先不设该列（落库默认 0）⇒ 物料库存会
+        // 显示成「数量 2400 / 可用 0」。成品侧 insertStock 一直是两者同写，此处对齐口径。
+        s.setAvailableQuantity(quantity);
         if (companyId != null) s.setCompanyId(companyId);
         warehouseStockMapper.insert(s);
     }

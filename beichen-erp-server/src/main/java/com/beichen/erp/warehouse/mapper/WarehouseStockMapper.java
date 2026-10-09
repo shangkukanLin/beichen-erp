@@ -35,6 +35,7 @@ public interface WarehouseStockMapper extends BaseMapper<WarehouseStock> {
     @Update("""
             UPDATE warehouse_stock
             SET quantity = quantity + #{delta},
+                available_quantity = available_quantity + #{delta},
                 update_time = NOW()
             WHERE warehouse_id = #{warehouseId}
               AND material_id = #{materialId}
