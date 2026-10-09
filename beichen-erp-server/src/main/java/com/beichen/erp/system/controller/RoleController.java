@@ -110,13 +110,23 @@ public class RoleController {
         if (count != null && count > 0) {
             throw new BusinessException("角色编码已存在");
         }
-        Role role = new Role();
-        role.setId(dto.getId());
-        role.setRoleName(dto.getRoleName());
-        role.setRoleCode(dto.getRoleCode());
-        role.setStatus(dto.getStatus());
-        role.setRemark(dto.getRemark());
-        roleService.updateById(role);
+        // 2026-10-08：改在**已加载的 exist 实体**上更新，不再新建"只填 5 个字段"的 Role ——
+        // 因为 Role.companyId 是 @TableField(fill = FieldFill.INSERT_UPDATE)，MyBatis-Plus 会把它
+        // **无条件**拼进 UPDATE 的 SET 子句（不加 null 判断）⇒ 新建实体会把 company_id 写成 NULL，
+        // 该角色随即在公司视角下"隐身"（与 RoleServiceImpl.saveRoleMenus 同一根因）。
+        // exist 来自库中，companyId / customizedMenu 等原值原样带回，不会被抹掉。
+        exist.setRoleName(dto.getRoleName());
+        exist.setRoleCode(dto.getRoleCode());
+        exist.setStatus(dto.getStatus());
+        exist.setRemark(dto.getRemark());
+        // 2026-10-09（处理「角色/菜单的修改时间不刷新」）：
+        // Role.companyId 误标的 INSERT_UPDATE 已在实体上从根修正（见 Role.java），上面那段
+        // "必须先加载 exist 把 companyId 带回去"的顾虑已消失（本写法仍保留 —— 更稳，且不依赖实体标注）。
+        // 但 updateTime 的刷新还差这一步：exist 是**刚从库里读出来的对象**，其 updateTime 非空，
+        // 而 MybatisPlusConfig 的 updateFill 用的是 strictUpdateFill（**仅当字段为 null 才填**）
+        // ⇒ 不清空就仍把旧时间原样写回。置 null 让填充器重新盖章为当前时间。
+        exist.setUpdateTime(null);
+        roleService.updateById(exist);
         return R.ok();
     }
 

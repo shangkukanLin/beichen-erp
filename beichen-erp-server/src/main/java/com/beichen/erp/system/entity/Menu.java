@@ -48,8 +48,17 @@ public class Menu {
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
 
-    @TableField(fill = FieldFill.INSERT_UPDATE)
+    /**
+     * 公司归属。⚠️ <b>2026-10-09 修正</b>：本字段原先误标 {@code FieldFill.INSERT_UPDATE}
+     * —— 注解放反了位置（{@code updateTime} 才是该标 INSERT_UPDATE 的那个），与 {@link Role} 同一手误。
+     * 后果：① 该列被**无条件**拼进 UPDATE 的 SET ⇒ 裸实体会把菜单公司归属写成 NULL，菜单在公司视角下"隐身"；
+     * ② {@code updateTime} 无填充标注 ⇒ 编辑保存后修改时间不刷新。
+     * 现与全库其它实体对齐：公司归属只在**新增**时填充。
+     */
+    @TableField(fill = FieldFill.INSERT)
     private Long companyId;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updateTime;
 
     @TableField(exist = false)
