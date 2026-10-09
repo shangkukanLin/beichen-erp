@@ -9,6 +9,8 @@ import 'element-plus/dist/index.css'
 import App from './App.vue'
 import router from './router'
 import { setupPermDirective } from './directives/perm'
+// 表格列宽记忆（2026-10-09）：全局兜底，一次覆盖所有 el-table（口径见 utils/tableWidths.ts）
+import { setupTableWidths } from './utils/tableWidths'
 import './styles/tokens.css'
 import './styles/index.css'
 // 次级页面统一骨架样式（PageShell / SectionCard；2026-09-23 统一模板专项）
@@ -34,5 +36,9 @@ app.use(ElementPlus, { locale: zhCn })
 
 // F3-3 按钮级权限（方案 A）：v-perm="'purchase:exchange:audit'"
 setupPermDirective(app)
+
+// 表格列宽记忆：用户拖动列宽后记住（存服务端、跟用户走、不跟公司走），下次进来仍是这个宽度。
+// 未拖动/未登录/读不到偏好时**完全不动**，默认行为与之前一致。
+setupTableWidths(app)
 
 app.mount('#app')

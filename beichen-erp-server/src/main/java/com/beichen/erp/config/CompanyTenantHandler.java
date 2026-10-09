@@ -17,6 +17,9 @@ public class CompanyTenantHandler implements TenantLineHandler {
     private static final java.util.Set<String> IGNORE_TABLES = java.util.Set.of(
         "sys_company", "sys_user", "sys_role", "sys_menu", "sys_role_menu", "sys_user_role",
         "sys_user_menu",
+        // 2026-10-09（V5）：用户表格列宽偏好 —— 按**用户**维度存储（用户口径：列宽不跟公司走），
+        // 表内没有 company_id 列 ⇒ 必须在这里登记，否则会被拼上 company_id 条件而报 Unknown column。
+        "sys_user_table_pref",
         // F7-99（2026-09-19）：屏幕资料知识库 = 行业基础资料（1268 条机型种子数据），
         // 不是业务数据（清空数据时一律保留）⇒ **各公司共享同一份**，不参与租户隔离；
         // 该表 company_id 已统一置 NULL（DataInitializer 导入时也会归拢）。
