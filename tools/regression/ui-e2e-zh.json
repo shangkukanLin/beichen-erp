@@ -590,5 +590,6 @@
   "msg_repair_need_charge": "维修退货必须填写",
   "btn_add_repair_material": "添加用料行",
   "lbl_tax_included": "是否含税",
-  "lbl_tax_incl_info": "含税情况"
+  "lbl_tax_incl_info": "含税情况",
+  "lbl_contact_incharge": "负责人"
 }

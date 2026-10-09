@@ -29,7 +29,9 @@ function handleQuery() { loadData() }
 function handleReset() { query.warehouseName = ''; loadData() }
 
 const dialogVisible = ref(false); const dialogTitle = ref(''); const submitLoading = ref(false)
-const defForm = () => ({ id: undefined as any, code: '', warehouseName: '', warehouseType: WAREHOUSE_TYPE, address: '', manager: '', phone: '', status: 1, remark: '' })
+// 2026-10-09 修缺陷「编辑仓库填负责人保存不生效」：字段名必须是 **contact**（表/实体的列就叫 contact），
+// 之前写成 manager —— 实体无此属性 ⇒ Jackson 静默丢弃 ⇒ 永不落库、回显恒空 ✗（与自有成品仓页同一缺陷）。
+const defForm = () => ({ id: undefined as any, code: '', warehouseName: '', warehouseType: WAREHOUSE_TYPE, address: '', contact: '', phone: '', status: 1, remark: '' })
 const form = reactive(defForm()); const isEdit = ref(false)
 
 function handleAdd() { Object.assign(form, defForm()); isEdit.value = false; dialogTitle.value = '新增仓库'; dialogVisible.value = true }
@@ -88,7 +90,7 @@ onMounted(() => loadData())
         </el-table-column>
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="manager" label="负责人" width="80" />
+        <el-table-column prop="contact" label="负责人" width="80" />
         <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="155" align="center">
           <template #default="{row}"><el-button v-perm="'outsource:material-warehouse'" type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-perm="'outsource:material-warehouse'" type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button v-perm="'outsource:material-warehouse'" type="warning" link @click.stop="handleToggleStatus(row)">停用</el-button></template>
@@ -103,7 +105,7 @@ onMounted(() => loadData())
         </el-table-column>
         <el-table-column label="仓型" width="90"><template #default="{row}">{{ WarehouseTypeLabel[row.warehouseType] || row.warehouseType }}</template></el-table-column>
         <el-table-column prop="address" label="地址" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="manager" label="负责人" width="80" />
+        <el-table-column prop="contact" label="负责人" width="80" />
         <el-table-column prop="phone" label="联系电话" width="120" />
         <el-table-column label="操作" width="155" align="center">
           <template #default="{row}"><el-button v-perm="'outsource:material-warehouse'" type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-perm="'outsource:material-warehouse'" type="primary" link @click.stop="handleEdit(row)">编辑</el-button><el-button v-perm="'outsource:material-warehouse'" type="success" link @click.stop="handleToggleStatus(row)">启用</el-button></template>
@@ -117,7 +119,7 @@ onMounted(() => loadData())
         <!-- 仓型：本页只管理自有物料仓（辅料仓），值=code、显示=中文 label（原写法把 code 当 label，界面显示 "AUXILIARY"） -->
         <el-form-item label="仓型"><el-select v-model="form.warehouseType" style="width:100%"><el-option :label="WarehouseTypeLabel[WAREHOUSE_TYPE]" :value="WAREHOUSE_TYPE" /></el-select></el-form-item>
         <el-form-item label="地址"><el-input v-model="form.address" /></el-form-item>
-        <el-form-item label="负责人"><el-input v-model="form.manager" /></el-form-item>
+        <el-form-item label="负责人"><el-input v-model="form.contact" /></el-form-item>
         <el-form-item label="联系电话"><el-input v-model="form.phone" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="2" /></el-form-item>
       </el-form>
