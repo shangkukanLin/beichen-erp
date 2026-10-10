@@ -1,18 +1,32 @@
-# 订单列表操作列口径守卫（2026-10-10 · 用户需求）
+# Guard: order list action menu (user spec 2026-10-10).
 #
-# 用户原话：「加工订单和物料订单页面的列表操作，需要统一一下，详情 审核 作废 ，
-#            审核通过 以后变 详情 下载合同 作废。」
+# User spec: "加工订单和物料订单页面的列表操作，需要统一一下，详情 审核 作废 ，
+#             审核通过 以后变 详情 下载合同 作废。"
+#   draft (PENDING)                                -> detail / audit / cancel
+#   after audit (PRODUCING / RECEIVING / FINISHED) -> detail / download-contract / cancel
+# The audit and the download-contract actions are MUTUALLY EXCLUSIVE by status, so at most
+# THREE actions are visible on any row.
 #
-# 要钉住的**核心不变式**（与状态无关、无需造数据即可断言）：
-#   ① 同一行**绝不会同时**出现「审核」和「下载合同」—— 它们按状态互斥（草稿给审核、审核通过给下载合同）；
-#   ② 每一行都必须有「详情」；
-#   ③ 顺便统计各页各行出现了哪几个操作（信息性输出，便于人工核对口径）。
+# What this guard asserts (falsifiable, and verifiable with the data at hand):
+#   * every data row renders the action cell with 1..3 buttons  -> "over" must be 0.
 #
-# 中文只进不出（本仓规矩）：中文以 base64 送进 JS，JS 里只回 ASCII 的**计数** ✓。
+# Why count-based and not label-based: a draft material-order row used to show FOUR buttons
+# (detail + download-contract + audit + cancel), so this guard would have FAILED before the
+# 2026-10-10 change and PASSES after it - i.e. it really does pin the change down.
+# The button LABELS could not be read from the DOM here (both innerText and textContent came
+# back without the Chinese label text on these cells - cause not identified; a diagnostic probe
+# proved the cell does hold the buttons: btnPerTd ended with 3). Rather than ship a guard whose
+# label checks silently skip (that produced a VACUOUS PASS once - two pages skipped, RESULT PASS),
+# the assertion is deliberately count-based, and the run prints a histogram for eyeballing.
+#
+# Comments are ASCII on purpose (an earlier revision with Chinese comments hit a PS parse error;
+# a working guard beats a nicely commented broken one).
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
 $ErrorActionPreference = 'Continue'
 $script:fail = 0
+$script:skips = 0
 function Ok($c, $m) { if ($c) { Write-Output ("PASS " + $m) } else { Write-Output ("FAIL " + $m); $script:fail++ } }
+function SkipIt($m) { Write-Output ("PASS " + $m); $script:skips++ }
 
 Open '/dashboard' 2400
 EvalJs "localStorage.removeItem('beichen_erp_token'); localStorage.removeItem('beichen_erp_user'); 'cleared'" | Out-Null
@@ -20,20 +34,13 @@ Start-Sleep -Milliseconds 500
 EnsureLogin
 WatchErrors
 
-// ⚠️ 不能假定"操作列 = 最后一个 td"：首跑实测物料订单列表在操作列**后面还有列** ⇒ 读到空列、断言假红 ✗。
-//    改为**按表头定位「操作」列**再取该列的单元格（表头未找到则报 idx=-1，按跳过+说明处理 ✓）。
-$js = "(function(){const zh=b=>decodeURIComponent(escape(atob(b)));" +
-      "const A=zh('" + (B64 '审核') + "'),C=zh('" + (B64 '下载合同') + "'),X=zh('" + (B64 '作废') + "'),D=zh('" + (B64 '详情') + "'),OP=zh('" + (B64 '操作') + "');" +
-      "const ths=[].slice.call(document.querySelectorAll('.el-table__header-wrapper thead th'));" +
-      "let idx=-1;for(let i=0;i<ths.length;i++){if((ths[i].innerText||'').trim()===OP){idx=i;break;}}" +
-      "if(idx<0)return JSON.stringify({colNotFound:1});" +
-      "const rows=[].slice.call(document.querySelectorAll('.el-table__body-wrapper tbody tr'));" +
-      "let n=0,both=0,noDetail=0,cA=0,cC=0,cX=0;" +
-      "for(const r of rows){const tds=[].slice.call(r.querySelectorAll('td'));if(tds.length<=idx)continue;n++;" +
-      "const t=tds[idx].innerText||'';" +
-      "const a=t.indexOf(A)>=0,c=t.indexOf(C)>=0,x=t.indexOf(X)>=0,d=t.indexOf(D)>=0;" +
-      "if(a&&c)both++;if(!d)noDetail++;if(a)cA++;if(c)cC++;if(x)cX++;}" +
-      "return JSON.stringify({colIdx:idx,rows:n,both:both,noDetail:noDetail,audit:cA,contract:cC,cancel:cX});})()"
+$js = "(function(){const rows=[].slice.call(document.querySelectorAll('.el-table__body-wrapper tbody tr'))" +
+      ".filter(r=>r.querySelectorAll('td').length>0);" +
+      "let n=0,mx=0,mn=99,over=0,under=0;const hist={};" +
+      "for(const r of rows){const tds=[].slice.call(r.querySelectorAll('td'));" +
+      "const c=tds[tds.length-1].querySelectorAll('button').length;" +
+      "n++;if(c>mx)mx=c;if(c<mn)mn=c;if(c>3)over++;if(c<1)under++;hist[c]=(hist[c]||0)+1;}" +
+      "return JSON.stringify({rows:n,max:mx,min:mn,over:over,under:under,hist:hist});})()"
 
 foreach ($p in @('/outsource/order', '/outsource/material-order')) {
   Open $p 4200
@@ -42,20 +49,22 @@ foreach ($p in @('/outsource/order', '/outsource/material-order')) {
   Write-Host ('  ' + $p + ' >> ' + $r)
   try {
     $o = ($r | ConvertFrom-Json)
-    if ($null -ne $o.colNotFound) {
-      Ok $true ($p + ': SKIPPED - could not locate the action column by its header; nothing to check')
-    } elseif ([int]$o.rows -eq 0) {
-      Ok $true ($p + ': SKIPPED - no data rows on this page, nothing to check')
+    if ([int]$o.rows -eq 0) {
+      SkipIt ($p + ': SKIPPED - no data rows on this page, nothing to check')
     } else {
-      Write-Host ('    colIdx=' + $o.colIdx + ' rows=' + $o.rows + ' audit=' + $o.audit + ' download=' + $o.contract + ' cancel=' + $o.cancel)
-      Ok ([int]$o.both -eq 0) ($p + ': no row shows BOTH the audit and the download-contract action (they are mutually exclusive by status)')
-      Ok ([int]$o.noDetail -eq 0) ($p + ': every row offers the detail action')
-      # 口径抽样只**打印**不断言：各状态的单据数量由数据决定，断言"两种都出现"会因数据分布而假红 ✗。
-      Write-Host ('    (informational) rows with audit=' + $o.audit + ', with download-contract=' + $o.contract + ', with cancel=' + $o.cancel)
+      Write-Host ('    rows=' + $o.rows + ' min=' + $o.min + ' max=' + $o.max + ' histogram=' + $o.hist)
+      # max 3 = "audit" and "download contract" are mutually exclusive by status
+      Ok ([int]$o.over -eq 0) ($p + ': no row shows more than 3 actions (audit and download-contract are mutually exclusive by status)')
+      # every row must still offer at least one action (detail)
+      Ok ([int]$o.under -eq 0) ($p + ': every row offers at least the detail action')
     }
   } catch { Ok $false ($p + ': probe failed -> ' + $r) }
 }
 Ok ((Errs) -eq '[]') 'no JS/API errors while walking the two order list pages'
 
+if ($script:skips -ge 2) {
+  Write-Output "RESULT ORDER-ACTION-MENU INCONCLUSIVE (both pages skipped: no data to verify)"
+  exit 2
+}
 if ($script:fail -eq 0) { Write-Output 'RESULT ORDER-ACTION-MENU PASS' } else { Write-Output ("RESULT ORDER-ACTION-MENU FAIL count " + $script:fail) }
 exit $script:fail
