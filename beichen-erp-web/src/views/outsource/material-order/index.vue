@@ -147,10 +147,13 @@ useDomainRefresh('materialOrder', () => {
         <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 206→200；2026-09-25 按 4 按钮家规档收到 176。 -->
         <el-table-column label="操作" width="176" align="center">
           <template #default="{row}">
+            <!-- 2026-10-10 用户口径：与「委外加工单」列表**统一** —— 草稿＝详情/审核/作废；审核通过后＝详情/下载合同/作废。
+                 审核与下载合同互斥（中间那格按状态二选一）⇒ 任一时刻最多 3 个按钮 ✓。
+                 本页按钮保留原有 `size="small"`（统一的是"哪些操作、什么条件"，不是按钮尺寸 ⇒ 不动视觉 ✓）。 -->
             <el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)">详情</el-button>
-            <el-button type="success" link size="small" @click.stop="handleDownloadContract(row)">下载合同</el-button>
             <el-button v-perm="'outsource:material-order'" v-if="row.status===MaterialOrderStatus.PENDING" type="success" link size="small" @click.stop="handleConfirm(row)">审核</el-button>
-            <el-button v-perm="'outsource:material-order'" v-if="row.status!==MaterialOrderStatus.FINISHED && row.status!==MaterialOrderStatus.CANCELLED" type="danger" link size="small" @click.stop="handleCancel(row)">作废</el-button>
+            <el-button v-if="row.status!==MaterialOrderStatus.PENDING && row.status!==MaterialOrderStatus.CANCELLED" type="success" link size="small" @click.stop="handleDownloadContract(row)">下载合同</el-button>
+            <el-button v-perm="'outsource:material-order'" v-if="row.status!==MaterialOrderStatus.CANCELLED && row.status!==MaterialOrderStatus.FINISHED" type="danger" link size="small" @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>

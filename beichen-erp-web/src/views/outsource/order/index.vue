@@ -36,6 +36,16 @@ function onTabChange() { pagination.pageNum = 1; loadData() }
 function handleQuery() { pagination.pageNum = 1; loadData() }
 function handleReset() { query.code = ''; query.factoryId = undefined; loadData() }
 
+/**
+ * 审核（2026-10-10 用户口径：与「委外物料订单」列表统一 —— 草稿行直接给「审核」入口，不用先进详情页）。
+ *
+ * <p>后端 `PUT /outsource/order/{id}/audit` **无请求体**（OutsourceOrderController:303-308 ✓）
+ * ⇒ 列表页可直接调用，不需要先补计划交期之类的参数 ✓。确认框文案与物料订单页保持一致 ✓。</p>
+ */
+async function handleConfirm(row: any) {
+  try { await ElMessageBox.confirm('审核后将进入生产中状态', '审核订单', { type: 'warning' }); await request.put(`/outsource/order/${row.id}/audit`); ElMessage.success('已审核'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
+}
+
 async function handleCancel(row: any) {
   try { await ElMessageBox.confirm('确定作废该加工单吗？', '提示', { type: 'warning' }); await request.put(`/outsource/order/${row.id}/cancel`); ElMessage.success('已作废'); loadData() } catch (e: any) { if (e !== 'cancel' && e !== 'close') { console.error(e) } }
 }
@@ -152,9 +162,14 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="操作" width="176" align="center">
           <template #default="{row}">
+            <!-- 2026-10-10 用户口径：列表操作按状态统一 —— **草稿＝详情/审核/作废**；**审核通过后＝详情/下载合同/作废**。
+                 审核与下载合同**互斥**（中间那格按状态二选一）⇒ 任一时刻最多 3 个按钮 ⇒ 操作列 176px 无需改宽 ✓。
+                 下载合同=订单上**已上传的合同附件**（attachUrl，非模板生成；详情页才是按模板生成 DOCX ✓），
+                 未上传会弹提示引导去详情上传 ✓。 -->
             <el-button type="primary" link @click.stop="router.push(`/outsource/order/detail/${row.id}`)">详情</el-button>
-            <el-button type="success" link @click.stop="handleDownloadContract(row)">下载合同</el-button>
-            <el-button v-perm="'outsource:order'" type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED" @click.stop="handleCancel(row)">作废</el-button>
+            <el-button v-perm="'outsource:order'" v-if="row.status===OutsourceOrderStatus.PENDING" type="success" link @click.stop="handleConfirm(row)">审核</el-button>
+            <el-button v-if="row.status!==OutsourceOrderStatus.PENDING && row.status!==OutsourceOrderStatus.CANCELLED" type="success" link @click.stop="handleDownloadContract(row)">下载合同</el-button>
+            <el-button v-perm="'outsource:order'" type="danger" link v-if="row.status!==OutsourceOrderStatus.CANCELLED && row.status!==OutsourceOrderStatus.FINISHED" @click.stop="handleCancel(row)">作废</el-button>
           </template>
         </el-table-column>
       </el-table>
