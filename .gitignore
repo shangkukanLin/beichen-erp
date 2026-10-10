@@ -42,3 +42,9 @@ beichen-erp-server/scripts/
 # 后端本地配置（含数据库密码，禁止入库）
 beichen-erp-server/config/
 
+# docs 下的二进制安装包（客户端 / 证书，6MB+，非代码 —— 沿用前几批"不入库"口径；2026-10-10）
+docs/*.zip
+docs/北辰ERP客户端-绿色版/
+docs/北辰ERP客户端安装包/
+docs/证书安装包/
+
