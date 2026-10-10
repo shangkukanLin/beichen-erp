@@ -492,7 +492,9 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
       <div style="margin-bottom:8px"><el-select v-model="retWarehouseId" filterable style="width:100%" placeholder="选择退货仓库（默认＝第一个可退仓，可改）" @change="onRetWhChange"><el-option v-for="w in retWarehouseOptions" :key="w.id" :label="w.warehouseName" :value="w.id" /></el-select></div>
       <div style="margin-bottom:8px;padding:6px 10px;background:#fdf6ec;border-left:3px solid var(--app-color-warning);font-size:var(--app-font-xs);color:var(--app-color-warning)">保存为<b>草稿</b>：需在「收货记录」里点「审核」后才会 ① 从退货仓扣减库存 ② 冲减该订单已收数量 ③ 冲减应付（「反审核」原路回滚）。</div>
       <el-table :data="retItems" border size="small">
-        <el-table-column prop="materialName" label="物料" min-width="140" />
+        <el-table-column label="物料" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column prop="available" label="可退" width="70" />
         <el-table-column label="仓库库存" width="90" align="right"><template #default="{ row }"><span v-if="row.stockLoading">加载中...</span><span v-else-if="row.warehouseStock === undefined" style="color:var(--app-text-placeholder)">—</span><span v-else :style="{ color: row.warehouseStock < row.quantity ? 'var(--app-color-danger)' : 'var(--app-color-success)' }">{{ row.warehouseStock }}</span></template></el-table-column>
         <el-table-column label="退货数量" width="140"><template #default="{ row }"><el-input-number v-model="row.quantity" size="small" :controls="false" :precision="0" :step="1" :max="row.available" style="width:100%" placeholder="数量" /></template></el-table-column>

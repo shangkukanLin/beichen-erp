@@ -224,7 +224,7 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
         <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
         <el-table-column prop="materialName" label="物料名称" min-width="120">
           <template #default="{row}">
-            {{ row.materialName }}
+            {{ $mLabel(row) }}
             <el-tooltip v-if="rowShortage(row)" content="退料数量超过工厂委外仓账面库存，需勾选「强制退料」才能结单" placement="top">
               <el-tag type="danger" size="small" effect="plain" style="margin-left:4px">账面不足</el-tag>
             </el-tooltip>
