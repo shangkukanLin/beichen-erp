@@ -36,11 +36,24 @@ $targets = @()
 # ⚠️ 2026-10-10 修：原正则用 `[^\r\n]*?` ⇒ **不能跨行** ✗，而有些路由的 `path:` 与 `component:` 是
 #    分两行写的（如 dev/project/add）⇒ 这些页**根本没进扫描目标**，扫描却仍报 PASS（"扫不到=通过"的假绿 ✗，
 #    用户报的「玻璃分辨率」折行就在这类页上）。改为允许跨行但**限定跨度**（{0,400} 惰性 ⇒ 不会误吃到下一条路由）。
-foreach ($m in [regex]::Matches($router, "path:\s*'([^']+)'[\s\S]{0,400}?component:")) {
+#    ⇒ 正则提到变量里：下面的**自检**与这里**必须是同一条**，否则自检形同虚设 ✗。
+$rxRoute = "path:\s*'([^']+)'[\s\S]{0,400}?component:"
+foreach ($m in [regex]::Matches($router, $rxRoute)) {
   $p = $m.Groups[1].Value
   if ($p -match ':' -or $p -eq '') { continue }
   $targets += ('/' + $p)
 }
+
+# --- "漏扫 ≠ 通过"自检（2026-10-10）------------------------------------------------------------
+# 这类 bug 的现象是**漏扫却报 PASS**，页面侧断言发现不了 ✗ ⇒ 这里直接验证"目标构建"这件事本身：
+#   ① 用一段**人造的两行路由**喂同一条正则 ⇒ 必须能匹配（正是 2026-10-10 那次漏扫的原因 ✓）；
+#   ② target 数量不能少得像"正则又退化了"（floor 取 30，远低于实测规模 ⇒ 不会误报 ✓）。
+# ⚠️ 没有做"把路由文件里每个 path 都枚举一遍再与 targets 比对"：路由文件里有 **children 嵌套的相对路径**
+#    （如 path: 'product-stock'），它们本来就该出现在绝对路径 target 里 ⇒ 逐条比对会**必然误报** ✗（试过 ✓）。
+$selfTestRoute = "      { path: 'selftest/route',`n        name: 'SelfTest',`n        component: () => import('@/views/x.vue') },"
+Ok ([regex]::IsMatch($selfTestRoute, $rxRoute)) 'the target regex still matches a route whose path and component sit on DIFFERENT lines (the 2026-10-10 miss)'
+Ok ($targets.Count -ge 30) ('the sweep built a plausible target list (targets: ' + $targets.Count + ')')
+
 $oid = SqlOne "SELECT id FROM outsource_order ORDER BY id DESC LIMIT 1"
 $moid = SqlOne "SELECT id FROM outsource_material_order ORDER BY id DESC LIMIT 1"
 $mrL = SqlOne "SELECT id FROM outsource_material_return WHERE return_type='REFUND' AND material_order_id IS NOT NULL ORDER BY id DESC LIMIT 1"
