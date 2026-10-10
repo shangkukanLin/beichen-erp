@@ -6,6 +6,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
+// 2026-10-10 用户口径「物料名称前面需要显示物料类型」：本页导出原本只导出纯名称 ⇒ 补类型前缀 ✓
+// （这是导出里唯一"没有独立类型列"的页面 —— 委外/自有仓库详情的导出本来就带类型列，故未动 ✓）
+import { materialLabel } from '@/utils/materialLabel'
 import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute(); const router = useRouter()
@@ -77,7 +80,7 @@ async function exportHistory() {
       fmtDateTime(r.createTime),
       r.relatedOrderCode || '',
       StockChangeTypeLabel[r.changeType] || r.changeType || '',
-      r.materialName || '',
+      materialLabel(r),
       Number(r.beforeQuantity ?? 0),
       Number(r.changeQuantity ?? 0),
       Number(r.afterQuantity ?? 0),

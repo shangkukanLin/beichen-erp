@@ -43,6 +43,9 @@ import { MaterialOrderStatus, MaterialOrderStatusLabel, MaterialOrderStatusTag, 
 import { DocStatus, DocStatusLabel, DocStatusTag } from '@/api/common'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import { invalidate } from '@/utils/dataFreshness'
+// 2026-10-10 用户口径「物料名称前面需要显示物料类型」：**打印**里的物料名也要带类型 ✓
+// （脚本里取不到全局 `$mLabel` ⇒ 直接引函数 ✓）
+import { materialLabel } from '@/utils/materialLabel'
 
 defineOptions({ name: 'OutsourceMaterialOrderDeliveryDetail' })
 
@@ -156,7 +159,7 @@ async function handleReceive(force?: boolean, overReceipt?: boolean) {
       html += '<table style="width:100%;border-collapse:collapse;font-size:var(--app-font-base)">'
       html += '<tr style="background:var(--app-bg-hover)"><th style="padding:6px;border:1px solid var(--app-border-light);text-align:left">物料</th><th style="padding:6px;border:1px solid var(--app-border-light)">下单数</th><th style="padding:6px;border:1px solid var(--app-border-light)">已收</th><th style="padding:6px;border:1px solid var(--app-border-light)">剩余可收</th><th style="padding:6px;border:1px solid var(--app-border-light)">本次收货</th><th style="padding:6px;border:1px solid var(--app-border-light)">超出</th></tr>'
       for (const o of overs) {
-        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${o.materialName || ''}</td>`
+        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${materialLabel(o)}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center">${o.ordered || 0}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center">${o.received || 0}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center">${o.remain || 0}</td>`
@@ -179,7 +182,7 @@ async function handleReceive(force?: boolean, overReceipt?: boolean) {
       html += '<table style="width:100%;border-collapse:collapse;font-size:var(--app-font-base)">'
       html += '<tr style="background:var(--app-bg-hover)"><th style="padding:6px;border:1px solid var(--app-border-light);text-align:left">物料名称</th><th style="padding:6px;border:1px solid var(--app-border-light)">需要</th><th style="padding:6px;border:1px solid var(--app-border-light)">库存</th><th style="padding:6px;border:1px solid var(--app-border-light)">缺口</th></tr>'
       for (const s of shortages) {
-        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${s.materialName || ''}</td>`
+        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${materialLabel(s)}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-warning)">${s.demand || 0}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger)">${s.stock || 0}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger);font-weight:600">${s.shortage || 0}</td></tr>`

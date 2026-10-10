@@ -10,6 +10,9 @@
  * 草稿行仍是 审核/编辑/删除（加工退货红冲为 作废）。记录详情页保持不变（只读）。</p>
  */
 import { localDate } from '@/utils/date'
+// 2026-10-10 用户口径「物料名称前面需要显示物料类型」：**打印/导出**里的物料名同样要带类型 ✓
+// （脚本里取不到全局 `$mLabel` ⇒ 直接引函数 ✓）
+import { materialLabel } from '@/utils/materialLabel'
 import { reactive, ref, computed, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -206,7 +209,7 @@ async function handleSubmit(forceDelivery = false, overReceipt = false) {
       html += '<table style="width:100%;border-collapse:collapse;font-size:var(--app-font-base)">'
       html += '<tr style="background:var(--app-bg-hover)"><th style="padding:6px;border:1px solid var(--app-border-light);text-align:left">物料名称</th><th style="padding:6px;border:1px solid var(--app-border-light)">需要</th><th style="padding:6px;border:1px solid var(--app-border-light)">库存</th><th style="padding:6px;border:1px solid var(--app-border-light)">缺口</th></tr>'
       for (const s of shortages) {
-        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${s.materialName || ''}</td>`
+        html += `<tr><td style="padding:6px;border:1px solid var(--app-border-light)">${materialLabel(s)}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-warning)">${s.needed || 0}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger)">${s.stock || 0}</td>`
         html += `<td style="padding:6px;border:1px solid var(--app-border-light);text-align:center;color:var(--app-color-danger);font-weight:600">${s.gap || 0}</td></tr>`
