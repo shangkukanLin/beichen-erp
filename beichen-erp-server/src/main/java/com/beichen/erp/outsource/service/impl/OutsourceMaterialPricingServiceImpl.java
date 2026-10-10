@@ -9,6 +9,7 @@ import com.beichen.erp.outsource.mapper.MaterialOrderItemMapper;
 import com.beichen.erp.outsource.mapper.MaterialOrderMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.outsource.service.OutsourceMaterialPricingService;
+import com.beichen.erp.warehouse.service.CostService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,6 +36,8 @@ public class OutsourceMaterialPricingServiceImpl implements OutsourceMaterialPri
     private final MaterialOrderMapper materialOrderMapper;
     private final MaterialOrderItemMapper materialOrderItemMapper;
     private final OutsourceMaterialMapper outsourceMaterialMapper;
+    /** 2026-10-09：物料**完全成本**（自身加权 + 子物料递归），与产品成本/结单/报损同口径 */
+    private final CostService costService;
 
     @Override
     public BigDecimal weightedPrice(Long supplierId, Long materialId) {
@@ -54,9 +57,11 @@ public class OutsourceMaterialPricingServiceImpl implements OutsourceMaterialPri
     public BigDecimal fifoPriceWithFallback(Long materialId, BigDecimal requiredQty) {
         if (materialId == null) return ZERO;
         // 1) 成本价优先（覆盖委外其他出入库 / 结算退料等非物料订单来源；原实现只扫物料订单 ⇒ 会算出 0）
+        //    2026-10-09：改用**完全成本**（自身移动加权 + 子物料递归展开），
+        //    原先只取自身 cost_price ⇒ 装配件的子物料成本被漏掉（与产品成本同上一个缺口）。
         OutsourceMaterial mat = outsourceMaterialMapper.selectById(materialId);
-        if (mat != null && mat.getCostPrice() != null && mat.getCostPrice().compareTo(ZERO) > 0)
-            return mat.getCostPrice();
+        BigDecimal fullCost = costService.materialFullCost(materialId);
+        if (fullCost.compareTo(ZERO) > 0) return fullCost;
         // 2) FIFO 兜底
         BigDecimal fifo = fifo(materialId, requiredQty);
         if (fifo.compareTo(ZERO) > 0) return fifo;

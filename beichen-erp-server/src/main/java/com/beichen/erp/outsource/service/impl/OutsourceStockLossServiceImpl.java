@@ -63,6 +63,8 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
     /** 报损落账（2026-09-29 用户口径「报损需要走财务流程」）：内部损失⇒损失费用单；加工厂/供应商承担⇒对供应商应收（索赔） */
     private final StockLossAccountingHelper stockLossAccounting;
     private final SupplierMapper supplierMapper;
+    /** 2026-10-09：物料**完全成本**（自身加权 + 子物料递归）—— 报损默认价与产品成本/退货同口径 */
+    private final com.beichen.erp.warehouse.service.CostService costService;
 
     @Override
     public Page<OutsourceStockLoss> page(String status, Long warehouseId, String lossReason, String keyword,
@@ -435,7 +437,9 @@ public class OutsourceStockLossServiceImpl implements OutsourceStockLossService 
                 if (it.getMaterialTypeId() == null) it.setMaterialTypeId(m.getMaterialTypeId());
                 // 单价未填时优先最近进价，其次物料单价
                 if (it.getUnitPrice() == null) {
-                    it.setUnitPrice(firstNonZero(m.getLastInPrice(), m.getPrice(), m.getCostPrice()));
+                    // 2026-10-09：兜底链末位由「自身成本价」改为**完全成本**（含子物料递归展开）
+                    it.setUnitPrice(firstNonZero(m.getLastInPrice(), m.getPrice(),
+                            costService.materialFullCost(m.getId())));
                 }
             }
             if (it.getMaterialTypeId() != null) {

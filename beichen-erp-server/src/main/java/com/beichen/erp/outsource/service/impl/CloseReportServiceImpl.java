@@ -99,6 +99,8 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
     private final com.beichen.erp.outsource.service.OutsourceMaterialPricingService pricingService;
     /** F7-81-③（2026-09-20）：复用收发单的仓库规则 —— 结单自动退料也必须满足「调拨」的仓库约束 */
     private final com.beichen.erp.outsource.service.DeliveryService deliveryService;
+    /** 2026-10-09：物料**完全成本**（自身加权 + 子物料递归）—— 结单报告物料单价与退货/产品成本同口径 */
+    private final com.beichen.erp.warehouse.service.CostService costService;
 
     @Override
     public Map<String, Object> getOrCreateReport(Long orderId) {
@@ -269,8 +271,10 @@ public class CloseReportServiceImpl extends ServiceImpl<CloseReportMapper, Close
         // 物料单价：优先取系统移动加权成本（与退货计价口径一致）→ 物料主数据参考价 → 发料成本（其他出入库填写价 → 物料订单先进先出）
         BigDecimal unitPrice = BigDecimal.ZERO;
         OutsourceMaterial matInfo = outsourceMaterialMapper.selectById(mat.getMaterialId());
-        if (matInfo != null && matInfo.getCostPrice() != null && matInfo.getCostPrice().compareTo(BigDecimal.ZERO) > 0) {
-            unitPrice = matInfo.getCostPrice();
+        // 2026-10-09：优先取**完全成本**（自身移动加权 + 子物料递归展开）；未建立时退回参考价（口径不变）
+        BigDecimal fullCost = costService.materialFullCost(mat.getMaterialId());
+        if (fullCost.compareTo(BigDecimal.ZERO) > 0) {
+            unitPrice = fullCost;
         } else if (matInfo != null && matInfo.getPrice() != null && matInfo.getPrice().compareTo(BigDecimal.ZERO) > 0) {
             unitPrice = matInfo.getPrice();
         } else {

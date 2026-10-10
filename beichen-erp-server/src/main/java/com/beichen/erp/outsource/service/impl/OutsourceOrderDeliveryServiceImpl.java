@@ -1646,11 +1646,11 @@ public class OutsourceOrderDeliveryServiceImpl
                 continue;
             }
             BigDecimal needed = mat.perUnit().multiply(deliveryQty).setScale(0, RoundingMode.HALF_UP);
-            // 材料成本取物料移动加权成本价，未建立时退回主数据参考单价
-            OutsourceMaterial matMaster = outsourceMaterialMapper.selectById(mat.materialId());
-            BigDecimal matUnitCost = matMaster != null && matMaster.getCostPrice() != null
-                    ? matMaster.getCostPrice()
-                    : (matMaster != null && matMaster.getPrice() != null ? matMaster.getPrice() : BigDecimal.ZERO);
+            // 材料成本取物料**完全成本**（= 自身移动加权成本 + 子物料完全成本 × 用量 ×(1+损耗率)，递归展开）——
+            // 2026-10-09：原先只取自身 cost_price ⇒ 装配件（如「排线 X60Pro」含子物料「触摸IC S3909」）
+            // 的子物料成本被完全忽略（实测 7.0000 应为 11.1724），并沿「物料→加工单→产品成本」一路放大。
+            // 未建立成本时的退回参考价口径不变（已收敛进 CostService.materialFullCost）。
+            BigDecimal matUnitCost = costService.materialFullCost(mat.materialId());
             totalMaterialCost = totalMaterialCost.add(matUnitCost.multiply(needed));
             // 物料写入统一到 WarehouseStockService（架构债 A2）：本方法是"允许负数"口径
             //（forceDelivery 可忽略缺料继续出库），故用 changeMaterialStockAllowNegative，不做充足校验

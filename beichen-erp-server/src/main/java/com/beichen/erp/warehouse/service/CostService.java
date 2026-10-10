@@ -5,6 +5,8 @@ import com.beichen.erp.config.CompanyContext;
 import com.beichen.erp.material.entity.Product;
 import com.beichen.erp.material.mapper.ProductMapper;
 import com.beichen.erp.outsource.entity.OutsourceMaterial;
+import com.beichen.erp.outsource.entity.OutsourceMaterialComponent;
+import com.beichen.erp.outsource.mapper.OutsourceMaterialComponentMapper;
 import com.beichen.erp.outsource.mapper.OutsourceMaterialMapper;
 import com.beichen.erp.warehouse.entity.CostInboundLog;
 import com.beichen.erp.warehouse.entity.WarehouseStock;
@@ -17,7 +19,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * 移动加权平均成本服务（一期）。
@@ -44,6 +50,8 @@ public class CostService {
     private final WarehouseStockMapper stockMapper;
     private final ProductMapper productMapper;
     private final OutsourceMaterialMapper materialMapper;
+    /** 2026-10-09：物料「子物料组成」（{@link #materialFullCost} 递归展开用） */
+    private final OutsourceMaterialComponentMapper componentMapper;
 
     /** 产品入库加权（采购入库/委外交货等） */
     @Transactional(rollbackFor = Exception.class)
@@ -89,6 +97,81 @@ public class CostService {
     /** 委外物料成本兜底 */
     public void fillMaterialCostIfEmpty(Long materialId) {
         fillCostIfEmpty(TYPE_MATERIAL, materialId);
+    }
+
+    // ==================== 物料「完全成本」（含子物料，2026-10-09 新增） ====================
+
+    /**
+     * 委外物料的<b>完全成本</b>：
+     * <pre>
+     *   完全成本 = 自身成本 + Σ( 子物料完全成本 × 用量 × (1 + 损耗率/100) )
+     * </pre>
+     *
+     * <p><b>为什么需要它</b>：委外物料可以是<b>装配件</b>（见 {@code outsource_material_component}，
+     * 如「排线 X60Pro」含子物料「触摸IC S3909」）。原实现各处计价只取 {@code cost_price}（自身加权成本），
+     * <b>子物料成本从未计入</b> —— 实测排线自身 7.0000 + 子物料 4.1724 应为 11.1724，被低估 37%，
+     * 并沿「物料 → 加工单 → 产品成本」一路放大。</p>
+     *
+     * <p><b>为什么是"算"出来、而不是把子物料写进 {@code cost_price}</b>：加权平均的入参必须是
+     * <b>自身</b>成本（见 {@link #apply}）。若把子物料成本并进 {@code cost_price}，下一批入库加权时
+     * 会把它当成"自身价"一起加权 ⇒ 子物料成本被反复放大，越滚越离谱。
+     * 故 {@code cost_price} 语义保持不变（自身成本），完全成本按需计算。</p>
+     *
+     * <p><b>递归与防环</b>：按 {@code parent_outsource_material_id} 递归展开，支持多层装配；
+     * 用 {@code visiting} 做<b>环检测</b>（A→B→A 时该分支记 0 并告警，绝不死循环）；
+     * 用 {@code memo} 记忆化，同一物料一次调用只查一次库。</p>
+     *
+     * <p><b>损耗率口径</b>：按<b>百分数</b>理解（与界面「损耗率%」一致，2 = 2%）⇒ 系数 = 1 + 损耗率/100。</p>
+     *
+     * <p><b>调用点</b>（凡"把物料成本计入金额"之处）：产品成本（加工单收货扣料）、
+     * 退货/维修计价（{@code fifoPriceWithFallback}）、结单报告物料单价、物料报损默认价。</p>
+     *
+     * @param materialId 委外物料ID（null ⇒ 0）
+     * @return 完全成本，保留 4 位小数（与 {@code cost_price} 同精度）
+     */
+    public BigDecimal materialFullCost(Long materialId) {
+        return materialFullCost(materialId, new HashSet<>(), new HashMap<>());
+    }
+
+    private BigDecimal materialFullCost(Long materialId, Set<Long> visiting, Map<Long, BigDecimal> memo) {
+        if (materialId == null) {
+            return ZERO;
+        }
+        BigDecimal cached = memo.get(materialId);
+        if (cached != null) {
+            return cached;
+        }
+        if (!visiting.add(materialId)) {
+            // 环：该分支记 0 并告警（不缓存 —— 这不是该物料的真实成本）
+            log.warn("[物料完全成本] 子物料组成存在环：物料 {} 重复出现，该分支按 0 计（请检查 outsource_material_component）",
+                    materialId);
+            return ZERO;
+        }
+        BigDecimal total = ownCostOf(materialId);
+        List<OutsourceMaterialComponent> comps = componentMapper.selectList(
+                new LambdaQueryWrapper<OutsourceMaterialComponent>()
+                        .eq(OutsourceMaterialComponent::getParentMaterialId, materialId));
+        for (OutsourceMaterialComponent c : comps) {
+            if (c.getChildMaterialId() == null) continue;
+            BigDecimal qty = c.getQuantity() == null ? ZERO : c.getQuantity();
+            if (qty.compareTo(ZERO) <= 0) continue;
+            BigDecimal loss = c.getLossRate() == null ? ZERO : c.getLossRate();
+            BigDecimal factor = BigDecimal.ONE.add(loss.divide(BigDecimal.valueOf(100), 6, RoundingMode.HALF_UP));
+            total = total.add(materialFullCost(c.getChildMaterialId(), visiting, memo)
+                    .multiply(qty).multiply(factor));
+        }
+        visiting.remove(materialId);
+        BigDecimal result = total.setScale(SCALE, RoundingMode.HALF_UP);
+        memo.put(materialId, result);
+        return result;
+    }
+
+    /** 物料"自身"成本：移动加权 {@code cost_price}；未建立（NULL/0）时退回主数据参考价 {@code price} */
+    private BigDecimal ownCostOf(Long materialId) {
+        OutsourceMaterial m = materialMapper.selectById(materialId);
+        if (m == null) return ZERO;
+        if (m.getCostPrice() != null && m.getCostPrice().compareTo(ZERO) > 0) return m.getCostPrice();
+        return m.getPrice() != null ? m.getPrice() : ZERO;
     }
 
     /** 反审核冲销：按 变动类型+单据ID 删除批次并反加权（同单多产品/多明细全部处理） */
