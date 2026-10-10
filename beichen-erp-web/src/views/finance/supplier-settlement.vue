@@ -201,7 +201,7 @@ useDomainRefresh('supplierSettlement', async () => { await loadAll(); refreshChe
       <el-alert type="warning" :closable="false" style="margin-bottom:12px">
         将该供应商所有委外仓的物料（{{ (data.stocks||[]).length }} 项）全部退回我方仓库，并生成退料单。
       </el-alert>
-      <el-form label-width="90px">
+      <el-form label-width="var(--app-label-width-lg)">
         <el-form-item label="退回目标仓" required>
           <RemoteSelect v-model="returnWarehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="选择我方仓库" style="width:100%" domain="warehouse" />
         </el-form-item>

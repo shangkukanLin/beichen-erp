@@ -134,7 +134,7 @@ onActivated(async ()=>{ await loadData(); takeBaseline() })
     </template>
 
     <el-card shadow="never">
-      <el-form :model="form" label-width="var(--app-label-width)" size="small" :disabled="readonly">
+      <el-form :model="form" label-width="var(--app-label-width-lg)" size="small" :disabled="readonly">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="状态"><el-tag :type="DocStatusTag[form.status] || 'info'">{{ DocStatusLabel[form.status] || form.status }}</el-tag></el-form-item></el-col>
           <!-- 类型只读：2026-09-16 流程重构后手工只支持 发料/调拨；收料/退不良为系统自动单、退料已下线（历史可查） -->
@@ -187,7 +187,7 @@ onActivated(async ()=>{ await loadData(); takeBaseline() })
     <!-- 物流信息 & 附件 -->
     <el-card shadow="never" style="margin-top:12px">
       <template #header><span style="font-weight:600">物流信息 & 附件</span></template>
-      <el-form :model="form" label-width="var(--app-label-width)" size="small" :disabled="readonly">
+      <el-form :model="form" label-width="var(--app-label-width-lg)" size="small" :disabled="readonly">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="物流公司"><el-input v-model="form.logisticsCompany" placeholder="如顺丰" /></el-form-item></el-col>
           <el-col :span="8"><el-form-item label="物流单号"><el-input v-model="form.logisticsNo" /></el-form-item></el-col>

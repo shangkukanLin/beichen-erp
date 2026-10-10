@@ -200,7 +200,7 @@ onActivated(() => { loadDetail() })
     <el-card shadow="never">
 
       <!-- ============ 草稿：可编辑（整理日期/备注 + 每行 A/B/C/不良 数量） ============ -->
-      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width)" class="head-form">
+      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width-lg)" class="head-form">
         <el-row :gutter="16">
           <el-col :span="8">
             <el-form-item label="单号">{{ head.code }}</el-form-item>

@@ -6,7 +6,7 @@
     </template>
 
     <el-card shadow="never">
-      <el-form :model="form" label-width="var(--app-label-width)" class="head-form">
+      <el-form :model="form" label-width="var(--app-label-width-lg)" class="head-form">
         <el-form-item label="仓库" required>
           <RemoteSelect v-model="form.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses"
             :label-key="(row:any)=>row.warehouseName" placeholder="选择报损仓库" style="width:240px"

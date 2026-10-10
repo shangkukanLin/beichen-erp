@@ -124,7 +124,7 @@ onMounted(load)
       </template>
 
       <!-- 草稿：可编辑表单（来源应付记录锁定，只放开日期/备注，与新增页编辑态口径一致） -->
-      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width)" class="form">
+      <el-form v-if="isDraft" :model="form" label-width="var(--app-label-width-lg)" class="form">
         <el-form-item label="来源应付单号">
           <span>{{ head.payableBillNo || '—' }}</span>
           <el-tag v-if="head.supplierType" :type="TYPE_TAG[head.supplierType] || 'info'" size="small" style="margin-left:8px">{{ typeLabel(head.supplierType) }}</el-tag>
