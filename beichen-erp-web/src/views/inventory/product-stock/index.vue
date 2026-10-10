@@ -195,8 +195,13 @@ const rows = ref<any[]>([])
 
 /**
  * 导出 Excel（**全量**）：按当前筛选条件重新请求全部匹配产品（pageNum=1、pageSize=9999），
- * 不受列表分页限制；列与页面一致，数量按数值写入（整数不带小数）。
+ * 不受列表分页限制；**列与页面逐列对齐**（2026-10-10 用户口径「对齐」），数量按数值写入（整数不带小数）。
  * 请求失败时退回当前页已加载数据，保证导出始终可用。
+ *
+ * <p>2026-10-10 对齐要点：屏上已把「分布仓库」列**换成「库存金额」**、并把仓库个数移进操作列按钮 ⇒
+ * 导出同步**去掉「分布仓库」列**、并把「库存金额」排到「安全库存」之后（与屏上列序一致 ✓）。</p>
+ * <p>⚠️ 金额口径与 `StockAmountCell` 对齐：**成本未维护时写「成本未维护」而不是 0** ✓ ——
+ * 写 0 会让人在 Excel 里以为系统算错 ✗（这正是 StockCosts 注释警告过的坑 ✓）。</p>
  */
 async function exportProductStock() {
   let data: any[] = rows.value || []
@@ -210,8 +215,9 @@ async function exportProductStock() {
     const res = await request.get<any, any>('/warehouse/stock/product-summary/page', { params })
     if (Array.isArray(res?.records)) data = res.records
   } catch { /* 拉取失败：退回当前页数据 */ }
-  // 2026-10-09：导出也带「库存金额」（与后端同一口径；成本未维护的行为 0，页面上的合计条已明示该部分不计入合计）
-  const cols = ['SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待整理', '总库存', '库存金额', '安全库存', '分布仓库']
+  // 列序与屏上**逐列对齐**：SKU → 产品名称 → 品牌 → A/B/C规 → 不良 → 待整理 → 总库存 → 安全库存 → 库存金额
+  // （屏上的「操作」列是入口按钮，非数据 ⇒ 不进导出 ✓；原「分布仓库」列已随屏上改动删除 ✓）
+  const cols = ['SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待整理', '总库存', '安全库存', '库存金额']
   const aoa: (string | number)[][] = [
     [`成品库存汇总（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
     [],
@@ -228,14 +234,14 @@ async function exportProductStock() {
       Number(r.qtyDefect ?? 0),
       Number(r.qtyPending ?? 0),
       Number(totalQty(r) ?? 0),
-      Number(r.stockAmount ?? 0),
       r.safetyStock ? Number(r.safetyStock) : '',
-      Number(r.warehouseCount ?? 0),
+      // 与 StockAmountCell 同口径：成本未维护明确写出，不静默写 0 ✓
+      r.costMissing ? '成本未维护' : Number(r.stockAmount ?? 0),
     ])
   })
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
-  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 10 }, { wch: 10 }]
+  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '成品库存汇总')
   XLSX.writeFile(wb, `成品库存汇总_${localDate()}.xlsx`)
