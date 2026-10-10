@@ -53,10 +53,10 @@ public class AuthController {
         return R.ok(List.of());
     }
 
-    /** 获取登录公司名称（从 session 读取，刷新页面后仍可用） */
+    /** 获取登录公司名称（从**Token-Session**读取，刷新页面后仍可用；2026-10-10 随 companyId 一起改为 token 级） */
     @GetMapping("/company-name")
     public R<String> companyName() {
-        String name = StpUtil.getSession().getString("companyName");
+        String name = StpUtil.getTokenSession().getString("companyName");
         return R.ok(name != null ? name : "");
     }
 }

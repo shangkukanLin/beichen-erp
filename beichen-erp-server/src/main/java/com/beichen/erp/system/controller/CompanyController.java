@@ -88,7 +88,9 @@ public class CompanyController {
         // 登录超管
         StpUtil.login(user.getId());
         // 超管公司ID设为0，不受租户限制（仅用于公司管理页）
-        StpUtil.getSession().set("companyId", 0L);
+        // 2026-10-10：改为 **Token-Session** —— 公司上下文必须跟"这一次登录的 token"走，
+        // 写 Account-Session（getSession()）会把本账号其它会话的公司上下文一起改掉，详见 AuthServiceImpl.login。
+        StpUtil.getTokenSession().set("companyId", 0L);
         Map<String, Object> result = new HashMap<>();
         result.put("token", StpUtil.getTokenInfo().tokenValue);
         return R.ok(result);
@@ -106,8 +108,8 @@ public class CompanyController {
             throw new BusinessException("公司ID不能为空");
         }
         Long companyId = Long.valueOf(companyIdStr);
-        // 切换公司上下文
-        StpUtil.getSession().set("companyId", companyId);
+        // 切换公司上下文（同样写 **Token-Session**：只切"当前这个 token"的公司，不影响本账号其它端）
+        StpUtil.getTokenSession().set("companyId", companyId);
 
         long userId = StpUtil.getLoginIdAsLong();
         // 重新加载角色与菜单

@@ -57,8 +57,20 @@ mybatis-plus:
 sa-token:
   token-name: ${SA_TOKEN_NAME:Authorization}
   timeout: ${SA_TOKEN_TIMEOUT:86400}
+  # 允许多端/多次登录并存（每个 token 各自一个会话，互不干扰）
   is-concurrent: true
-  is-share: true
+  # 2026-10-10 修复（用户报障：超管"以 GD 登录"会影响已存在的公司1 会话）—— **本次修复是两处一起改，缺一不可**：
+  #   ① 本项 is-share 由 true 改为 false（可用环境变量 SA_TOKEN_IS_SHARE 覆盖）：
+  #      true 的语义是「同一账号的**所有登录共用一个 token**」（实测换 User-Agent / 换浏览器也复用，不是按设备分组）
+  #      ⇒ 根本不存在"两个独立的登录"；改为 false 后每次登录签发**独立 token**，由上面的 is-concurrent=true 支持多端并存。
+  #   ② 代码侧把"公司上下文"从 Account-Session 迁到 **Token-Session**（见 AuthServiceImpl.login /
+  #      CompanyController.verifyAdmin·switchCompany / SaTokenConfig / AuthController.companyName）：
+  #      `StpUtil.getSession()` 是**按账号ID**分配的 Account-Session（同账号多端共用同一个），
+  #      即使有了独立 token，companyId 若仍写在那儿，后一次登录依然会改掉先前的上下文
+  #      （实测：改①之后各 token 已互不相同，但公司1 的 token 仍只看得到 GD 的 0 条供应商）。
+  #   roles / perms / username 仍留在 Account-Session（账号级状态，各 token 本就应一致）。
+  #   注：会话存在 JVM 内存（未接 Redis）⇒ 重启即全部失效，需重新登录；这是既有形态，本次未变。
+  is-share: ${SA_TOKEN_IS_SHARE:false}
   token-style: uuid
   is-log: false
 

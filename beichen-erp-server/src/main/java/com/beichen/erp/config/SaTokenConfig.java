@@ -7,6 +7,7 @@ import com.beichen.erp.auth.mapper.UserMapper;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +23,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * Sa-Token 配置：拦截器 + 多租户 + 跨域
  */
 @Configuration
+@Slf4j
 @RequiredArgsConstructor
 public class SaTokenConfig implements WebMvcConfigurer {
 
@@ -72,10 +74,19 @@ public class SaTokenConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new SaInterceptor(handler -> {
                     StpUtil.checkLogin();
-                    // 登录后从 session 读取 companyId 设置到 ThreadLocal
-                    Object cid = StpUtil.getSession().get("companyId");
+                    // 登录后从会话读取 companyId 设置到 ThreadLocal。
+                    // ⚠️ 2026-10-10：必须是 **getTokenSession()**（按 token 区分），不能用 getSession()
+                    // —— 后者是 **Account-Session**（按账号ID分配，同一账号在 PC / APP / 不同浏览器登录**共用同一个**），
+                    // 于是"这一次登录选的是哪家公司"会被广播给该账号的其它会话（实测：公司1 的 token 突然只看得到 GD 的数据）。
+                    // 读取点与写入点必须同作用域：写入见 AuthServiceImpl.login / CompanyController.verifyAdmin·switchCompany。
+                    Object cid = StpUtil.getTokenSession().get("companyId");
                     if (cid != null) {
                         CompanyContext.set(Long.valueOf(cid.toString()));
+                    } else {
+                        // 兜底可观测性：已登录却读不到 companyId ⇒ 本次请求**不做公司过滤**（能看到所有公司的数据）。
+                        // 正常不会出现（所有登录路径都会写入）；一旦出现即"某登录路径漏写"，让它立刻可见而不是静默越权。
+                        log.warn("Token-Session 缺少 companyId ⇒ 本次请求不做租户过滤（读取点见 SaTokenConfig，"
+                                + "写入点见 AuthServiceImpl.login / CompanyController.verifyAdmin·switchCompany）");
                     }
                     // 2026-09-23（用户口径：单据详情要显示「制单人 / 审核人」）：把"当前操作人"写入 ThreadLocal，
                     // 供 MetaObjectHandler 自动填充 create_by/create_by_name，以及各审核点盖章 auditor。
