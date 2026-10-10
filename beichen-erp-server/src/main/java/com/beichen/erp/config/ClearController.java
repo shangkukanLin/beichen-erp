@@ -113,6 +113,10 @@ public class ClearController {
             "DELETE FROM sale_order_item WHERE company_id = ?",
             "DELETE FROM sale_return_item WHERE company_id = ?",
             "DELETE FROM sale_exchange_item WHERE company_id = ?",
+            // 2026-10-10：销售出库单模块已下线（db6f192「只删代码，表与历史数据保留」），但两张表**仍在**
+            // 且含 company_id ⇒ 必须留在本清单里，否则「清空本公司数据」会给它们留下孤儿数据
+            // （启动自检 ClearTableSelfCheck 已报出该遗漏）。子表在前、主表在后，见下方「销售主表」段。
+            "DELETE FROM sale_outbound_item WHERE company_id = ?",
             "DELETE FROM return_sort_item WHERE company_id = ?",
             "DELETE FROM inventory_warehouse_move_item WHERE company_id = ?",
             "DELETE FROM inventory_material_move_item WHERE company_id = ?",      // F8-16 新增（物料移库）
@@ -169,6 +173,8 @@ public class ClearController {
             "DELETE FROM sale_order WHERE company_id = ?",
             "DELETE FROM sale_return WHERE company_id = ?",
             "DELETE FROM sale_exchange WHERE company_id = ?",
+            // 2026-10-10：同上 —— 销售出库单主表（模块下线但表保留，清空时一并删除；子表已在上方明细段删过）
+            "DELETE FROM sale_outbound WHERE company_id = ?",
             "DELETE FROM return_sort WHERE company_id = ?",
             "DELETE FROM after_sale_pending WHERE company_id = ?",
             // === 委外主表 ===
