@@ -167,7 +167,7 @@ onActivated(() => { loadData() })
             <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="104" align="center" fixed="right">
+        <el-table-column label="操作" width="104" align="center">
           <template #default="{ row }">
             <!-- 编辑在详情页内完成，列表只保留详情与停启用；行点击已进详情，按钮须阻止冒泡 -->
             <el-button type="primary" link @click.stop="goDetail((row as Customer).id)">详情</el-button>

@@ -175,7 +175,7 @@ useDomainRefresh('invoice', () => { loadData() })
         <!-- 2026-09-26 B6：表头「关联单号」4 字需 56px，列宽 74 时只剩 1px 余量（字体稍有差异即省略）⇒ 74→**76** -->
         <el-table-column prop="sourceBillCode" label="关联单号" width="76" show-overflow-tooltip/>
         <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="(STATUS_TAG[row.status]||'info') as any" size="small">{{ STATUS_LABEL[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="106" align="center" fixed="right">
+        <el-table-column label="操作" width="106" align="center">
           <template #default="{row}">
             <template v-if="row.status==='REGISTERED'">
               <!-- F7-235：按 finance:invoice 显示（后端 /api/finance/invoice 收口同码） -->

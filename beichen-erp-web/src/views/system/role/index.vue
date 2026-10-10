@@ -297,7 +297,7 @@ useDomainRefresh('role', () => {
             {{ (row as Role).remark || '-' }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="200" align="center" fixed="right">
+        <el-table-column label="操作" width="200" align="center">
           <template #default="{ row }">
             <el-button v-perm="'system:role'" type="primary" link @click="handleEdit(row as Role)">编辑</el-button>
             <el-button v-perm="'system:role'" type="warning" link @click="handleOpenPerm(row as Role)">分配权限</el-button>

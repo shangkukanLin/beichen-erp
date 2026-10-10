@@ -217,7 +217,7 @@ onMounted(async () => {
         <el-table-column prop="price" label="单价" width="90" />
         <!-- 2026-09-28（用户口径）：操作列去掉「研发支出」（190→130，回到加它之前的宽度）——
              研发支出属「研发管理 → 研发物料」，本页（委外物料）不再提供该入口 -->
-        <el-table-column label="操作" width="130" align="center" fixed="right">
+        <el-table-column label="操作" width="130" align="center">
           <template #default="{row}"><el-button type="primary" link size="small" @click="handleEdit(row)">编辑</el-button><el-button type="danger" link size="small" @click="handleDelete(row)">删除</el-button></template>
         </el-table-column>
       </el-table>
@@ -264,7 +264,7 @@ onMounted(async () => {
         <el-table-column label="备注" min-width="120">
           <template #default="{ row }"><el-input v-model="row.remark" placeholder="备注" size="small" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="70" align="center" fixed="right">
+        <el-table-column label="操作" width="70" align="center">
           <template #default="{ $index }"><el-button type="danger" link size="small" @click="removeBomRow($index)">删除</el-button></template>
         </el-table-column>
       </el-table>

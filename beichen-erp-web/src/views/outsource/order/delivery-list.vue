@@ -219,13 +219,13 @@ onActivated(() => { loadData(); loadCounts() })
              已结单的加工单后端禁止收货、禁止有单加工退货（账务已清算）⇒ 不放对应按钮，避免点了必被拒。
              ⚠️ 2026-09-29 用户口径「加工收退页面，列表的操作不需要有反审核」⇒ 行内**不放**「反审核」：
              它是**加工单级**动作（会级联逆回该单所有已审核的收货记录），入口留在「加工单详情」页头。 -->
-        <el-table-column v-if="!isClosed()" label="操作" width="124" align="center" fixed="right">
+        <el-table-column v-if="!isClosed()" label="操作" width="124" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDelivery(row)">收货</el-button>
             <el-button type="warning" link @click.stop="goReturn(row)">退货</el-button>
           </template>
         </el-table-column>
-        <el-table-column v-else label="操作" width="140" align="center" fixed="right">
+        <el-table-column v-else label="操作" width="140" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">收货详细</el-button>
             <el-button type="info" link @click.stop="goCloseReport(row)">结单报表</el-button>

@@ -340,7 +340,7 @@ onMounted(() => {
         </el-table-column>
         <!-- 动作集与顺序统一（与加工侧一致）：详情 → 审核 → 反审核 → 作废 → 结案 → 撤销结案 -->
         <!-- 2026-09-24（用户口径）：反审核与编辑都收进详情页（详情草稿态可就地改+存）⇒ 操作列 176→132。 -->
-        <el-table-column label="操作" width="132" align="center" fixed="right">
+        <el-table-column label="操作" width="132" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <el-button v-perm="'outsource:material-return'" type="success" link v-if="row.status===DocStatus.DRAFT" @click.stop="handleAudit(row)">审核</el-button>

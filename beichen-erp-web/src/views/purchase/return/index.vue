@@ -51,7 +51,7 @@
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusLabel(row.status) }}</el-tag></template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：反审核与编辑都收进详情页（详情草稿态本就可就改明细并保存）⇒ 操作列 200→132。 -->
-        <el-table-column label="操作" width="132" align="center" fixed="right">
+        <el-table-column label="操作" width="132" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->

@@ -186,7 +186,7 @@ function handleDetail(row: FinanceReceipt) { if (row?.id != null) router.push(`/
         <!-- 2026-09-26 B6：92→88（让 4px 给「主体类型」的表头；金额正文最长 57px，88 内仍完整） -->
         <el-table-column prop="amount" label="金额" width="88" align="right"><template #default="{row}">{{ fmt(row.amount) }}</template></el-table-column>
         <el-table-column label="状态" width="72" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{DocStatusLabel[row.status]||row.status}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="170" align="center" fixed="right">
+        <el-table-column label="操作" width="170" align="center">
           <!-- 2026-09-29 审核批 A · F7-210：三个危险动作按权限显示（与后端前缀守卫同码，避免"点必失败"的入口） -->
           <template #default="{row}"><el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="success" link v-perm="'finance:receipt'" @click.stop="handleAudit(row)">审核</el-button><el-button v-if="row.status===DocStatus.AUDITED" type="warning" link v-perm="'finance:receipt'" @click.stop="handleUnAudit(row)">反审核</el-button><el-button v-if="row.status===DocStatus.DRAFT" type="danger" link v-perm="'finance:receipt'" @click.stop="handleCancel(row)">作废</el-button></template>
         </el-table-column>

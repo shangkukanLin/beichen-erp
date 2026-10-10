@@ -510,7 +510,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
                 >{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="70" align="center" fixed="right">
+            <el-table-column label="操作" width="70" align="center">
               <template #default="{row}">
                 <el-button type="primary" link @click="router.push(row._route)">详情</el-button>
               </template>

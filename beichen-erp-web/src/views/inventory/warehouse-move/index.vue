@@ -55,7 +55,7 @@
           <template #default="{ row }"><el-tag :type="statusType(row.status)">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 174→132（详情/审核/作废 3 个按钮）。 -->
-        <el-table-column label="操作" width="132" align="center" fixed="right">
+        <el-table-column label="操作" width="132" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
                 <el-button v-perm="'stock:warehouse-move'" v-if="row.status === DocStatus.DRAFT" type="success" link @click.stop="handleAudit(row)">审核</el-button>

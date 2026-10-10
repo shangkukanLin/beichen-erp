@@ -434,7 +434,7 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
                 （每条记录都看得到详细，占位已无意义）。
              ⚠️ 本表有展开列（类型明细），故**不**像加工侧那样再做 `@row-click` 整行跳转（会与"点开明细"打架）。
              列宽 96→**110**：最长组合 = 「详细 + 反审核」2+3 字 + 间距/内边距 ≈ 100。 -->
-        <el-table-column label="操作" width="110" fixed="right">
+        <el-table-column label="操作" width="110">
           <template #default="{ row }">
             <el-button type="primary" link size="small" @click="openRecordDetail(row)">详细</el-button>
             <template v-if="isMaterialDelivery(row)">

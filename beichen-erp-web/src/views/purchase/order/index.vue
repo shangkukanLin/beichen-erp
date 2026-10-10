@@ -304,7 +304,7 @@ onMounted(() => { loadSupplierOptions(); loadWarehouseOptions(); loadMaterials()
              ⇒ 操作列 190→168（剩余最多 4 个按钮：详情/审核/编辑/作废）。 -->
         <!-- 2026-09-24（用户口径）：列表不再给「编辑」——草稿态直接在详情页改+存（详情页已支持），
              避免同一动作两套入口。⇒ 操作列 176→132（最多 3 个按钮：详情/退货/换货 或 详情/审核/作废）。 -->
-        <el-table-column label="操作" width="132" align="center" fixed="right">
+        <el-table-column label="操作" width="132" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row)">详情</el-button>
             <!-- 售后快捷入口（2026-09-21 用户口径）：仅已审核采购单可发起，带 fromOrder 跳转 ⇒ 新增页自动带出供货商与可退/可换明细 -->

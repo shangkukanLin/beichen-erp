@@ -145,7 +145,7 @@ useDomainRefresh('materialOrder', () => {
         <el-table-column label="交期" width="80" align="center"><template #default="{row}">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
         <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag :type="MaterialOrderStatusTag[row.status]||'info'" size="small">{{ MaterialOrderStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <!-- 2026-09-24（用户口径）：反审核移入详情页 ⇒ 操作列 206→200；2026-09-25 按 4 按钮家规档收到 176。 -->
-        <el-table-column label="操作" width="176" align="center" fixed="right">
+        <el-table-column label="操作" width="176" align="center">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click.stop="router.push(`/outsource/material-order/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link size="small" @click.stop="handleDownloadContract(row)">下载合同</el-button>

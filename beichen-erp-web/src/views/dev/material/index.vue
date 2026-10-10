@@ -172,7 +172,7 @@ onMounted(() => { loadProjectOptions(); loadList() })
         <el-table-column label="状态" width="90"><template #default="{ row }">{{ DevMaterialStatusLabel[row.status] || row.status }}</template></el-table-column>
         <!-- 2026-09-28（用户口径「研发支出属研发物料」）：操作列加「研发支出」（140→190）——
              给"新增时没勾选、事后补登记"的场景（落草稿，财务在费用管理审核后才扣款） -->
-        <el-table-column label="操作" width="190" fixed="right">
+        <el-table-column label="操作" width="190">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="handleDetail(row)">详情</el-button>
             <el-button link type="primary" @click.stop="handleRdExpense(row)">研发支出</el-button>

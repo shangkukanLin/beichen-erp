@@ -168,7 +168,7 @@ onMounted(() => { loadData() })
             <span v-else style="color:var(--app-text-placeholder)">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="112" align="center" fixed="right">
+        <el-table-column label="操作" width="112" align="center">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详情</el-button>
             <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消立项</el-button>
@@ -202,7 +202,7 @@ onMounted(() => { loadData() })
             <span v-else style="color:var(--app-text-placeholder)">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="112" align="center" fixed="right">
+        <el-table-column label="操作" width="112" align="center">
           <template #default="{ row }">
             <el-button type="success" link size="small" @click.stop="handleEdit(row)">详情</el-button>
             <el-button v-if="row.status===ProjectStatus.IN_PROGRESS" type="danger" link size="small" @click.stop="handleCancel(row)">取消立项</el-button>
@@ -224,7 +224,7 @@ onMounted(() => { loadData() })
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
         <el-table-column prop="glassSize" label="改配" width="64" show-overflow-tooltip />
         <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'success'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="85" align="center" fixed="right">
+        <el-table-column label="操作" width="85" align="center">
           <template #default="{row}">
             <el-button type="success" link size="small" @click.stop="handleEdit(row as ProjectVO)">详情</el-button>
           </template>
@@ -245,7 +245,7 @@ onMounted(() => { loadData() })
         <!-- 改配尺寸 = 改配信息里的「玻璃尺寸」(Project.glassSize)，2026-09-16 用户要求列表展示 -->
         <el-table-column prop="glassSize" label="改配" width="64" show-overflow-tooltip />
         <el-table-column label="状态" width="75" align="center"><template #default="{row}"><el-tag :type="ProjectStatusTag[row.status] || 'danger'" size="small">{{ ProjectStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="115" align="center" fixed="right">
+        <el-table-column label="操作" width="115" align="center">
           <template #default="{row}">
             <el-button type="success" link size="small" @click.stop="handleEdit(row as ProjectVO)">详情</el-button>
             <el-button type="warning" link size="small" @click.stop="handleReactivate(row as ProjectVO)">重新激活</el-button>

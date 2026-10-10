@@ -66,7 +66,7 @@
         </el-table-column>
         <!-- 2026-09-24（用户口径）：反审核移入详情页（后端还有"已被退货整理"等护栏，列表里说不清原因）。
              ⇒ 操作列 150→132。 -->
-        <el-table-column label="操作" width="132" fixed="right">
+        <el-table-column label="操作" width="132">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发 -->

@@ -148,7 +148,7 @@ async function handleCancel(row: any) {
              抢走到详情页（点「审核」也会先跳详情、确认框飘在详情页上）。与项目其它页面（如物料收货列表的
              @click.stop）保持一致，全部加 .stop。 -->
         <!-- 2026-09-24（用户口径）：反审核与编辑都收进详情页（详情草稿态可就地改）⇒ 操作列 min-width 155→132。 -->
-        <el-table-column label="操作" min-width="132" align="center" fixed="right">
+        <el-table-column label="操作" min-width="132" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <!-- F3-3 按钮级权限（方案 A）：动作码跟随页面自动下发，无码则后端也会 403 -->

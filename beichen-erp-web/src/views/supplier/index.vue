@@ -185,7 +185,7 @@ onMounted(() => { loadData() })
             <el-tag :type="row.status===1?'success':'info'">{{ row.status===1?'合作中':'已停用' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" align="center" fixed="right">
+        <el-table-column label="操作" width="280" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="handleDetail(row as SupplierVO)">详情</el-button>
             <el-button type="warning" link @click.stop="openProducts(row as SupplierVO)">供应产品</el-button>
@@ -220,7 +220,7 @@ onMounted(() => { loadData() })
             <el-input v-model="row.unitPrice" placeholder="单价" size="small" />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="70" align="center" fixed="right">
+        <el-table-column label="操作" width="70" align="center">
           <template #default="{ $index }">
             <el-button type="danger" link @click="removeProductRow($index)">删除</el-button>
           </template>

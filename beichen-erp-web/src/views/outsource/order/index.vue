@@ -150,7 +150,7 @@ onMounted(() => {
             <el-tag :type="OutsourceOrderStatusTag[row.status]||'info'">{{ OutsourceOrderStatusLabel[row.status] || row.status }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="176" align="center" fixed="right">
+        <el-table-column label="操作" width="176" align="center">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="router.push(`/outsource/order/detail/${row.id}`)">详情</el-button>
             <el-button type="success" link @click.stop="handleDownloadContract(row)">下载合同</el-button>

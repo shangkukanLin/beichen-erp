@@ -153,7 +153,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
       <el-table-column label="已付" width="126" align="right"><template #default="{row}"><span style="color:var(--app-color-success)">{{ fmt(row.paidAmount) }}</span></template></el-table-column>
       <el-table-column label="未付" width="126" align="right"><template #default="{row}"><span style="color:var(--app-color-warning);font-weight:600">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
       <el-table-column label="逾期金额" width="130" align="right"><template #default="{row}"><span :style="{color: Number(row.overdueAmount)>0?'var(--app-color-danger)':'var(--app-text-secondary)', fontWeight: Number(row.overdueAmount)>0?600:400}">{{ fmt(row.overdueAmount) }}</span></template></el-table-column>
-      <el-table-column label="操作" width="84" align="center" fixed="right">
+      <el-table-column label="操作" width="84" align="center">
         <template #default="{row}"><el-button type="primary" link @click.stop="goSupplierDetail(row)">详情</el-button></template>
       </el-table-column>
       </el-table>
@@ -219,7 +219,7 @@ function stType(s?: string): 'success' | 'warning' | 'info' | 'danger' | 'primar
         <el-table-column prop="unpaidAmount" label="未付" width="82" align="right"><template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmt(row.unpaidAmount) }}</span></template></el-table-column>
         <el-table-column prop="dueDate" label="到期日" width="92" align="center"/>
         <el-table-column label="状态" width="70" align="center"><template #default="{row}"><el-tag :type="stType(row.status)" size="small">{{statusLabel(row.status)}}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="104" align="center" fixed="right">
+        <el-table-column label="操作" width="104" align="center">
           <template #default="{row}">
             <el-button type="primary" link @click.stop="goDetail(row)">详情</el-button>
             <!-- 无货款可抵时，把这笔扣款/退货转为向对方收款。

@@ -231,7 +231,7 @@ onActivated(() => { loadData() })
         <el-table-column label="状态" width="72" align="center">
           <template #default="{row}"><el-tag :type="(DocStatusTag[row.status] || 'info') as any" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="174" align="center" fixed="right">
+        <el-table-column label="操作" width="174" align="center">
           <template #default="{row}">
             <el-button type="primary" link @click="openItems(row)">{{ row.status===DocStatus.DRAFT ? '录入实盘' : '查看明细' }}</el-button>
             <el-button v-if="row.status===DocStatus.DRAFT" type="success" link @click="audit(row)">审核</el-button>

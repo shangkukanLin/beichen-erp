@@ -108,7 +108,7 @@ onMounted(()=>{ loadWarehouses(); loadData() })
         </el-table-column>
         <!-- 2026-09-24（用户口径）：草稿态在详情页改+存 ⇒ 列表不再给「编辑」（那个动态按钮原先草稿态跳独立编辑页）；
              一律进详情。操作列 200→140。 -->
-        <el-table-column label="操作" width="148" align="center" fixed="right">
+        <el-table-column label="操作" width="148" align="center">
           <template #default="{row}">
             <el-button v-perm="'outsource:other-io'" v-if="row.status===DocStatus.DRAFT" type="success" link @click.stop="handleApprove(row)">审核</el-button>
             <el-button v-perm="'outsource:other-io'" v-if="row.status===DocStatus.AUDITED" type="warning" link @click.stop="handleUnapprove(row)">反审核</el-button>

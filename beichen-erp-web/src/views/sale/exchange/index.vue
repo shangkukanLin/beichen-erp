@@ -146,7 +146,7 @@ async function handleCancel(row: any) {
           </template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：反审核与编辑都收进详情页（详情草稿态可就地改）⇒ 操作列 174→132。 -->
-        <el-table-column label="操作" width="132" align="center" fixed="right">
+        <el-table-column label="操作" width="132" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click="goDetail(row)">详情</el-button>
             <el-button v-if="row.status === DocStatus.DRAFT" type="success" link @click="handleAudit(row)">审核</el-button>

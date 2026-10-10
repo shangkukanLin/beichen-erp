@@ -163,7 +163,7 @@ onUnmounted(() => { taxChart?.dispose(); taxChart = null })
       <!-- 2026-09-26 B7（实测驱动）：月份 66→**90**（"2026-01" 实测需 85，原 66 全部月份格子被截断）；
            金额列 84→80 与占比 58→54 抵平（12 列声明合计 960 ≤ 容器 971）。
            注：本表为**分组表头**（销售/采购/委外 三组各 4 列），改列宽时三组要同步。 -->
-      <el-table-column prop="month" label="月份" width="90" align="center" fixed="left"/>
+      <el-table-column prop="month" label="月份" width="90" align="center"/>
       <el-table-column label="销售（销项）" align="center">
         <el-table-column label="已税" width="78" align="right"><template #default="{row}">{{ fmt(row.saleTaxed) }}</template></el-table-column>
         <el-table-column label="销项税额" width="80" align="right"><template #default="{row}">{{ fmt(row.saleTaxedTax) }}</template></el-table-column>

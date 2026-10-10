@@ -227,7 +227,7 @@ onActivated(() => { loadData() })
         <el-table-column prop="resolution" label="分辨率" width="147" show-overflow-tooltip />
         <el-table-column prop="screenType" label="屏幕类型" width="181" show-overflow-tooltip />
         <el-table-column prop="panelSupplier" label="屏幕供应商" width="165" show-overflow-tooltip />
-        <el-table-column label="操作" width="90" align="center" fixed="right">
+        <el-table-column label="操作" width="90" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click="openEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>

@@ -165,7 +165,7 @@ useDomainRefresh('payableTransfer', () => {
           <template #default="{ row }">{{ row.auditorName || '—' }}</template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：草稿态在**详情页**改+存 ⇒ 列表去掉「编辑」入口；操作列 174→132（剩 3 个按钮）。 -->
-        <el-table-column label="操作" width="132" align="center" fixed="right">
+        <el-table-column label="操作" width="132" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">详情</el-button>
             <!-- 2026-09-29 审核批 B · F7-220：危险动作按权限显示（后端前缀 /api/finance/payable-transfer ⇒ finance:payable-transfer） -->

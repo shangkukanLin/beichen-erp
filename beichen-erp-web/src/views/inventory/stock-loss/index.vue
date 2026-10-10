@@ -69,7 +69,7 @@
           <template #default="{ row }">{{ row.auditorName || '—' }}</template>
         </el-table-column>
         <!-- 2026-09-24（用户口径）：草稿态在**详情页**改+存（含明细增删）⇒ 列表去掉「编辑」入口；操作列 170→132。 -->
-        <el-table-column label="操作" width="132" align="center" fixed="right">
+        <el-table-column label="操作" width="132" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click="goDetail(row)">详情</el-button>
             <el-button v-perm="'stock:stock-loss'" v-if="row.status === DocStatus.DRAFT" link type="success" @click="onAudit(row)">审核</el-button>

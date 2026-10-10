@@ -178,7 +178,7 @@ onMounted(loadData)
         <el-table-column prop="contact" label="联系人" width="96" />
         <el-table-column prop="phone" label="联系电话" width="108" />
         <el-table-column label="状态" width="76" align="center"><template #default="{row}"><el-tag size="small" :type="row.status===1?'success':'danger'">{{ row.status===1?'启用':'停用' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="116" align="center" fixed="right">
+        <el-table-column label="操作" width="116" align="center">
           <template #default="{row}">
             <el-button type="primary" link size="small" @click.stop="goDetail(row.id)">详情</el-button>
             <el-button type="danger" link size="small" @click.stop="handleDelete(row)">删除</el-button>

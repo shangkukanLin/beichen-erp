@@ -443,7 +443,7 @@ onActivated(async () => { await loadData(); await maybeAutoOpen() })
           与前端 `handleUnaudit` 一直都存在（原先成了死代码）。已审核行只有 2 个按钮（详情 2 字 + 反审核 3 字），
           窄于草稿行的 4 个按钮 ⇒ 列宽保持 176 不变。
         -->
-        <el-table-column label="操作" width="176" align="center" fixed="right">
+        <el-table-column label="操作" width="176" align="center">
           <template #default="{ row }">
             <!-- 详情：仓库/物流单号/备注/附件/SKU/等级明细/创建时间等明细字段都在**详情页**看
                  （2026-09-23 由抽屉改为独立页 /outsource/order/delivery/record/:id） -->

@@ -186,7 +186,7 @@ onActivated(() => { loadData(); loadCounts() })
         <!-- 操作：生产中 = 收货 + 退货；已结单 = 收货详细 + 退货
              （已结单**不可收货**（后端明确拒绝）⇒ 不放「收货」；但退不良/物料退货后端仍允许 ⇒ 保留「退货」；
               结单/反结单已按 2026-09-29 用户口径统一收到「物料收退详情」）。 -->
-        <el-table-column v-if="!isClosed()" label="操作" width="118" align="center" fixed="right">
+        <el-table-column v-if="!isClosed()" label="操作" width="118" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goReceive(row)">收货</el-button>
             <!-- 退货：把已收物料退回物料商（委外物料退货单），与「退不良」区分 -->
@@ -194,7 +194,7 @@ onActivated(() => { loadData(); loadCounts() })
           </template>
         </el-table-column>
         <!-- 已结单：收货详细 + 退货（「反结单」2026-09-29 已统一收到「物料收退详情」⇒ 操作列 186 → 150） -->
-        <el-table-column v-else label="操作" width="150" align="center" fixed="right">
+        <el-table-column v-else label="操作" width="150" align="center">
           <template #default="{ row }">
             <el-button type="primary" link @click.stop="goDetail(row)">收货详细</el-button>
             <el-button v-perm="'outsource:material-delivery'" type="warning" link @click.stop="goReturn(row)">退货</el-button>

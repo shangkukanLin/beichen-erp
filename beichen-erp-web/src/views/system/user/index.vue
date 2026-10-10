@@ -506,7 +506,7 @@ useDomainRefresh('user', () => {
             <el-tag v-else type="info" size="small">跟随角色</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="290" align="center" fixed="right">
+        <el-table-column label="操作" width="290" align="center">
           <template #default="{ row }">
             <el-tooltip
               :content="permDisabledReason(row as UserVO)"

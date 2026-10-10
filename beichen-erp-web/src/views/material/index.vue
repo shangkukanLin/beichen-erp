@@ -217,7 +217,7 @@ onMounted(() => {
             <el-tag v-if="isLowStock(row)" type="danger" size="small" style="margin-left:4px">预警</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="124" align="center" fixed="right">
+        <el-table-column label="操作" width="124" align="center">
           <template #default="{ row }">
             <!-- 详情页即编辑页，列表只需一个「编辑」入口 -->
             <el-button type="primary" link @click="handleEdit(row as Product)">编辑</el-button>

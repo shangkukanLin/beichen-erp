@@ -266,7 +266,7 @@ useDomainRefresh('menu', () => {
             <el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140" align="center" fixed="right">
+        <el-table-column label="操作" width="140" align="center">
           <template #default="{ row }">
             <el-button v-perm="'system:menu'" type="primary" link @click="handleEdit(row as FlatMenu)">编辑</el-button>
             <el-button v-perm="'system:menu'" type="danger" link @click="handleDelete(row as FlatMenu)">删除</el-button>
