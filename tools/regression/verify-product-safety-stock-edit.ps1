@@ -35,7 +35,9 @@ WatchErrors
 
 Step 'UI: the safety-stock cell is clickable (and shows the product-level hint in a dialog)'
 Open '/inventory/product-stock' 3600
-$listJs = "(()=>{const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[0];if(!t)return 'NOTABLE';const rs=[...t.querySelectorAll('.el-table__body tbody tr')].filter(vis);const cells=[...t.querySelectorAll('.safety-edit')].filter(vis);let idx=-1,sku='';for(let i=0;i<rs.length;i++){const c=(rs[i].querySelectorAll('td')[0]||{innerText:''}).innerText.trim();const has=cells.some(x=>rs[i].contains(x));if(has&&c){idx=i;sku=c;break}}return JSON.stringify({rows:rs.length,editCells:cells.length,idx:idx,sku:sku})})()"
+# 2026-10-10：首列已按用户口径合并为「SKU | 名称」⇒ 必须**切出分隔符前的 SKU** 再拿去查库 ✗
+#   （否则 `product WHERE sku='SKU-000001 | 名称'` 查不到 ⇒ 假红 ✓）。
+$listJs = "(()=>{const vis=e=>e.getClientRects().length>0;const ts=[...document.querySelectorAll('.el-table')].filter(vis);const t=ts[0];if(!t)return 'NOTABLE';const rs=[...t.querySelectorAll('.el-table__body tbody tr')].filter(vis);const cells=[...t.querySelectorAll('.safety-edit')].filter(vis);let idx=-1,sku='';for(let i=0;i<rs.length;i++){const raw=(rs[i].querySelectorAll('td')[0]||{innerText:''}).innerText.trim();const c=raw.split('|')[0].trim();const has=cells.some(x=>rs[i].contains(x));if(has&&c){idx=i;sku=c;break}}return JSON.stringify({rows:rs.length,editCells:cells.length,idx:idx,sku:sku})})()"
 $list = EvalJs $listJs
 Write-Host ('  list probe >> ' + $list)
 $L = $list | ConvertFrom-Json

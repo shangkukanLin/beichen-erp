@@ -50,10 +50,16 @@
       <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
         <!-- 2026-09-26 B6（实测）：SKU 是最长 10 位的业务编码（最长样本「SKU-000012」正文需 93px），
              min88 会把 10 行 SKU 全部省略 ⇒ min88→**98**（93 + 内边距 16 + 边框 1 的最省值再留 2px 余量）。 -->
-        <el-table-column prop="sku" label="SKU" min-width="98" show-overflow-tooltip />
-        <el-table-column label="产品名称" min-width="116" show-overflow-tooltip>
+        <!-- 2026-10-10 用户口径：「SKU」与「产品名称」两列**合并**成一列，显示 `SKU | 产品名称`
+             （与产品侧 productLabel、采购/销售换货页已合并的「退回产品」列**同格式** ✓）。
+             列宽配平（零配平方案）：原 SKU 98 + 名称 116 = 214 ⇒ 合并列取 **120**（10 位 SKU 正文约 93 + 分隔 + 名称余量，
+             低于 ~110 会截断 SKU ✗）；空出的 94px 给新增「是否滞销」列（96）⇒ 本表声明合计仍 **948 ≤ 容器** ✓，
+             其余列**一律不动**（不再从别的列抠宽度 ⇒ 不新增截断风险 ✓）。
+             产品名称仍**可点进产品详情** ✓：保留 goProduct + `@click.stop`（本表整行可点进仓库分布，
+             不阻止冒泡会「既弹产品又跳分布」✗）。 -->
+        <el-table-column label="SKU | 名称" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button type="primary" link @click.stop="goProduct(row)">{{ row.productName }}</el-button>
+            <el-button type="primary" link @click.stop="goProduct(row)">{{ row.sku ? row.sku + ' | ' + row.productName : row.productName }}</el-button>
           </template>
         </el-table-column>
         <el-table-column prop="brandName" label="品牌" min-width="100" show-overflow-tooltip>
@@ -110,6 +116,20 @@
         <el-table-column label="库存金额" min-width="88" align="right">
           <template #default="{ row }"><StockAmountCell :row="row" /></template>
         </el-table-column>
+        <!-- 2026-10-10 用户口径：新增「是否滞销」列 —— **滞销则显示滞销多少天** ✓。
+             数据由后端 `product-summary/page` 新增返回（`stagnant` / `stagnantDays` ✓），
+             口径与 /stagnant/page **完全同源**（同一个 mapper + 同一套判定 ✓）：起算点 = max(最后销售日, 最近来货日)，
+             阈值 = 后端默认 15 天（本页撤掉滞销面板后没有阈值入口 ⇒ 固定 ✓，不在前端另算 ✓ 免得两处打架 ✗）。
+             列宽 96：表头 4 字需 73 ✓；单元格「滞销12天」约 84 ⇒ 3 位天数会省略 ⇒ 靠 show-overflow-tooltip 兜底 ✓。 -->
+        <el-table-column label="是否滞销" min-width="96" align="center" show-overflow-tooltip>
+          <template #default="{ row }">
+            <span v-if="row.stagnant" style="color:#f56c6c;font-weight:600"
+                  :title="row.stagnantDays == null ? '从未销售且无来货记录（按滞销计）' : '距最近一次来货或销售已 ' + row.stagnantDays + ' 天（≥15 天判为滞销）'">
+              滞销{{ row.stagnantDays == null ? '' : row.stagnantDays + ' 天' }}
+            </span>
+            <span v-else style="color:#909399">否</span>
+          </template>
+        </el-table-column>
         <el-table-column label="操作" min-width="116" align="center">
           <template #default="{ row }">
             <el-button link type="primary" @click.stop="goDetail(row)">分布仓库（{{ row.warehouseCount ?? 0 }}）</el-button>
@@ -123,12 +143,10 @@
       </div>
     </el-card>
 
-    <!-- 滞销分析：独立卡片（2026-10-02 用户要求；两个页面共用 components/StagnantPanel.vue）。
-         为什么不做成主表加列：主表 12 列实测 colSum 971 = avail 971（margin 0），再加 4 列必然横向滚动 ✗
-         —— 详见 tools/regression/scan-table-overflow.ps1 与该组件的说明。 -->
-    <StagnantPanel ref="stagnantRef"
-      :brand-id="applied.brandId" :warehouse-ids="applied.warehouseIds" :product-name="applied.productName"
-      @row-click="goDetail" @product-click="goProduct" />
+    <!-- 2026-10-10 用户口径：「不要显示滞销分析了」⇒ **本页撤掉**滞销面板。
+         ⚠️ 组件本身**保留**（`components/StagnantPanel.vue` 仍在产品分析页 `views/analysis/product.vue` 使用 ✓，
+         那里滞销阈值/严重滞销/分桶/KPI/单独导出等能力都还在 ✓）。
+         本页的滞销信息改为**列表里的「是否滞销」列**（滞销则显示滞销多少天 ✓），数据口径与面板同源 ✓。 -->
 
     <!-- 安全库存弹框（2026-10-09 用户需求：在成品库存详情列表里点安全库存直接改） -->
     <el-dialog v-model="safetyDialog" :title="`修改安全库存 - ${safetyRow?.productName || ''}`" width="440px" append-to-body>
@@ -166,7 +184,6 @@ import { updateProductSafetyStock } from '@/api/product'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
-import StagnantPanel from '@/components/StagnantPanel.vue'
 import StockAmountBar from '@/components/StockAmountBar.vue'
 // 2026-10-10：逐行「库存金额」单元格 —— 与物料库存列表**同一个组件**（口径一致：数量 × 单价，
 // 单价 cost_price → last_in_price 兜底；成本未维护时显示「成本未维护」而不是 0.00 ✓）。
@@ -217,7 +234,8 @@ async function exportProductStock() {
   } catch { /* 拉取失败：退回当前页数据 */ }
   // 列序与屏上**逐列对齐**：SKU → 产品名称 → 品牌 → A/B/C规 → 不良 → 待整理 → 总库存 → 安全库存 → 库存金额
   // （屏上的「操作」列是入口按钮，非数据 ⇒ 不进导出 ✓；原「分布仓库」列已随屏上改动删除 ✓）
-  const cols = ['SKU', '产品名称', '品牌', 'A规', 'B规', 'C规', '不良', '待整理', '总库存', '安全库存', '库存金额']
+  // 2026-10-10：与屏上同步 —— SKU/名称合并为一列、新增「是否滞销」（滞销写「滞销 N 天」✓）
+  const cols = ['SKU | 名称', '品牌', 'A规', 'B规', 'C规', '不良', '待整理', '总库存', '安全库存', '库存金额', '是否滞销']
   const aoa: (string | number)[][] = [
     [`成品库存汇总（导出时间：${new Date().toLocaleString('zh-CN')}，共 ${data.length} 行）`],
     [],
@@ -225,8 +243,7 @@ async function exportProductStock() {
   ]
   data.forEach((r: any) => {
     aoa.push([
-      r.sku || '',
-      r.productName || '',
+      r.sku ? r.sku + ' | ' + (r.productName || '') : (r.productName || ''),
       r.brandName || '—',
       Number(r.qtyA ?? 0),
       Number(r.qtyB ?? 0),
@@ -237,11 +254,13 @@ async function exportProductStock() {
       r.safetyStock ? Number(r.safetyStock) : '',
       // 与 StockAmountCell 同口径：成本未维护明确写出，不静默写 0 ✓
       r.costMissing ? '成本未维护' : Number(r.stockAmount ?? 0),
+      // 与屏上同口径：滞销写天数，非滞销写「否」✓
+      r.stagnant ? ('滞销' + (r.stagnantDays == null ? '' : r.stagnantDays + ' 天')) : '否',
     ])
   })
   const ws = XLSX.utils.aoa_to_sheet(aoa)
   ws['!merges'] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: cols.length - 1 } }]
-  ws['!cols'] = [{ wch: 16 }, { wch: 24 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }]
+  ws['!cols'] = [{ wch: 40 }, { wch: 14 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 8 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 }, { wch: 12 }]
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, '成品库存汇总')
   XLSX.writeFile(wb, `成品库存汇总_${localDate()}.xlsx`)
@@ -358,7 +377,10 @@ function syncApplied() {
   applied.productName = query.productName
 }
 
-useDomainRefresh('productStock', () => { load(); stagnantRef.value?.reload() })
+// 2026-10-10：本页撤掉滞销面板 ⇒ 不再联动刷新面板（组件本身仍在产品分析页使用 ✓）。
+// TODO(清理)：`stagnantRef` / `applied` / `syncApplied`（及其在 doQuery/resetQuery 里的调用）现在只剩空转；
+//   本次为控制改动面未一并删除 —— 它们不影响行为（`?.` 空安全 ✓），下次顺手清干净 ✓。
+useDomainRefresh('productStock', () => { load() })
 </script>
 
 <style scoped>

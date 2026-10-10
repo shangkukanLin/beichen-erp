@@ -179,7 +179,10 @@ if ($pidB -eq '') {
 
 # ---------- (6) UI ----------
 Step '(6) UI: no window selector, a tooltip on the threshold, 9 columns, no overflow'
-Open '/inventory/product-stock' 3600
+# 2026-10-10：面板已按用户口径从「成品库存详情」撤掉 ⇒ UI 段改指向**仍挂载该面板**的产品分析页
+#   （`views/analysis/product.vue` 用同一个组件 ⇒ 控件/列数/不溢出这些断言口径不变 ✓）。
+#   ⚠️ 断言本身**一条没删**（不因撤面板就放弃验证滞销 UI ✗）。
+Open '/analysis/product' 4200
 $uiJs = "(()=>{const vis=e=>e.getClientRects().length>0;const card=[...document.querySelectorAll('.stagnant-card')].filter(vis)[0];if(!card)return 'NOCARD';const sel=card.querySelectorAll('.st-controls .el-select').length;const num=card.querySelectorAll('.st-controls .el-input-number').length;const tip=card.querySelectorAll('.st-controls .el-tooltip__trigger').length;const tb=card.querySelector('.el-table');const th=tb?tb.querySelectorAll('.el-table__header th').length:0;const body=tb?tb.querySelector('.el-table__body-wrapper'):null;const of=body?(body.scrollWidth-body.clientWidth):-1;return JSON.stringify({sel:sel,num:num,tip:tip,th:th,of:of})})()"
 $ui = EvalJs $uiJs
 Write-Host ('  panel probe >> ' + $ui)

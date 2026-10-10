@@ -306,6 +306,23 @@ public class WarehouseStockController {
             brandMapper.selectBatchIds(brandIds).forEach(b -> brandNameMap.put(b.getId(), b.getBrandName()));
         }
 
+        // ---- 滞销时钟（2026-10-10 用户口径：列表页要新增「是否滞销」列）----
+        // 与 /stagnant/page 用**同一套口径、同一个 mapper**（绝不在两处各写一份判定 ✗ 否则数字会打架 ✓）：
+        //   起算点 ref = max(最后销售日, 最近来货日) —— 来货也会重置滞销时钟 ✓；
+        //   两者都没有（既没来过货、也从没卖过）⇒ ref=null ⇒ 一律算滞销 ✓。
+        //   阈值固定取 DEFAULT_NO_SALE_DAYS(15)：本页撤掉滞销面板后**没有阈值入口** ⇒ 与后端默认值对齐 ✓。
+        LocalDate stagnantToday = LocalDate.now();
+        Map<Long, LocalDate> lastSaleForList = new HashMap<>();
+        for (Map<String, Object> r : stagnantAnalysisMapper.productLastSaleByProduct()) {
+            if (r.get("pid") == null || r.get("d") == null) continue;
+            lastSaleForList.put(((Number) r.get("pid")).longValue(), LocalDate.parse(String.valueOf(r.get("d"))));
+        }
+        Map<Long, LocalDate> lastInForList = new HashMap<>();
+        for (Map<String, Object> r : stagnantAnalysisMapper.productLastInByProduct()) {
+            if (r.get("pid") == null || r.get("d") == null) continue;
+            lastInForList.put(((Number) r.get("pid")).longValue(), LocalDate.parse(String.valueOf(r.get("d"))));
+        }
+
         List<Map<String, Object>> list = new ArrayList<>();
         for (Map<String, Object> row : agg.values()) {
             Long pid = (Long) row.get("productId");
@@ -334,6 +351,17 @@ public class WarehouseStockController {
             row.put("unitCost", pUnitCost);
             row.put("stockAmount", StockCosts.amount(total, pUnitCost));
             row.put("costMissing", pUnitCost == null);
+            // 滞销（2026-10-10 用户口径）：起算点 = max(最后销售日, 最近来货日)；
+            // ref 为空（从没来过货、也没卖出过）⇒ stagnantDays=null 且**一律算滞销** ✓（与 /stagnant/page 一致 ✓）
+            LocalDate refForStagnant = lastSaleForList.get(pid);
+            LocalDate lastInDate = lastInForList.get(pid);
+            if (refForStagnant == null || (lastInDate != null && lastInDate.isAfter(refForStagnant))) {
+                refForStagnant = lastInDate;
+            }
+            Long stagnantDaysForList = refForStagnant == null ? null
+                    : ChronoUnit.DAYS.between(refForStagnant, stagnantToday);
+            row.put("stagnantDays", stagnantDaysForList);
+            row.put("stagnant", stagnantDaysForList == null || stagnantDaysForList >= DEFAULT_NO_SALE_DAYS);
 
             if (Boolean.TRUE.equals(onlyLowStock) && !lowStock) continue;
             list.add(row);
