@@ -10,7 +10,9 @@
 -->
 <template>
   <div class="stock-amount-bar" v-loading="loading">
-    <span class="label">库存金额</span>
+    <!-- 2026-10-10 用户口径：这个数字是**合计**（成品页=成品额、物料页=物料额、all=两者之和）
+         ⇒ 标签由「库存金额」改成「**库存总金额**」，并把**标签与金额都标红**以示强调 ✓。 -->
+    <span class="label">库存总金额</span>
     <span class="total">{{ fmtMoney(total) }}</span>
     <!-- 只在「不限定范围」时才展开成品/物料分项：范围已限定（成品页=成品额、物料页=物料额）时，
          分项与上面的合计是**同一个数字**，重复一遍纯属噪声（2026-10-09 用户反馈）。 -->
@@ -117,8 +119,10 @@ defineExpose({ reload: load })
   border-radius: 4px;
   font-size: 13px;
 }
-.stock-amount-bar .label { color: #909399; }
-.stock-amount-bar .total { font-size: 15px; font-weight: 600; color: #303133; }
+/* 2026-10-10 用户口径：**标签与金额都标红**（强调这是"总金额"）。
+   颜色取项目语义色变量、并带字面兜底 ⇒ 变量缺失时也一定是红色 ✓。 */
+.stock-amount-bar .label { color: var(--app-color-danger, #f56c6c); }
+.stock-amount-bar .total { font-size: 15px; font-weight: 600; color: var(--app-color-danger, #f56c6c); }
 .stock-amount-bar .parts { color: #606266; }
 .stock-amount-bar .caliber {
   color: #409eff;
