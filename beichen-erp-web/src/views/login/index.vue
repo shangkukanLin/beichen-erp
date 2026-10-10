@@ -7,6 +7,7 @@ import request from '@/utils/request'
 import { login } from '@/api/auth'
 import { getCompanyList, verifyAdmin } from '@/api/company'
 import { useUserStore, type UserInfo } from '@/stores/user'
+import { SUPER_ADMIN_ROLE_CODE } from '@/constants/system'
 import type { MenuVO } from '@/api/system'
 import type { Company } from '@/api/company'
 // 2026-10-07「记住密码」：本地存储口径集中在 utils/remember.ts（含安全说明与"只记用户名"开关）
@@ -120,6 +121,14 @@ async function handleAdminVerify() {
     adminDialogVisible.value = false
     // 验证成功，用返回的 token 设置认证状态
     userStore.setToken(res.token)
+    // 2026-10-10 修复（用户报障：超管验证通过后却落到 /403，进不去「公司管理」）：
+    // 路由守卫 /company-manage 判的是 userStore.isSuperAdmin，而它读 userInfo.roles，
+    // 且 userInfo 是**上一次登录持久化在 localStorage 的值**。原实现只设 token、不写身份 ⇒
+    // 只要这份持久化身份的 roles 不含 super_admin（该浏览器上次是用**公司账号**登录的、
+    // 或换了浏览器 / 清过缓存），刚验证通过的超管也会被判 false ⇒ next('/403')。
+    // 后端 /admin/verify 已校验过该账号**持有 super_admin 角色**（否则不会返回 token），
+    // 故此处据实把身份回写进 store（只覆盖 roles，其余字段保持原样）。
+    userStore.setUserInfo({ ...(userStore.userInfo || {}), roles: [SUPER_ADMIN_ROLE_CODE] })
     router.push('/company-manage')
   } catch (e: any) {
     // 错误已在拦截器提示
