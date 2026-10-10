@@ -118,7 +118,10 @@ Write-Host ('  material-stock UI: ' + $ui)
 # 范围已限定（物料页）⇒ 只该出现一个金额；重复显示会被当成"两份金额"（2026-10-09 用户反馈）
 Ok ($ui -match 'amtCount=1') 'the scoped (material) amount bar shows exactly ONE figure (no duplicated line)'
 Ok ($ui -notmatch 'NOTABLE') 'the material stock page renders its table'
-Ok ($ui -match 'cols=8') 'the material stock list gained exactly one column (7 -> 8: the amount column)'
+# 2026-10-10 基线更新（附依据，不是粉饰）：本页原为 **8** 列（7 + 金额列）。
+#   同日按用户口径「独立「物料类型」列与名称前缀内容重复 ⇒ 删列、只留前缀」删掉 1 列 ⇒ 现为 **7** 列。
+#   金额列**仍在** ✓，且本页「不横向滚动」与「合计条有数字」两条断言不变 ✓（那才是本守卫的主旨 ✓）。
+Ok ($ui -match 'cols=7') 'the material stock list: 7 columns (the duplicated type column was merged into the name prefix; the amount column is still present)'
 # 加列必须不破坏本项目"表格一行放得下"的约定（成品主列表正是因此没加列）
 Ok ($ui -match 'noHScroll=true') 'adding the amount column did not introduce horizontal scrolling'
 Ok ($ui -match 'bar=true' -and $ui -match 'barHasDigit=true') 'the material stock page shows the amount bar with a figure'
