@@ -588,7 +588,9 @@ function onNameBlur() {
         <!-- 基础信息 -->
         <el-card shadow="never">
           <template #header><span style="font-weight:600">基础信息</span></template>
-          <el-form :model="form" label-width="var(--app-label-width)" size="default">
+          <!-- 2026-10-10：与 add.vue 同因 —— 含 5 字标签「玻璃分辨率」⇒ 默认档 90px 骑边缘、会折行 ✗。
+               按 tokens.css 口径升到 -lg(112px) ✓（本页该标签无必填星号，更接近临界 ⇒ 同样必须升 ✓）。 -->
+          <el-form :model="form" label-width="var(--app-label-width-lg)" size="default">
             <el-row :gutter="16">
               <el-col :span="8"><el-form-item label="项目编码"><el-input :model-value="form.code" disabled /></el-form-item></el-col>
               <el-col :span="8"><el-form-item required label="项目名称"><el-input v-model="form.name" @blur="onNameBlur" /></el-form-item></el-col>

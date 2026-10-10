@@ -33,7 +33,10 @@ function FromB64([string]$s) { return [Text.Encoding]::UTF8.GetString([Convert]:
 $root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent   # beichen-erp
 $router = Get-Content (Join-Path $root 'beichen-erp-web\src\router\index.ts') -Raw
 $targets = @()
-foreach ($m in [regex]::Matches($router, "path:\s*'([^']+)'[^\r\n]*?component:")) {
+# ⚠️ 2026-10-10 修：原正则用 `[^\r\n]*?` ⇒ **不能跨行** ✗，而有些路由的 `path:` 与 `component:` 是
+#    分两行写的（如 dev/project/add）⇒ 这些页**根本没进扫描目标**，扫描却仍报 PASS（"扫不到=通过"的假绿 ✗，
+#    用户报的「玻璃分辨率」折行就在这类页上）。改为允许跨行但**限定跨度**（{0,400} 惰性 ⇒ 不会误吃到下一条路由）。
+foreach ($m in [regex]::Matches($router, "path:\s*'([^']+)'[\s\S]{0,400}?component:")) {
   $p = $m.Groups[1].Value
   if ($p -match ':' -or $p -eq '') { continue }
   $targets += ('/' + $p)

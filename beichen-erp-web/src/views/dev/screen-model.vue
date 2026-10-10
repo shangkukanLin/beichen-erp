@@ -243,7 +243,10 @@ onActivated(() => { loadData() })
 
     <!-- 新增 / 编辑 -->
     <el-dialog v-model="dialog" :title="dialogTitle" width="var(--app-dialog-md)" :close-on-click-modal="false">
-      <el-form :model="form" label-width="90px" size="small">
+      <!-- 2026-10-10：本弹框表单含 3 个 5 字标签（副屏分辨率 / 副屏刷新率 / 屏幕供应商）+ 必填星号
+           ⇒ 90px（5 字+星号 ≈87~92px）**骑边缘必然折行** ✗；按 tokens.css 口径升到 -lg(112px) ✓。
+           注意这几行还用了 `:span="6"/"12"` 的窄栅格 ⇒ 标签升档后仍要保证输入框不被挤没（已由守卫复测 ✓）。 -->
+      <el-form :model="form" label-width="var(--app-label-width-lg)" size="small">
         <el-row :gutter="12">
           <el-col :span="8"><el-form-item label="类别">
             <el-select v-model="form.category" style="width:100%">

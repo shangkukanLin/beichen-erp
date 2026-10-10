@@ -221,7 +221,12 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
     <!-- 基础信息 -->
     <el-card shadow="never">
       <template #header><span style="font-weight:600">基础信息</span></template>
-      <el-form :model="form" label-width="var(--app-label-width)">
+      <!-- 2026-10-10（用户报：改配信息里「玻璃分辨率」折行 —— 「玻璃分辨」一行、「率」掉到第二行 ✗）：
+           本表单含 5 字标签「玻璃分辨率」且带 **必填星号** ⇒ 实测需求 ≈87~92px，而默认档正好是 **90px**
+           ⇒ **骑在边缘**：字体度量/浏览器缩放差 1~2px 就折行（这正是"守卫通过、用户却看到折行"的原因 ✗）。
+           按 tokens.css 既有口径（**凡含 5 字及以上标签的表单一律用 -lg 档**）升到 **112px** ✓ 留足余量。
+           ⚠️ 下方"时间节点"那个表单最长标签只有 4 字（立项日期/预计完成）⇒ **保持 90px 不动** ✓（不无谓改动）。 -->
+      <el-form :model="form" label-width="var(--app-label-width-lg)">
         <!-- 2026-09-21 布局：行1 项目名称|产品SKU|产品名称、行2 规格|适配机型|品牌、
              行3 显示方案|触摸方案|打样工厂（前两个在"原配"时隐藏）、行4 委外工厂 -->
         <el-row :gutter="16">
