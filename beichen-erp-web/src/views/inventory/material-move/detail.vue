@@ -108,7 +108,8 @@
       <el-table v-else :data="items" border stripe size="small">
         <el-table-column label="物料" min-width="240">
           <template #default="{ row }">
-            <el-link v-if="row.materialId" type="primary" underline="never" @click.stop="$router.push(`/outsource/material-stock/detail/${row.materialId}`)">{{ row.materialName || ('物料#' + row.materialId) }}</el-link>
+            <!-- 2026-10-10 用户口径「物料名称前面需要显示物料类型」：后端已把 materialTypeName 回填到明细行 ✓ -->
+            <el-link v-if="row.materialId" type="primary" underline="never" @click.stop="$router.push(`/outsource/material-stock/detail/${row.materialId}`)">{{ $mLabel(row) || ('物料#' + row.materialId) }}</el-link>
             <span v-else>—</span>
           </template>
         </el-table-column>

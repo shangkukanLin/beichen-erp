@@ -69,6 +69,13 @@ public class StockTakeServiceImpl implements StockTakeService {
     private final ProductMapper productMapper;
     private final OutsourceMaterialMapper materialMapper;
     private final CostService costService;
+    /**
+     * 物料类型主数据（2026-10-10 用户口径「物料名称前面需要显示物料类型」）。
+     *
+     * <p>建单快照时把类型名一并写进展示字段 {@code InventoryStockTakeItem.materialTypeName}
+     * （`@TableField(exist = false)` ⇒ 不落库、不需迁移 ✓），前端全局 `$mLabel` 直接可用 ✓。</p>
+     */
+    private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
 
     @Override
     public Page<Map<String, Object>> page(Long warehouseId, String period, String status, String scope, int pageNum, int pageSize) {
@@ -129,8 +136,40 @@ public class StockTakeServiceImpl implements StockTakeService {
     @Override
     public List<InventoryStockTakeItem> getItems(Long takeId) {
         assertRoleForTake(takeMapper.selectById(takeId));
-        return itemMapper.selectList(
+        List<InventoryStockTakeItem> items = itemMapper.selectList(
                 new LambdaQueryWrapper<InventoryStockTakeItem>().eq(InventoryStockTakeItem::getTakeId, takeId));
+        fillMaterialTypeNames(items);
+        return items;
+    }
+
+    /**
+     * 回填「物料类型名」（展示字段、`@TableField(exist = false)` **不落库**）。
+     *
+     * <p>2026-10-10 用户口径「物料名称前面需要显示物料类型」。⚠️ 为什么必须在**读取路径**做：
+     * 该字段不持久化 ⇒ 只在 {@link #create} 里赋值的话，**存量盘点单**（以及任何重新查询出来的行）
+     * 的类型名都是 null ⇒ 页面永远显示不出类型 ✗（这是本次差点漏掉的坑 ✓）。
+     * 用两次批量查询（物料 → 类型）而不是逐行查，避免 N+1 ✓。</p>
+     */
+    private void fillMaterialTypeNames(List<InventoryStockTakeItem> items) {
+        if (items == null || items.isEmpty()) return;
+        List<Long> mids = items.stream()
+                .filter(i -> i.getMaterialId() != null && i.getMaterialTypeName() == null)
+                .map(InventoryStockTakeItem::getMaterialId).distinct().toList();
+        if (mids.isEmpty()) return;
+        Map<Long, Long> midToTypeId = new LinkedHashMap<>();
+        for (OutsourceMaterial m : materialMapper.selectBatchIds(mids)) {
+            if (m.getMaterialTypeId() != null) midToTypeId.put(m.getId(), m.getMaterialTypeId());
+        }
+        if (midToTypeId.isEmpty()) return;
+        Map<Long, String> typeNames = new LinkedHashMap<>();
+        for (com.beichen.erp.dev.entity.MaterialType mt
+                : materialTypeMapper.selectBatchIds(midToTypeId.values().stream().distinct().toList())) {
+            typeNames.put(mt.getId(), mt.getTypeName());
+        }
+        for (InventoryStockTakeItem it : items) {
+            Long tid = midToTypeId.get(it.getMaterialId());
+            if (tid != null) it.setMaterialTypeName(typeNames.get(tid));
+        }
     }
 
     @Override

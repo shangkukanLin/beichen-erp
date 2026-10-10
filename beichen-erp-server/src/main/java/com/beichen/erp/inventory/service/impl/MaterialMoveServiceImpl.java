@@ -55,6 +55,14 @@ public class MaterialMoveServiceImpl implements MaterialMoveService {
     private final WarehouseStockService stockService;
     private final OutsourceMaterialMapper materialMapper;
     private final CostService costService;
+    /**
+     * 物料类型主数据（2026-10-10 用户口径「物料名称前面需要显示物料类型」）。
+     *
+     * <p>明细行的 {@code materialName} / {@code materialTypeName} 都按 material_id 回填，
+     * 供前端全局 `$mLabel` 显示成 `类型 | 名称` ✓。用全限定名注入，与
+     * {@code OutsourceOtherIoController} 的写法保持一致（该文件同样不写 import）✓。</p>
+     */
+    private final com.beichen.erp.dev.mapper.MaterialTypeMapper materialTypeMapper;
 
     @Override
     public Page<Map<String, Object>> page(String status, Long fromWarehouseId, Long toWarehouseId, int pageNum, int pageSize) {
@@ -113,6 +121,12 @@ public class MaterialMoveServiceImpl implements MaterialMoveService {
                     Map<String, Object> im = new HashMap<>();
                     im.put("materialId", it.getMaterialId());
                     im.put("materialName", name);
+                    // 2026-10-10 用户口径「物料名称前面需要显示物料类型」：列表摘要/明细都带上类型 ✓
+                    // ⚠️ 上面的 `mat` 声明在 if 块内、这里取不到 ⇒ 从 materialMap 再取一次（零额外查询 ✓）
+                    OutsourceMaterial mForType = materialMap.get(it.getMaterialId());
+                    com.beichen.erp.dev.entity.MaterialType mt = (mForType == null || mForType.getMaterialTypeId() == null)
+                            ? null : materialTypeMapper.selectById(mForType.getMaterialTypeId());
+                    im.put("materialTypeName", mt == null ? null : mt.getTypeName());
                     im.put("quantity", it.getQuantity());
                     itemList.add(im);
                 }
@@ -142,6 +156,10 @@ public class MaterialMoveServiceImpl implements MaterialMoveService {
                 if (mat != null) {
                     it.setMaterialName(mat.getMaterialName());
                     it.setUnit(mat.getUnit());
+                    // 2026-10-10 用户口径「物料名称前面需要显示物料类型」：明细行回填类型名 ✓
+                    com.beichen.erp.dev.entity.MaterialType mt = mat.getMaterialTypeId() == null
+                            ? null : materialTypeMapper.selectById(mat.getMaterialTypeId());
+                    it.setMaterialTypeName(mt == null ? null : mt.getTypeName());
                 }
             }
         }

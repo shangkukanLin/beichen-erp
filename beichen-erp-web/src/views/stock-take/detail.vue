@@ -108,7 +108,9 @@ onMounted(async () => { await loadItems(); takeBaseline() })
       <el-table :data="items" border stripe size="small" max-height="560">
         <!-- SKU 仅成品有；品质仅成品区分（物料库存不分品质，恒为良品） -->
         <el-table-column v-if="!isMaterial" prop="sku" label="SKU" width="130" />
-        <el-table-column :label="isMaterial ? '物料' : '名称'" min-width="160" show-overflow-tooltip><template #default="{row}">{{ nameOf(row) }}</template></el-table-column>
+        <!-- 2026-10-10 用户口径「物料名称前面需要显示物料类型」：物料行走全局 $mLabel（`类型 | 名称`），
+             成品行照旧走 nameOf ✓（产品侧有自己的 `SKU | 名称` 口径，别混用 ✓）。 -->
+        <el-table-column :label="isMaterial ? '物料' : '名称'" min-width="200" show-overflow-tooltip><template #default="{row}">{{ isMaterial ? $mLabel(row) : nameOf(row) }}</template></el-table-column>
         <el-table-column v-if="!isMaterial" prop="qualityType" label="品质" width="80" align="center" />
         <el-table-column prop="unit" label="单位" width="70" align="center" />
         <el-table-column prop="bookQuantity" label="账面数量" width="100" align="right" />

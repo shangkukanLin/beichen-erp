@@ -246,7 +246,7 @@ export function deleteReturnSort(id: number) {
 export interface StockTake { id?: number; takeNo?: string; warehouseId?: number; warehouseName?: string; period?: string; takeDate?: string; status?: string; remark?: string; itemCount?: number; diffCount?: number; diffSum?: number;
   // 2026-09-28（用户口径「盘点明细页需要显示盘点人、盘点时间等」）：单据信息块要用的人/时间 —— 后端 getById 已返回整实体
   createByName?: string; createTime?: string; auditorName?: string; auditTime?: string }
-export interface StockTakeItem { id?: number; takeId?: number; productId?: number; productName?: string; sku?: string; materialId?: number; materialName?: string; qualityType?: string; unit?: string; bookQuantity?: number; actualQuantity?: number; diffQuantity?: number; remark?: string }
+export interface StockTakeItem { id?: number; takeId?: number; productId?: number; productName?: string; sku?: string; materialId?: number; materialName?: string; materialTypeName?: string; qualityType?: string; unit?: string; bookQuantity?: number; actualQuantity?: number; diffQuantity?: number; remark?: string }
 /** 仓库盘点看板行：当月是否已盘点 + 超期天数 + 上次盘点日期 */
 export interface StockTakeStatus { warehouseId?: number; warehouseName?: string; warehouseType?: string; warehouseCategory?: string; period?: string; taken?: boolean; lastTakeDate?: string; dueDate?: string; overdueDays?: number; remind?: boolean }
 /**

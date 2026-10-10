@@ -31,9 +31,15 @@ public class InventoryMaterialMoveItem {
     @TableField(exist = false)
     private String unit;
 
-    /** 物料类型名（展示用，非表字段；明细接口回填） */
+    /**
+     * 物料类型名（展示用，**非表字段**；明细接口按 material_id 回填）。
+     *
+     * <p>2026-10-10：原字段名是 {@code typeName}，全仓**无任何读写**（死字段 ✗，值永远是 null ⇒ 前端
+     * 一直显示不出类型 ✓），且与全局约定（{@code materialLabel} 读 {@code materialTypeName}）不一致。
+     * 现改名并真正回填，前端统一走 `$mLabel(row)` ✓。</p>
+     */
     @TableField(exist = false)
-    private String typeName;
+    private String materialTypeName;
 
     private BigDecimal quantity;
 
