@@ -135,7 +135,9 @@ public class FinanceBillServiceImpl implements FinanceBillService {
         if (BillType.RECEIVABLE.getCode().equals(billType)) {
             if (customerMapper.selectForUpdate(partnerId, cid) == null) throw new BusinessException("客户不存在");
         } else {
-            if (supplierMapper.selectForUpdate(partnerId, cid) == null) throw new BusinessException("供应商不存在");
+            // 2026-10-10：方法改名（原名与单参版本构成 MyBatis **不支持**的同名重载 ⇒ 两者抢同一个 statement id，
+            // 被静默忽略的那个带 company_id ⇒ 租户条件失效。详见 SupplierMapper.selectForUpdateWithCompany 的说明）
+            if (supplierMapper.selectForUpdateWithCompany(partnerId, cid) == null) throw new BusinessException("供应商不存在");
         }
     }
 

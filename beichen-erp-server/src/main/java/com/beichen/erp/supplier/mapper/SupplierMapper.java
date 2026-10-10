@@ -14,19 +14,31 @@ import java.util.Map;
 public interface SupplierMapper extends BaseMapper<Supplier> {
 
     /**
-     * 行锁查询供应商（用于清算等需加锁场景），配合 FOR UPDATE 使用
+     * 行锁查询供应商（用于清算等**既有**调用方），配合 FOR UPDATE 使用。
+     *
+     * <p>⚠️ 本方法**不带租户条件**（裸 `FOR UPDATE` ⇒ 会绕过 mybatis-plus 的租户过滤）。
+     * 需要"加锁 + 租户校验"一次完成的新调用方，请用
+     * {@link #selectForUpdateWithCompany(Long, Long)}。</p>
      */
     @Select("SELECT * FROM supplier WHERE id = #{id} FOR UPDATE")
     Supplier selectForUpdate(@Param("id") Long id);
 
     /**
-     * F7-139（2026-09-20）：**带租户条件**的行锁重载（原单参版本保留给清算等既有调用方，避免连带改动）。
-     * 裸 `FOR UPDATE` 不带 `company_id` 会绕过 mybatis-plus 的租户过滤，新调用方请优先用本重载
+     * F7-139（2026-09-20）：**带租户条件**的行锁（单参版本保留给清算等既有调用方，避免连带改动）。
+     * 裸 `FOR UPDATE` 不带 `company_id` 会绕过 mybatis-plus 的租户过滤，新调用方请优先用本方法
      * （如账单生成的"往来单位串行化"）。
+     *
+     * <p><b>⚠️ 2026-10-10 改名（原名与上面单参版本**同名重载** {@code selectForUpdate}）：</b>
+     * <b>MyBatis 的 Mapper 接口不支持同名重载</b> —— statement id 是 {@code <接口全名>.<方法名>}，
+     * 两个同名方法抢同一个 id，只有一个被注册、另一个被**静默忽略**（启动日志一行
+     * {@code ERROR ... mapper[...] is ignored}，不中断启动 ⇒ 极难发现）。
+     * <b>实测：改名前的 20 天里本方法的 {@code company_id} 条件从未生效</b>，F7-139 形同虚设 ——
+     * 因为 {@code verify-fix-f7-139.ps1} 只断言"调用后返回业务错误（供应商不存在）"⇒ 照绿。
+     * 防复发：{@code tools/regression/verify-mapper-no-overload.ps1}（静态扫描全部 Mapper 接口的同名方法）。</p>
      */
     @Select("<script>SELECT * FROM supplier WHERE id = #{id}"
             + "<if test='companyId != null'> AND company_id = #{companyId}</if> FOR UPDATE</script>")
-    Supplier selectForUpdate(@Param("id") Long id, @Param("companyId") Long companyId);
+    Supplier selectForUpdateWithCompany(@Param("id") Long id, @Param("companyId") Long companyId);
 
     /**
      * 批量汇总供应商应付余额：按供应商ID分组，SUM 未结清应付台账的未付金额
