@@ -429,7 +429,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
               <template #default="{row}">
                 <span v-if="row.materialName">{{ row.materialName }}</span>
                 <el-select v-else v-model="row.materialId" placeholder="搜索物料" filterable remote :remote-method="searchMaterials" size="small" style="width:100%">
-                  <el-option v-for="m in matOptions" :key="m.id" :label="m.materialName || ('物料#' + m.id)" :value="m.id" />
+                  <el-option v-for="m in matOptions" :key="m.id" :label="m.materialName ? $mLabel(m) : ('物料#' + m.id)" :value="m.id" />
                 
                 <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/material-info')">+ 新增</div></template>
               </el-select>

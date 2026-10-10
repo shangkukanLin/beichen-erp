@@ -7,7 +7,7 @@
           <RemoteSelect v-model="query.warehouseId" add-route="/inventory/warehouse" :fetch="fetchWarehouses" :label-key="(row:any)=>row.warehouseName" placeholder="全部" style="width:180px" domain="warehouse" />
         </el-form-item>
         <el-form-item label="物料">
-          <RemoteSelect v-model="query.materialId" add-route="/outsource/material-info" :fetch="fetchMaterials" label-key="materialName" placeholder="全部（可输名称）" style="width:200px" @pick="(rows:any[])=>onMaterialPick(rows[0])" domain="material" />
+          <RemoteSelect v-model="query.materialId" add-route="/outsource/material-info" :fetch="fetchMaterials" :label-key="$mLabel" placeholder="全部（可输名称）" style="width:200px" @pick="(rows:any[])=>onMaterialPick(rows[0])" domain="material" />
         </el-form-item>
         <el-form-item label="变动类型">
           <el-select v-model="query.changeType" placeholder="全部" clearable filterable style="width:180px">

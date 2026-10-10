@@ -40,6 +40,21 @@ public class OutsourceMaterialServiceImpl implements OutsourceMaterialService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public Long create(Map<String, Object> body) {
+        // 2026-10-10（用户口径「物料必须有类型」）：必填校验**下沉到服务层** ——
+        // 原先只靠前端表单的 required，直调 API / 回归脚本可以静默造出无类型物料
+        // （实测：seed0_master.ps1 把字段名写成 bomTypeId ⇒ fill() 的 `if != null` 跳过 ⇒ 14 条 NULL ✗）。
+        // 只拦新增、不拦修改：update() 走同一个 fill()，传 null 时 MyBatis-Plus 会跳过该列（保留原值）⇒ 无害。
+        Object typeIdRaw = body == null ? null : body.get("materialTypeId");
+        if (typeIdRaw == null || String.valueOf(typeIdRaw).isBlank())
+            throw new BusinessException("物料类型不能为空");
+        long typeId;
+        try {
+            typeId = Long.parseLong(String.valueOf(typeIdRaw).trim());
+        } catch (NumberFormatException e) {
+            throw new BusinessException("物料类型不合法：" + typeIdRaw);
+        }
+        if (count("SELECT COUNT(*) FROM material_type WHERE id = ?", typeId) == 0)
+            throw new BusinessException("物料类型不存在");
         OutsourceMaterial m = new OutsourceMaterial();
         fill(m, body);
         m.setUnit(body.get("unit") != null ? body.get("unit").toString() : "PCS");

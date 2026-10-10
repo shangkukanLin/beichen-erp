@@ -105,7 +105,10 @@ if ($Part -eq 0 -or $Part -eq 2) {
   $hd = $null
   try { $hd = $hraw | ConvertFrom-Json } catch { Ok $false ('header probe parse failed: ' + $hraw) }
   if ($null -ne $hd) {
-    Ok ([int]$hd.n -eq 6) 'the list has EXACTLY 6 columns'
+    # 2026-10-10（用户口径「物料名称前面显示物料类型」）：独立「物料类型」列与名称前缀内容重复 ⇒ 按用户裁定
+    # 删掉该列、只留前缀（空出的宽度转给名称列）⇒ 列数由 6 变 5。前缀仍会渲染类型，故下方"类型列还在"的
+    # 断言改为"表头里没有独立的物料类型列"（$B_MT 仍在，见下）。
+    Ok ([int]$hd.n -eq 5) 'the list has EXACTLY 5 columns (the type column was merged into the name prefix)'
     Ok ($hd.hitA -eq $false) 'the "owner project" column is gone'
     Ok ($hd.hitS -eq $false) 'the "stock total" column is gone'
     Ok ($hd.hitU -eq $false) 'the "undelivered qty" column is gone'

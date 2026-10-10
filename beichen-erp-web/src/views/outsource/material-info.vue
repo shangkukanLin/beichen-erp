@@ -197,13 +197,15 @@ onMounted(async () => {
         <el-tab-pane v-for="t in MATERIAL_TYPES" :key="t.id" :label="t.typeName" :name="t.id" />
       </el-tabs>
 
-      <!-- 2026-09-21：列改版 —— 去掉「所属项目」「库存总量」「未交数量」三列（剩 6 列：物料类型/物料名称/供应商/单位/单价/操作） -->
+      <!-- 2026-09-21：列改版 —— 去掉「所属项目」「库存总量」「未交数量」三列（剩 6 列：物料类型/物料名称/供应商/单位/单价/操作）
+           2026-10-10 用户口径「物料名称前面显示物料类型」：独立「物料类型」列与名称前缀**内容重复** ⇒ 按用户裁定
+           **删掉该列、只留前缀**（空出的 100px 转给名称列 ⇒ 20 多个字的「类型 | 名称」也放得下）⇒ 现剩 5 列。
+           ⚠️ 列数变化由 tools/regression/verify-material-info-cols.ps1 断言，已同步改为 5。 -->
       <el-table :data="tableData" border stripe v-loading="tableLoading">
-        <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <!-- 2026-09-25 B1：物料 → 物料库存分布详情（含物料档案摘要）；供应商 → 供应商详情（多选时弹层逐项可点） -->
-        <el-table-column label="物料名称" min-width="130" show-overflow-tooltip>
+        <el-table-column label="物料名称" min-width="230" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.id}`)">{{ row.materialName }}</el-button>
+            <el-button type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.id}`)">{{ $mLabel(row) }}</el-button>
           </template>
         </el-table-column>
         <el-table-column label="供应商" width="180" show-overflow-tooltip>

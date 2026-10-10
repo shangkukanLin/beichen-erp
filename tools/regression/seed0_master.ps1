@@ -67,17 +67,25 @@ Write-Output ('products=' + $prodIds.Count + ' created=' + $prodOk)
 $bomTypes = (GetP '/dev/bom-type/enabled')
 $btId = if ($bomTypes -and $bomTypes.Count) { [int]$bomTypes[0].id } else { $null }
 Write-Output ('bomTypes=' + $bomTypes.Count + ' first=' + $btId)
+# 2026-10-10 修复（用户口径「物料必须有类型」）：本段原来往物料接口传的是 **bomTypeId**
+#   —— 那是**研发 BOM 的类型**，字段名撞车；而后端 create 只认 `materialTypeId`（`if != null` 才写）
+#   ⇒ 静默落 NULL、且不报错 ⇒ 实测一次 seed 造出 14 条无类型物料（SUB-MAT-* / MAT-* 全是这样来的 ✗）。
+#   现在按「物料类型」接口取名（默认第一类）并把字段名改对 ✓；后端也已补必填校验（见 OutsourceMaterialServiceImpl.create）。
+$matTypes = @((GetP '/dev/material-type/enabled'))
+$mtId = if ($matTypes.Count -gt 0) { [int]$matTypes[0].id } else { $null }
+Write-Output ('materialTypes=' + $matTypes.Count + ' first=' + $mtId)
+if (-not $mtId) { Write-Output 'WARN no enabled material type -> materials will have NO type (backend will now reject them)' }
 $matSupIds = @($supAll | Where-Object { $_.name -like 'MAT-SUP-*' } | ForEach-Object { $_.id })
 $childIds = @()
 for ($i = 1; $i -le 8; $i++) {
     $supStr = ($matSupIds -join ',')
-    $r = Post '/outsource/material' @{ materialName = 'SUB-MAT-' + $i; unit = 'PCS'; price = [math]::Round(($i * 7 + 3), 2); status = 1; bomTypeId = $btId; supplierIds = $supStr; remark = 'seed child' }
+    $r = Post '/outsource/material' @{ materialName = 'SUB-MAT-' + $i; unit = 'PCS'; price = [math]::Round(($i * 7 + 3), 2); status = 1; materialTypeId = $mtId; supplierIds = $supStr; remark = 'seed child' }
     if ($r) { $childIds += [int]$r.data }
 }
 $parentIds = @()
 for ($i = 1; $i -le 6; $i++) {
     $supStr = ($matSupIds -join ',')
-    $r = Post '/outsource/material' @{ materialName = 'MAT-' + $i; unit = 'PCS'; price = [math]::Round(($i * 30 + 60), 2); status = 1; bomTypeId = $btId; supplierIds = $supStr; remark = 'seed parent' }
+    $r = Post '/outsource/material' @{ materialName = 'MAT-' + $i; unit = 'PCS'; price = [math]::Round(($i * 30 + 60), 2); status = 1; materialTypeId = $mtId; supplierIds = $supStr; remark = 'seed parent' }
     if ($r) { $parentIds += [int]$r.data }
 }
 # components: each parent uses 2 children

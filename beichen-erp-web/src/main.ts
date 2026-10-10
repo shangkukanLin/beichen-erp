@@ -11,6 +11,9 @@ import router from './router'
 import { setupPermDirective } from './directives/perm'
 // 表格列宽记忆（2026-10-09）：全局兜底，一次覆盖所有 el-table（口径见 utils/tableWidths.ts）
 import { setupTableWidths } from './utils/tableWidths'
+// 物料展示标签（2026-10-10 用户口径「物料名称前面显示物料类型」）：
+// 注册成全局属性 ⇒ 30 多处展示点每处只改一行（口径与实现见 utils/materialLabel.ts，类型见 types/material-label.d.ts）
+import { materialLabel, materialTypePrefix } from './utils/materialLabel'
 import './styles/tokens.css'
 import './styles/index.css'
 // 次级页面统一骨架样式（PageShell / SectionCard；2026-09-23 统一模板专项）
@@ -28,6 +31,10 @@ app.config.globalProperties.$fmtDate = (val: any) => {
   const s = String(val)
   return s.length >= 10 ? s.substring(0, 10) : s
 }
+
+// 物料展示标签：`物料类型 | 物料名称`（无类型时只显示名称）—— 口径见 utils/materialLabel.ts
+app.config.globalProperties.$mLabel = materialLabel
+app.config.globalProperties.$mTypePrefix = materialTypePrefix
 
 app.use(createPinia())
 app.use(router)

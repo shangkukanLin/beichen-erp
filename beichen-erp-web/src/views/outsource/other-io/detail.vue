@@ -231,7 +231,7 @@ onActivated(() => { loadDetail() })
         <el-table-column label="物料名称" min-width="180">
           <template #default="{row,$index}">
             <el-select v-model="row.materialId" filterable style="width:100%" :disabled="!row.materialTypeId" @change="(v:any)=>onMatSelect($index,v)">
-              <el-option v-for="m in materialsByType(row.materialTypeId)" :key="m.id" :label="m.materialName" :value="m.id"/>
+              <el-option v-for="m in materialsByType(row.materialTypeId)" :key="m.id" :label="$mLabel(m)" :value="m.id"/>
             </el-select>
           </template>
         </el-table-column>

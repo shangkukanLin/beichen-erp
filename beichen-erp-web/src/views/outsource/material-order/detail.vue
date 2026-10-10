@@ -262,7 +262,7 @@ const { takeBaseline } = useUnsavedGuard(() => ({ order, items: items.value }))
             <span v-else>{{ typeName(row.materialTypeId) }}</span>
           </template></el-table-column>
           <el-table-column label="物料名称" min-width="150"><template #default="{row}">
-            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialId" add-route="/outsource/material-info" :fetch="(kw:string)=>fetchMaterialsByType(kw,row)" label-key="materialName" size="small" filterable clearable disable-cache style="width:100%" :preset="row.materialId?{id:row.materialId,materialName:row.materialName}:null" @change="(v:any)=>onMatChange(v,row)" />
+            <RemoteSelect v-if="order.status===MaterialOrderStatus.PENDING" v-model="row.materialId" add-route="/outsource/material-info" :fetch="(kw:string)=>fetchMaterialsByType(kw,row)" :label-key="$mLabel" size="small" filterable clearable disable-cache style="width:100%" :preset="row.materialId?{id:row.materialId,materialName:row.materialName,materialTypeName:row.materialTypeName}:null" @change="(v:any)=>onMatChange(v,row)" />
             <span v-else>{{ row.materialName }}</span>
           </template></el-table-column>
           <el-table-column prop="unit" label="单位" width="60" />
