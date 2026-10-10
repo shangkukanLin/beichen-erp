@@ -43,7 +43,10 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import request from '@/utils/request'
-import { fmtMoney } from '@/utils/format'
+// 2026-10-10 用户需求「金额精确到分、小数两位为 00 则不显示小数部分」：本组件渲染的都是**金额** ⇒
+// 统一改走 fmtAmount ✓（用 `as` 保留本地调用名，避免为一个口径改动去动三处模板 ✓）。
+// fmtMoney（固定 2 位）仍保留给"必须定长"的场合 ✓。
+import { fmtAmount as fmtMoney } from '@/utils/format'
 
 const props = withDefaults(defineProps<{
   /** 只统计某个仓库（仓库详情页用） */

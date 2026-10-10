@@ -113,7 +113,7 @@ if (-not $prodId -or $prodId -eq 'NULL') {
 
 # ---------- 5) 前端呈现：两个页面都要有金额（含「成本未维护」明示） ----------
 Open '/outsource/material-stock' 3500
-$ui = (EvalJs "(()=>{const t=document.querySelector('.el-table');if(!t)return 'NOTABLE';const n=t.querySelectorAll('.el-table__header th').length;const bar=document.querySelector('.stock-amount-bar');const miss=document.querySelectorAll('.cost-missing').length;const w=document.querySelector('.el-table__body-wrapper');const noH=w?(w.scrollWidth<=w.clientWidth+2):null;const cnt=bar?(String(bar.innerText).match(/\d[\d,]*\.\d\d/g)||[]).length:0;return 'cols=' + n + ' ; bar=' + !!bar + ' ; barHasDigit=' + (bar?/\d/.test(String(bar.innerText)):false) + ' ; amtCount=' + cnt + ' ; missingCells=' + miss + ' ; noHScroll=' + noH})()").Trim([char]34)
+$ui = (EvalJs "(()=>{const t=document.querySelector('.el-table');if(!t)return 'NOTABLE';const n=t.querySelectorAll('.el-table__header th').length;const bar=document.querySelector('.stock-amount-bar');const miss=document.querySelectorAll('.cost-missing').length;const w=document.querySelector('.el-table__body-wrapper');const noH=w?(w.scrollWidth<=w.clientWidth+2):null;const cnt=bar?(String(bar.innerText).match(/\d[\d,]*(?:\.\d\d)?/g)||[]).length:0;return 'cols=' + n + ' ; bar=' + !!bar + ' ; barHasDigit=' + (bar?/\d/.test(String(bar.innerText)):false) + ' ; amtCount=' + cnt + ' ; missingCells=' + miss + ' ; noHScroll=' + noH})()").Trim([char]34)
 Write-Host ('  material-stock UI: ' + $ui)
 # 范围已限定（物料页）⇒ 只该出现一个金额；重复显示会被当成"两份金额"（2026-10-09 用户反馈）
 Ok ($ui -match 'amtCount=1') 'the scoped (material) amount bar shows exactly ONE figure (no duplicated line)'
@@ -130,7 +130,7 @@ if ([int](SqlOne "SELECT COUNT(*) FROM warehouse_stock ws JOIN outsource_materia
 }
 
 Open '/inventory/product-stock' 3500
-$ui2 = (EvalJs "(()=>{const bar=document.querySelector('.stock-amount-bar');const cnt=bar?(String(bar.innerText).match(/\d[\d,]*\.\d\d/g)||[]).length:0;return 'bar=' + !!bar + ' ; barHasDigit=' + (bar?/\d/.test(String(bar.innerText)):false) + ' ; amtCount=' + cnt + ' ; tableCount=' + document.querySelectorAll('.el-table').length})()").Trim([char]34)
+$ui2 = (EvalJs "(()=>{const bar=document.querySelector('.stock-amount-bar');const cnt=bar?(String(bar.innerText).match(/\d[\d,]*(?:\.\d\d)?/g)||[]).length:0;return 'bar=' + !!bar + ' ; barHasDigit=' + (bar?/\d/.test(String(bar.innerText)):false) + ' ; amtCount=' + cnt + ' ; tableCount=' + document.querySelectorAll('.el-table').length})()").Trim([char]34)
 Write-Host ('  product-stock UI: ' + $ui2)
 Ok ($ui2 -match 'bar=true' -and $ui2 -match 'barHasDigit=true') 'the finished-goods stock page shows the amount bar with a figure'
 Ok ($ui2 -match 'amtCount=1') 'the scoped (finished-goods) amount bar shows exactly ONE figure (no duplicated line)'

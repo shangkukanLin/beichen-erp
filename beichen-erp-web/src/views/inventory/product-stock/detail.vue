@@ -108,7 +108,8 @@ import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import request from '@/utils/request'
 import * as XLSX from 'xlsx'
-import { fmtMoney } from '@/utils/format'
+// 2026-10-10：「库存金额」是**金额** ⇒ 统一走 fmtAmount（分；小数两位为 00 则不显示 ✓）。
+import { fmtAmount as fmtMoney } from '@/utils/format'
 import PageShell from '@/components/PageShell.vue'
 
 const route = useRoute()
