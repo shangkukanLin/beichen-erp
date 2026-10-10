@@ -537,7 +537,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           </template>
         </el-table-column>
         <el-table-column label="入库仓库" width="130"><template #default="{row}">{{ row.warehouseName || '-' }}</template></el-table-column>
-        <el-table-column label="物料名称" min-width="150"><template #default="{row}">{{ row.materialName || ('#' + row.materialId) }}</template></el-table-column>
+        <el-table-column label="物料名称" min-width="200" show-overflow-tooltip><template #default="{row}">{{ $mLabel(row) || ('#' + row.materialId) }}</template></el-table-column>
         <el-table-column label="返回数量" width="100" align="right"><template #default="{row}"><span style="color:var(--app-color-success);font-weight:500">{{ row.quantity }}</span></template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="90" show-overflow-tooltip />
         <!-- 2026-09-25 物料形态化：实际用料（子物料补料）汇总，明细金额 = FIFO 快照合计；
@@ -591,7 +591,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
         </el-row>
       </el-form>
       <el-table :data="repairRows" border size="small">
-        <el-table-column label="物料名称" min-width="150"><template #default="{row}">{{ row.materialName }}</template></el-table-column>
+        <el-table-column label="物料名称" min-width="200" show-overflow-tooltip><template #default="{row}">{{ $mLabel(row) }}</template></el-table-column>
         <el-table-column label="单位" width="70"><template #default="{row}">{{ row.unit || '-' }}</template></el-table-column>
         <el-table-column label="送修 / 已返回" width="130" align="center"><template #default="{row}">{{ row.sentQty }} / {{ row.returnedQty }}</template></el-table-column>
         <el-table-column label="本次返回" width="140">

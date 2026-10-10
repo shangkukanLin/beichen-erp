@@ -427,7 +427,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
           <el-table :data="materials" border size="small">
             <el-table-column label="物料" min-width="160">
               <template #default="{row}">
-                <span v-if="row.materialName">{{ row.materialName }}</span>
+                <span v-if="row.materialName">{{ $mLabel(row) }}</span>
                 <el-select v-else v-model="row.materialId" placeholder="搜索物料" filterable remote :remote-method="searchMaterials" size="small" style="width:100%">
                   <el-option v-for="m in matOptions" :key="m.id" :label="m.materialName ? $mLabel(m) : ('物料#' + m.id)" :value="m.id" />
                 
@@ -487,7 +487,7 @@ onActivated(async () => { await loadData(); takeBaseline() })
             <el-table-column label="产品/物料" min-width="120" show-overflow-tooltip>
               <template #default="{row}">
                 <template v-if="row._type==='加工单'">{{ row.productCount || 0 }}项</template>
-                <template v-else>{{ (row.items || []).map((it:any)=>it.materialName).join('、') || '-' }}</template>
+                <template v-else>{{ (row.items || []).map((it:any)=>$mLabel(it)).join('、') || '-' }}</template>
               </template>
             </el-table-column>
             <el-table-column label="金额" width="90" align="right">

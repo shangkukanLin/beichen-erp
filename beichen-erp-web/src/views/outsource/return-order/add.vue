@@ -633,7 +633,7 @@ async function loadMaterialTypes() {
         <el-table-column v-if="!isRepair" label="BOM物料（单套）" min-width="180">
           <template #default="{row}">
             <span v-if="row.materials.length" style="font-size:var(--app-font-xs)">
-              {{ row.materials.map((m:any) => m.materialName + '×' + (Number(m.perSetQuantity)||0)).join('、') }}
+              {{ row.materials.map((m:any) => $mLabel(m) + '×' + (Number(m.perSetQuantity)||0)).join('、') }}
             </span>
             <span v-else style="color:var(--app-text-placeholder);font-size:var(--app-font-xs)">选择产品后自动加载</span>
           </template>

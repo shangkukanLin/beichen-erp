@@ -487,8 +487,8 @@ onActivated(loadData)
     <el-card shadow="never" style="margin-top:12px" v-if="!isRepair">
       <template #header><span style="font-weight:600">退货物料明细（按 BOM 快照还料）</span></template>
       <el-table :data="detail.items || []" border size="small">
-        <el-table-column label="物料名称" min-width="160"><template #default="{row}">{{ row.materialName || row.materialId }}</template></el-table-column>
-        <el-table-column label="物料类型" width="100"><template #default="{row}">{{ row.materialTypeName || '-' }}</template></el-table-column>
+        <!-- 2026-10-10 用户口径：名称前拼物料类型 ⇒ 独立「物料类型」列与之内容重复，删列并把宽度转给名称列 -->
+        <el-table-column label="物料名称" min-width="260" show-overflow-tooltip><template #default="{row}">{{ $mLabel(row) || row.materialId }}</template></el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="quantity" label="数量" width="100" align="right" />
         <el-table-column prop="unitPrice" label="单价" width="100" align="right" />
