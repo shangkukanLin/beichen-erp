@@ -248,6 +248,10 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 .eq(UserDashboardTab::getUserId, id));
         userMenuMapper.delete(new LambdaQueryWrapper<UserMenu>()
                 .eq(UserMenu::getUserId, id));
+        // 2026-10-10（口径丙 · 用户口径「不改成"登出=全端下线"，但要堵住终止访问的缺口」）：
+        // 删号后必须终止其全部在线会话。此前"删了人，但他手上那台还能继续用"（最长 24h = SA_TOKEN_TIMEOUT）
+        // —— 会话只在**登录时**校验账号状态，请求期仅校验 token 有效性，不踢就等于"删了账号仍可操作"。
+        kickOutAllSessions(id, "删除用户");
     }
 
     @Override
@@ -270,6 +274,11 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
         update.setId(dto.getId());
         update.setPassword(passwordEncoder.encode(dto.getPassword()));
         baseMapper.updateById(update);
+        // 2026-10-10（口径丙）：改口令 ⇒ 该账号**全部在线会话立即失效**（不能只改库里的哈希）。
+        // 此前重置密码后，对方**正登录着的设备照旧能用**（最长 24h）—— "改密即终止旧会话"是本应有的语义。
+        // 注意副作用：若管理员重置的是**自己的**口令（超管本人改自己，见 assertSuperAdminSelfOnly），
+        // 会把自己也一并登出，需用新口令重新登录（这是标准做法，勿视为故障）。
+        kickOutAllSessions(dto.getId(), "重置密码");
     }
 
     /**
@@ -336,6 +345,38 @@ public class UserServiceImpl extends ServiceImpl<UserMapper, User> implements Us
                 : (user.getStatus() != null && user.getStatus() == 1 ? 0 : 1);
         update.setStatus(target);
         baseMapper.updateById(update);
+        // 2026-10-10（口径丙）：**禁用**时终止其全部在线会话（**启用**时不需要 —— 用户本来就能登录）。
+        // 原先 status 只在登录时校验 ⇒ "把人禁用了，但他手上那台还能继续用"直到 token 超时（最长 24h）。
+        if (target == 0) {
+            kickOutAllSessions(id, "禁用用户");
+        }
+    }
+
+    /**
+     * 2026-10-10（口径丙）：**踢掉某账号的全部在线会话**。用户口径原文："不改成'登出=全端下线'（多端并存保留），
+     * 但要把'终止访问'的缺口堵上"。
+     *
+     * <p>为什么必须有这个方法：本系统会话只在**登录时**校验账号状态（`status` / 密码），请求期只校验 token
+     * 是否有效。因此"重置密码 / 禁用 / 删除用户"如果不主动踢人，对方**已经建立**的会话会一直可用到 token
+     * 过期（{@code SA_TOKEN_TIMEOUT}，默认 24h）—— 表现为"我把人禁用了/删号了，他手上那台还在操作"。</p>
+     *
+     * <p>三个调用点（都是"终止访问"语义；<b>正常的「退出登录」不在其列</b>，那仍只注销当前这一端）：
+     * {@link #deleteUser}、{@link #resetPassword}、{@link #toggleStatus}（仅禁用方向）。</p>
+     *
+     * <p>用 {@code kickout} 而非 {@code logout}：前者把 token 标记为"被踢下线"，语义准确；对被踢的一方而言，
+     * 下一次请求会拿到 {@code code=401}（见 GlobalExceptionHandler），前端按既有 401 逻辑跳登录页，
+     * 不会 500。踢人失败**不得影响**主业务结果（例如目标账号本就没有任何会话）⇒ 只告警。</p>
+     */
+    private void kickOutAllSessions(Long userId, String action) {
+        if (userId == null) {
+            return;
+        }
+        try {
+            StpUtil.kickout(userId);
+            log.info("{} ⇒ 已将该账号的全部在线会话踢下线（userId={}，含多端）", action, userId);
+        } catch (Exception e) {
+            log.warn("{} ⇒ 踢下线未成功（不影响本次操作结果）：userId={}，原因={}", action, userId, e.getMessage());
+        }
     }
 
     private void saveUserRoles(Long userId, List<Long> roleIds) {
