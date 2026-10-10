@@ -648,7 +648,9 @@ async function loadMaterialTypes() {
       <template #header><span style="font-weight:600">拆解后的退货物料（合并去重）</span></template>
       <el-table :data="mergedItems" border size="small">
         <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
-        <el-table-column prop="materialName" label="物料名称" min-width="130" />
+        <el-table-column label="物料名称" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column prop="unit" label="单位" width="60" />
         <el-table-column prop="quantity" label="退回数量" width="100" align="right" />
       </el-table>

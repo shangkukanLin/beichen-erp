@@ -421,7 +421,9 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
     <el-card shadow="never" v-if="form.fromWarehouseId" v-loading="loading">
       <template #header><span style="font-weight:600">{{ isRepair ? '可送修物料（源仓良品库存）' : '可退物料（源仓良品库存）' }}</span></template>
       <el-table :data="stockList" border size="small">
-        <el-table-column prop="materialName" label="物料名称" min-width="140" />
+        <el-table-column label="物料名称" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column label="可退数量" width="100" align="right">

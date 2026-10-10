@@ -302,7 +302,9 @@ onMounted(() => { loadMaterialTypes(); loadReport() })
         title="以下物料的退料数量超过工厂委外仓账面库存"
         description="委外收货领料走「允许负」口径，工厂仓账面常为负或没有库存行，此时严格口径会阻止结单。如需按实际情况退料，请勾选下方「强制退料」；否则请先补入库单或下调退料数量。" />
       <el-table :data="shortageRows" border size="small" max-height="240" style="margin-top:12px">
-        <el-table-column prop="materialName" label="物料" min-width="130" />
+        <el-table-column label="物料" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column label="工厂仓账面" width="110" align="right">
           <template #default="{row}"><span style="color:var(--app-color-danger)">{{ fmtQty(row.factoryStockQty) }}</span></template>
         </el-table-column>

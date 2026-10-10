@@ -251,7 +251,7 @@ onMounted(async () => {
         <el-table-column label="子物料" min-width="220">
           <template #default="{ row }">
             <el-select v-model="row.childMaterialId" filterable placeholder="选择已有物料" style="width:100%" size="small">
-              <el-option v-for="m in allMaterials" :key="m.id" :label="`${m.materialName} (${m.materialTypeName || ''})`" :value="m.id" :disabled="m.id === form.id" />
+              <el-option v-for="m in allMaterials" :key="m.id" :label="$mLabel(m)" :value="m.id" :disabled="m.id === form.id" />
             
                 <template #footer><div style="padding:6px 12px;cursor:pointer;text-align:center;font-size:12px;color:var(--app-color-primary,#409eff);border-top:1px solid var(--app-color-border,#ebeef5)" @click="$router.push('/outsource/material-info')">+ 新增</div></template>
               </el-select>

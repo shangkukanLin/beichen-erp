@@ -328,7 +328,9 @@ onUnmounted(() => window.removeEventListener('refresh:dropdown-data', handleRefr
         <div style="margin-bottom:6px"><span style="font-weight:500;font-size:var(--app-font-base)">BOM物料清单</span></div>
         <el-table :data="p.materials" border size="small">
           <el-table-column label="类型" width="80"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
-          <el-table-column prop="materialName" label="物料名称" min-width="150" />
+          <el-table-column label="物料名称" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }">{{ $mLabel(row) }}</template>
+          </el-table-column>
           <el-table-column prop="unit" label="单位" width="60" />
           <el-table-column label="单价" width="90" align="right"><template #default="{row}">{{ row.price != null ? Number(row.price).toFixed(2) : '-' }}</template></el-table-column>
           <el-table-column label="单套用量" width="90"><template #default="{row}">{{ row.bomQuantityPerSet }}</template></el-table-column>

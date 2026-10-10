@@ -168,7 +168,9 @@
           </div>
         </template>
         <el-table v-loading="tableLoading" :data="readonlyItems" border stripe show-summary :summary-method="summaries">
-          <el-table-column prop="materialName" label="物料名称" min-width="160" />
+          <el-table-column label="物料名称" min-width="190" show-overflow-tooltip>
+            <template #default="{ row }">{{ $mLabel(row) }}</template>
+          </el-table-column>
           <el-table-column prop="materialTypeName" label="物料类型" width="120">
             <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
           </el-table-column>

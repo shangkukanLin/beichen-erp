@@ -400,7 +400,9 @@ onMounted(async () => { await load(); await loadReturns() })
           </template>
         </p>
         <el-table v-if="(detail.materials || []).length" :data="detail.materials" border stripe size="small">
-          <el-table-column prop="materialName" label="还回物料" min-width="130" show-overflow-tooltip />
+          <el-table-column label="还回物料" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">{{ $mLabel(row) }}</template>
+          </el-table-column>
           <el-table-column label="品质" width="70" align="center">
             <template #default="{ row }">{{ row.qualityType === 'DEFECT' ? '不良' : '良品' }}</template>
           </el-table-column>
@@ -545,7 +547,7 @@ onMounted(async () => { await load(); await loadReturns() })
                 :disabled="candidates.length === 0" @change="onPickMaterial(it)">
                 <el-option v-for="c in candidates" :key="c.materialId" :value="c.materialId"
                   :disabled="isMaterialPicked(c.materialId, it)"
-                  :label="(c.materialName || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 单套用量 ' + c.perSetQuantity" />
+                  :label="($mLabel(c) || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 单套用量 ' + c.perSetQuantity" />
               </el-select>
               <el-input v-model="it.quantity" type="number" placeholder="用量(可超BOM)" style="width:110px"
                 @change="onQtyChange(it)" />

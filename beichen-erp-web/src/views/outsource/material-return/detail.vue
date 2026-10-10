@@ -479,8 +479,10 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
 
       <!-- 草稿：可编辑（物料集合固定 —— 不重建明细，避免 add.vue 注释里"静默删行"的坑） -->
       <el-table v-if="isDraft" :data="editableItems" border size="small">
-        <el-table-column prop="materialName" label="物料名称" min-width="160" />
-        <el-table-column prop="materialTypeName" label="物料类型" width="100" />
+        <!-- 2026-10-10 用户口径：独立「物料类型」列与名称前缀内容重复 ⇒ 删列、只留前缀（空出的 100px 转给名称列） -->
+        <el-table-column label="物料名称" min-width="260" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column :label="isRepair ? '送修数量' : '退货数量'" width="110">
           <template #default="{ row }">
@@ -616,7 +618,7 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
           <el-option-group v-for="g in repairCandidateGroups" :key="g.label" :label="g.label">
             <el-option v-for="c in g.items" :key="c.materialId" :value="c.materialId"
               :disabled="isRepairMaterialPicked(c.materialId, m)"
-              :label="(c.materialName || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 用量 ' + c.quantity" />
+              :label="($mLabel(c) || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 用量 ' + c.quantity" />
           </el-option-group>
         </el-select>
         <el-input v-model="m.quantity" type="number" placeholder="用量" style="width:150px" @change="m.quantity = Math.round(Number(m.quantity) || 0)" />

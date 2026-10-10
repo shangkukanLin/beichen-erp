@@ -633,7 +633,7 @@ onActivated(loadData)
           <el-option-group v-for="g in repairCandidateGroups" :key="g.label" :label="g.label">
             <el-option v-for="c in g.items" :key="c.materialId" :value="c.materialId"
               :disabled="isRepairMaterialPicked(c.materialId, m)"
-              :label="(c.materialName || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 单套用量 ' + c.perSetQuantity" />
+              :label="($mLabel(c) || ('#' + c.materialId)) + (c.unit ? ('（' + c.unit + '）') : '') + ' · 单套用量 ' + c.perSetQuantity" />
           </el-option-group>
         </el-select>
         <el-input v-model="m.quantity" type="number" placeholder="用量" style="width:150px" @change="m.quantity = Math.round(Number(m.quantity) || 0)" />

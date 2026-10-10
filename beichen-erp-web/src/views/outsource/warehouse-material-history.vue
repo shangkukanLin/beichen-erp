@@ -60,7 +60,9 @@ onMounted(() => loadData())
         <el-table-column label="类型" width="190" align="center">
           <template #default="{row}"><el-tag :type="stockChangeTypeTag(row.changeType)" size="small">{{ StockChangeTypeLabel[row.changeType] || row.changeType }}</el-tag></template>
         </el-table-column>
-        <el-table-column prop="materialName" label="物料名称" min-width="140" show-overflow-tooltip />
+        <el-table-column label="物料名称" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column label="变更前" width="100" align="right">
           <template #default="{row}"><span style="font-weight:500">{{ row.beforeQuantity }}</span></template>
         </el-table-column>

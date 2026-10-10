@@ -394,7 +394,9 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <el-table-column type="expand">
           <template #default="{ row }">
             <el-table :data="row.items || []" border size="small" style="margin:4px 20px">
-              <el-table-column prop="materialName" label="物料" min-width="120" />
+              <el-table-column label="物料" min-width="150" show-overflow-tooltip>
+                <template #default="{ row }">{{ $mLabel(row) }}</template>
+              </el-table-column>
               <el-table-column prop="unit" label="单位" width="60" />
               <el-table-column prop="quantity" label="数量" width="90" />
               <el-table-column prop="qualityType" label="品质" width="70"><template #default="{ row: r }"><el-tag :type="r.qualityType === QualityType.DEFECT ? 'danger' : 'success'" size="small">{{ QualityTypeLabel[r.qualityType] || r.qualityType }}</el-tag></template></el-table-column>

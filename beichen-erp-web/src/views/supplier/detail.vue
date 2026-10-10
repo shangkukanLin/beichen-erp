@@ -524,7 +524,9 @@ onActivated(async () => { await loadData(); takeBaseline() })
       <el-tab-pane v-if="hasFactory" label="物料缺料" name="material">
         <el-card shadow="never" v-loading="materialLoading">
           <el-table :data="materialSummary" border stripe size="small">
-            <el-table-column prop="materialName" label="物料名称" min-width="120" show-overflow-tooltip />
+            <el-table-column label="物料名称" min-width="150" show-overflow-tooltip>
+              <template #default="{ row }">{{ $mLabel(row) }}</template>
+            </el-table-column>
             <el-table-column prop="materialTypeName" label="类型" width="80" />
             <el-table-column prop="totalDemand" label="总需求" width="90" align="right" />
             <el-table-column label="已送料" width="90" align="right">

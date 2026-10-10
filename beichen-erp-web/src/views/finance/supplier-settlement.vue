@@ -172,7 +172,9 @@ useDomainRefresh('supplierSettlement', async () => { await loadAll(); refreshChe
       <el-table :data="data.stocks || []" border stripe max-height="260">
         <el-table-column prop="warehouseName" label="委外仓" width="150" />
         <el-table-column prop="materialTypeName" label="类型" width="90" />
-        <el-table-column prop="materialName" label="物料" min-width="140" />
+        <el-table-column label="物料" min-width="170" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="qualityType" label="质量" width="80" align="center" />
         <el-table-column prop="quantity" label="数量" width="100" align="right" />

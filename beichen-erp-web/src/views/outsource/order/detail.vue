@@ -386,7 +386,9 @@ onActivated(async () => { await loadOptions(); await loadData() })
         <template #header><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-weight:600">结单详情</span><el-button size="small" @click="router.push(`/outsource/order/close/${form.id}`)">查看完整结单报表</el-button></div></template>
         <el-table :data="closeItems" border size="small" stripe v-if="closeItems.length">
           <el-table-column label="类目" width="70"><template #default="{row}">{{ typeName(row.materialTypeId) }}</template></el-table-column>
-          <el-table-column prop="materialName" label="物料名称" min-width="120" />
+          <el-table-column label="物料名称" min-width="150" show-overflow-tooltip>
+            <template #default="{ row }">{{ $mLabel(row) }}</template>
+          </el-table-column>
           <el-table-column label="用料总数" width="90" align="right"><template #default="{row}">{{ fmt(row.usedTotalQuantity) }}</template></el-table-column>
           <el-table-column label="退料总计" width="90" align="right"><template #default="{row}">{{ fmt((+row.goodReturnQty||0) + (+row.defectReturnQty||0)) }}</template></el-table-column>
           <el-table-column label="出货消耗" width="90" align="right"><template #default="{row}">{{ fmt(row.shippedQuantity) }}</template></el-table-column>
