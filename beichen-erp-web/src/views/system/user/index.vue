@@ -25,8 +25,11 @@ import { SUPER_ADMIN_ROLE_CODE } from '@/constants/system'
 import { SYSTEM_USER_DIRTY_KEY } from '@/api/enums'
 import { useUserStore } from '@/stores/user'
 import { invalidate, useDomainRefresh } from '@/utils/dataFreshness'
+// 2026-10-10：重置「自己」的口令后需主动跳登录页（见 handleResetPassword 的说明）
+import { useRouter } from 'vue-router'
 
 const userStore = useUserStore()
+const router = useRouter()
 
 // 查询参数
 const query = reactive<UserQueryParams>({
@@ -294,6 +297,16 @@ async function handleResetPassword() {
     resetLoading.value = true
     try {
       await resetPassword({ id: resetForm.id, password: resetForm.password })
+      // 2026-10-10（配套后端口径丙：「改密 ⇒ 终止该账号全部在线会话」，见 UserServiceImpl.kickOutAllSessions）：
+      // 重置的若是**自己**的口令，后端会把自己也一并踢下线 ⇒ 此处主动清本地状态并跳登录页，
+      // 否则用户会先看到"已重置密码"、再莫名收到"登录已失效"（本系统的"改自己密码"唯一入口就是这里）。
+      if (String(resetForm.id) === String(userStore.userInfo?.id ?? '')) {
+        ElMessage.success('密码已重置，请用新密码重新登录')
+        resetDialogVisible.value = false
+        userStore.logout()
+        router.push('/login')
+        return
+      }
       ElMessage.success('已重置密码')
       resetDialogVisible.value = false
     } catch {
