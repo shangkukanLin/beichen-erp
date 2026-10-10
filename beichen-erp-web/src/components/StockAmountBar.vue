@@ -52,6 +52,19 @@ const props = withDefaults(defineProps<{
   warehouseIds?: string | number[]
   /** 突出哪一项：all=合计、product=成品、material=物料 */
   mode?: 'all' | 'product' | 'material'
+  // ---- 2026-10-10 用户需求「库存总金额需要根据查询结果而改变」----------------------------------
+  // 两个库存列表页把**已确认应用**的筛选条件传进来 ⇒ 合计条跟着查询走 ✓。
+  // ⚠️ 全部可选：不传（仓库详情页 / 首页看板）时后端仍按全量统计 ✓ —— 那是既有的契约，不能破 ✗。
+  /** 品牌（成品页查询条） */
+  brandId?: number | string
+  /** 产品名称关键字（成品页查询条；后端匹配名称/SKU） */
+  productName?: string
+  /** 仅看低于安全库存（成品页查询条） */
+  onlyLowStock?: boolean
+  /** 物料类型（物料页查询条） */
+  materialTypeId?: number | string
+  /** 物料名称关键字（物料页查询条） */
+  materialName?: string
 }>(), { mode: 'all' })
 
 const loading = ref(false)
@@ -91,6 +104,13 @@ async function load() {
     if (ids && (Array.isArray(ids) ? ids.length : String(ids).length)) {
       params.warehouseIds = Array.isArray(ids) ? ids.join(',') : ids
     }
+    // 2026-10-10 用户需求「库存总金额需要根据查询结果而改变」：把列表页"已确认应用"的筛选条件一并带上 ✓。
+    // 只在**有值**时才带 ⇒ 两个仓库详情页与首页看板"不带参数 = 全量"的契约不受影响 ✓。
+    if (props.brandId) params.brandId = props.brandId
+    if (props.productName) params.productName = props.productName
+    if (props.onlyLowStock) params.onlyLowStock = true
+    if (props.materialTypeId) params.materialTypeId = props.materialTypeId
+    if (props.materialName) params.materialName = props.materialName
     const res = await request.get<any, any>('/warehouse/stock/amount-summary', { params })
     data.value = res || {}
   } catch {
@@ -102,7 +122,10 @@ async function load() {
 }
 
 onMounted(load)
-watch(() => [props.warehouseId, props.warehouseIds], load)
+// 任一筛选条件变化都要重算 ✓。注意：列表页传的是"已确认应用"的快照（applied）而非输入框实时值
+// ⇒ 沿用"点查询/重置才生效"的既有口径，输入框每敲一下不会触发重查 ✓。
+watch(() => [props.warehouseId, props.warehouseIds, props.brandId, props.productName, props.onlyLowStock,
+             props.materialTypeId, props.materialName], load)
 defineExpose({ reload: load })
 </script>
 

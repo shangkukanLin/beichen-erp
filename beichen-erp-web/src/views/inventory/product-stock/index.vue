@@ -46,7 +46,11 @@
       <!-- 2026-10-09 用户需求：成品仓库存金额。本表 12 列 colSum 已 = avail（余量 0），
            再加一列必然横向滚动 ⇒ 这里用合计条（含成品/物料/合计 + 按仓库明细 + 成本未维护提示）；
            逐行金额在「仓库分布」明细页与仓库详情页给出（那两处列宽够）。 -->
-      <StockAmountBar mode="product" />
+      <!-- 2026-10-10 用户需求「库存总金额需要根据查询结果而改变」⇒ 把**已确认应用**的快照（applied ✓：
+           点查询/重置才更新）传给合计条 ⇒ 它跟着查询走 ✓，而输入框每敲一下不会触发重查 ✓
+           （沿用本页"点查询才生效"的既有口径 ✓）。默认全空时后端仍按全量统计 ✓ 契约不变 ✓。 -->
+      <StockAmountBar mode="product" :warehouse-ids="applied.warehouseIds" :brand-id="applied.brandId"
+                      :product-name="applied.productName" :only-low-stock="applied.onlyLowStock" />
       <el-table v-loading="loading" :data="rows" border stripe @row-click="goDetail">
         <!-- 2026-09-26 B6（实测）：SKU 是最长 10 位的业务编码（最长样本「SKU-000012」正文需 93px），
              min88 会把 10 行 SKU 全部省略 ⇒ min88→**98**（93 + 内边距 16 + 边框 1 的最省值再留 2px 余量）。 -->
@@ -370,16 +374,24 @@ function goProduct(row: any) { if (row.productId) router.push(`/product/detail/$
  * 组件内部 watch 这三个值，变化后自动回第一页重查。
  */
 const stagnantRef = ref<any>(null)
-const applied = reactive({ brandId: undefined as number | undefined, warehouseIds: '', productName: '' })
+const applied = reactive({
+  brandId: undefined as number | undefined,
+  warehouseIds: '',
+  productName: '',
+  // 2026-10-10（用户需求「库存总金额需要根据查询结果而改变」）：补上 onlyLowStock ——
+  // 合计条必须也受"仅看低于安全库存"影响 ✓（缺这一项，勾上后列表只剩几行、合计条却仍是全部金额 ✗）。
+  onlyLowStock: false
+})
 function syncApplied() {
   applied.brandId = query.brandId
   applied.warehouseIds = (query.warehouseIds || []).join(',')
   applied.productName = query.productName
+  applied.onlyLowStock = query.onlyLowStock
 }
 
 // 2026-10-10：本页撤掉滞销面板 ⇒ 不再联动刷新面板（组件本身仍在产品分析页使用 ✓）。
-// TODO(清理)：`stagnantRef` / `applied` / `syncApplied`（及其在 doQuery/resetQuery 里的调用）现在只剩空转；
-//   本次为控制改动面未一并删除 —— 它们不影响行为（`?.` 空安全 ✓），下次顺手清干净 ✓。
+// 2026-10-10 二次修订：`applied` / `syncApplied` **不再空转** —— 它们现在是「库存总金额」合计条的筛选快照 ✓
+//   （用户需求「库存总金额需要根据查询结果而改变」✓）。仅 `stagnantRef` 仍是无用残留，下次顺手删 ✓。
 useDomainRefresh('productStock', () => { load() })
 </script>
 

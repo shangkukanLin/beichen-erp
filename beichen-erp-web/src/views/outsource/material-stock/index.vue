@@ -46,7 +46,11 @@
       -->
       <!-- 2026-10-09 用户需求：物料仓库存金额。列宽够（本页 7 列，加一列仍 ≤ 容器）⇒ 直接加列；
            成品库存主表 12 列余量为 0，那里改用同一个合计条组件（见 StockAmountBar 注释）。 -->
-      <StockAmountBar mode="material" />
+      <!-- 2026-10-10 用户需求「库存总金额需要根据查询结果而改变」⇒ 传"已确认应用"的快照（applied ✓）：
+           跟着查询走 ✓，而输入框每敲一下不会触发重查 ✓（沿用本页"点查询才生效"的口径 ✓）；
+           默认全空时后端仍按全量统计 ✓（不破仓库详情页/首页看板的既有契约 ✓）。 -->
+      <StockAmountBar mode="material" :warehouse-ids="applied.warehouseIds"
+                      :material-type-id="applied.materialTypeId" :material-name="applied.materialName" />
       <el-table v-loading="loading" :data="rows" border stripe>
         <!-- 2026-10-10 用户口径：独立「物料类型」列与名称前缀内容重复 ⇒ 删列、只留前缀（空出的 104px 转给名称列） -->
         <!-- 2026-09-26 B5b（用户口径「数据显示完整 + 物料/仓库可点」）：行粒度是「仓库 × 物料」，
@@ -202,12 +206,26 @@ async function load() {
   } finally { loading.value = false }
 }
 
-function doQuery() { page.pageNum = 1; load() }
+/**
+ * 「已确认应用」的筛选快照（2026-10-10 用户需求「库存总金额需要根据查询结果而改变」）。
+ *
+ * <p>合计条传这份**快照**而不是输入框实时值 ⇒ 沿用本页"点查询才生效"的口径 ✓（输入框每敲一下不会重查 ✓）。
+ * ⚠️ 只放**筛选条件**、**不放分页** ✓ —— 合计条是"筛选后的**全量**合计"，不随翻页/每页条数跳动 ✓。</p>
+ */
+const applied = reactive({ materialName: '', materialTypeId: undefined as number | undefined, warehouseIds: '' })
+function syncApplied() {
+  applied.materialName = query.materialName
+  applied.materialTypeId = query.materialTypeId
+  applied.warehouseIds = (query.warehouseIds || []).join(',')
+}
+
+function doQuery() { page.pageNum = 1; syncApplied(); load() }
 function resetQuery() {
   query.materialName = ''
   query.materialTypeId = undefined
   query.warehouseIds = []
   page.pageNum = 1
+  syncApplied()
   load()
 }
 function onSizeChange(v: number) { page.pageSize = v; page.pageNum = 1; load() }

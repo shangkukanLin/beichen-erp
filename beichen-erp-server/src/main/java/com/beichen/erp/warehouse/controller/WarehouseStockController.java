@@ -917,11 +917,41 @@ public class WarehouseStockController {
     @GetMapping("/amount-summary")
     public R<Map<String, Object>> amountSummary(
             @RequestParam(required = false) Long warehouseId,
-            @RequestParam(required = false) List<Long> warehouseIds) {
+            @RequestParam(required = false) List<Long> warehouseIds,
+            // 2026-10-10 用户需求「库存总金额需要根据查询结果而改变」：接收与两个库存列表页**同样的**筛选条件。
+            // ⚠️ 全部 required=false ⇒ **不带参数时仍是全量**（仓库详情页 / 首页看板的既有契约 ✓ 不能破 ✗）。
+            @RequestParam(required = false) Long brandId,
+            @RequestParam(required = false) String productName,
+            @RequestParam(required = false) Boolean onlyLowStock,
+            @RequestParam(required = false) Long materialTypeId,
+            @RequestParam(required = false) String materialName) {
 
         Set<Long> whFilter = buildWarehouseFilter(warehouseId, warehouseIds);
-        List<WarehouseStock> all = stockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
-                .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter));
+        // 与「产品库存汇总 / 物料库存」两个列表页**复用同一套条件构造器** ✓ —— 这是"合计数与列表数对得上"的前提 ✓
+        // （这里若另写一套 where，迟早与列表打架 ✗）。`buildProductIdFilter` 的语义：不适用回 null，
+        // 适用但匹配不到东西回**空集** ✓。
+        Set<Long> fp = buildProductIdFilter(brandId, productName);
+        Set<Long> fm = buildMaterialIdFilter(materialTypeId, materialName);
+        // ⚠️ 空集**绝不能退化成"不过滤"** ✗✗ —— 那会把**全量金额**当成"筛选后的金额"显示（最会骗人的一种错 ✓）。
+        //    列表页对空集的做法是"直接回 0 行"（product-summary/page 的 filter 分支 ✓）⇒ 这里等价地回"金额全 0" ✓。
+        boolean noMatch = (fp != null && fp.isEmpty()) || (fm != null && fm.isEmpty());
+        List<WarehouseStock> all = noMatch ? Collections.emptyList()
+                : stockMapper.selectList(new LambdaQueryWrapper<WarehouseStock>()
+                    .in(!whFilter.isEmpty(), WarehouseStock::getWarehouseId, whFilter)
+                    .in(fp != null, WarehouseStock::getProductId, fp)
+                    .in(fm != null, WarehouseStock::getMaterialId, fm));
+
+        // 「仅看低于安全库存」需要**产品跨仓总库存**（与 product-summary/page:336-337 同一判据 ✓）⇒
+        // 先按"筛选后的行集合"把每个产品的总库存算出来（品质口径与列表的「总库存」列一致 ✓）。
+        Map<Long, BigDecimal> productTotals = new HashMap<>();
+        if (Boolean.TRUE.equals(onlyLowStock)) {
+            for (WarehouseStock s : all) {
+                if (s.getProductId() == null) continue;
+                if (ProductQualityType.of(s.getQualityType()) == null) continue;
+                BigDecimal q = s.getQuantity() != null ? s.getQuantity() : BigDecimal.ZERO;
+                productTotals.merge(s.getProductId(), q, BigDecimal::add);
+            }
+        }
 
         Set<Long> pIds = new HashSet<>();
         Set<Long> mIds = new HashSet<>();
@@ -952,6 +982,17 @@ public class WarehouseStockController {
             boolean isProduct = s.getProductId() != null;
             boolean isMaterial = !isProduct && s.getMaterialId() != null;
             if (!isProduct && !isMaterial) continue;
+
+            // 「仅看低于安全库存」（2026-10-10）：判据与列表页**逐字同源** ——
+            // 设置了安全库存，且**产品跨仓总库存**（在上方按"筛选后的行集合"算出 ✓）低于它 ⇒ 才算低库存 ✓。
+            // 不一致的话，勾上"仅看低库存"后列表只剩 N 行、合计条却仍是全部金额 ✗。
+            if (Boolean.TRUE.equals(onlyLowStock) && isProduct) {
+                Product pp = pMap.get(s.getProductId());
+                BigDecimal ss = pp != null ? pp.getSafetyStock() : null;
+                boolean low = ss != null && ss.compareTo(BigDecimal.ZERO) > 0
+                        && productTotals.getOrDefault(s.getProductId(), BigDecimal.ZERO).compareTo(ss) < 0;
+                if (!low) continue;
+            }
 
             // 数量口径：与列表页「总库存」一致（未知/脏品质不静默计入，避免金额虚增）
             if (isProduct) {
