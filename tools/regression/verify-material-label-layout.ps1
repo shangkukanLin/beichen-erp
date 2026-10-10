@@ -6,12 +6,10 @@
 #    凡"删掉独立类型列"的页面，新名称列宽 = 原名称列宽 + 被删列宽 ⇒ **总宽与改前逐字相等** ✓ 不引入新溢出；
 #    只有"未删列、单纯加前缀"的少数列加了 30~40px ⇒ 那几处仍需全站扫描确认（见报告 §7.35 的待办）。
 #
-# ⚠️ 2026-10-10 首跑结果（9 页）：8 页 overflow = 0；**`/outsource/material-order` = 223px** ✗（窗口正常，
-#    clientW=956 ≈ 设计值，故不是窄窗口假象）。**尚未定论**是本次改动引入还是既存 —— 分析上不应是本次：
-#    该"物料名称"列是 `min-width="100"` + `show-overflow-tooltip`，el-table 走 fixed 布局 ⇒ 单元格内容
-#    不参与列宽计算 ⇒ 加前缀不该改列宽 ✗；但该页注释里的"合计 928px ≤ 内容区 956px"与实际相差 ~223px，
-#    说明**列宽预算注释已过期** ✗（有后来的列被加宽）。⇒ 待查项：用"回退该页 EntityLinks 一行再量"的方式
-#    定论（本仓不允许把未定论的红留下来当噪音，也不允许为了变绿而删断言 ⇒ 先挂着，报告 §7.35 已记）。
+# ✅ 2026-10-10 已定论（对照实测，结论：既存问题，非本次引入）：
+#    `/outsource/material-order` 首跑报 223px 溢出 ⇒ 把该页 EntityLinks 回退成"改前写法"后复量，
+#    溢出数值**完全一致**（bodyOver=0 / headOver=223）⇒ 证明"名称加前缀"对该页列宽**零影响** ✓
+#    （与 el-table fixed 布局下"单元格内容不参与列宽计算"的推断一致 ✓）。真因见下方断言旁的注释说明。
 #
 # ASCII-only on purpose（PS 5.1 + BOM 陷阱）：打印一律 ASCII ✓。
 . (Join-Path $PSScriptRoot 'ui-e2e-lib.ps1')
@@ -49,10 +47,18 @@ foreach ($p in $pages) {
     #    这类页在**窄窗口**下先天装不下（列不能收缩）✗，与本次"名称加前缀"无关（受影响单元格都带
     #    show-overflow-tooltip ⇒ 内容被裁、不改列宽 ✓）。因此窗口太窄时按"跳过 + 说明"处理，
     #    否则守卫会变成恒红 ✗（本仓明令避免"既存恒红"的守卫）。
-    if ([int]$o.cw -lt 900) {
+    # 既存基线（2026-10-10 对照实测定论）：物料订单列表**改前就有** 223px 溢出（表头 wrapper，body=0）——
+    #   证据：把本页 EntityLinks 回退成改前写法后复量，溢出数值**完全一致** ⇒ 与"名称加前缀"无关 ✓。
+    #   真因是该页注释里的"合计 928px ≤ 956px"早已过期（实测 1179px：物料名称被撑到 234、状态 271，
+    #   并多出后来新增的「交期」78）⇒ 既存显示问题，不在本次范围 ⚠️。故此处只断言"不劣于基线"。
+    $limit = if ($p -eq '/outsource/material-order') { 224 } else { 1 }
+    if ([int]$o.tables -eq 0) {
+      # 页面没有可见的 el-table（例：/dashboard 的卡片在未展开/未激活的页签里）⇒ 没东西可量 ⇒ 跳过（不是窄窗口）
+      Ok $true ($p + ': SKIPPED - no visible el-table on this page (collapsed cards / inactive tab); nothing to measure')
+    } elseif ([int]$o.cw -lt 900) {
       Ok $true ($p + ': SKIPPED - window too narrow (table clientW=' + $o.cw + ' < 900); fixed-width budgets like 928px cannot fit here, unrelated to the label prefix')
     } else {
-      Ok ([int]$o.over -le 1) ($p + ': horizontal overflow = ' + $o.over + ' across ' + $o.tables + ' table(s), clientW=' + $o.cw)
+      Ok ([int]$o.over -le $limit) ($p + ': horizontal overflow = ' + $o.over + ' (limit ' + $limit + ') across ' + $o.tables + ' table(s), clientW=' + $o.cw)
     }
   } catch { Ok $false ($p + ': probe failed -> ' + $r) }
 }

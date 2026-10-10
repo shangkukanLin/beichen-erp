@@ -91,6 +91,9 @@
 //      若照抄成品页的 warehouseCategory=INVENTORY，页面大部分时间会是空的。
 import { localDate } from '@/utils/date'
 import { WarehouseCategory, WarehouseType, StockChangeTypeLabel, codeLabelOptions } from '@/api/enums'
+// 2026-10-10 用户口径「物料名称前面需要显示物料类型」：本页行来自流水表（**只有纯名称、没有类型字段**）
+// ⇒ 名称改由本地映射统一供给（映射里直接存 materialLabel ✓），见下方 loadMaterialMap / rowMaterialName ✓。
+import { materialLabel } from '@/utils/materialLabel'
 import { reactive, ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import request from '@/utils/request'
@@ -168,12 +171,18 @@ const materialMap = ref<Record<number, string>>({})
 
 function fmt(v?: number) { return v == null ? '-' : Number(v).toLocaleString() }
 function warehouseName(id?: number) { const w = warehouseOptions.value.find(x => x.id === id); return w ? w.warehouseName : '-' }
-/** 物料名：优先取流水行自带（写入时就落库了），缺失才用本地映射 / ID 兜底 */
+/**
+ * 物料名：**优先取本地映射**（2026-10-10 起映射里存的是 `物料类型 | 物料名称` ✓）。
+ *
+ * <p>⚠️ 为什么不能像原先那样优先取"行自带名称"：流水行是写入时快照的**纯名称**、**没有类型字段** ⇒
+ * 若优先取它，本页就永远显示不出类型 ✗（其余页面能做，是因为它们的接口回了 materialTypeName）。
+ * 映射缺失（物料被删 / 未加载）时退回行自带的纯名称 ✓，再退回 `物料#id` ✓。</p>
+ */
 function rowMaterialName(row: any) {
-  if (row?.materialName) return row.materialName
   const id = row?.materialId
-  if (!id) return ''
-  return materialMap.value[id] || `物料#${id}`
+  if (id && materialMap.value[id]) return materialMap.value[id]
+  if (row?.materialName) return row.materialName
+  return id ? `物料#${id}` : ''
 }
 function materialName(row: any) { return rowMaterialName(row) || '-' }
 
@@ -195,18 +204,25 @@ async function loadWarehouses() {
   } catch { warehouseOptions.value = [] }
 }
 
-/** 物料名兜底映射（个别历史行 material_name 为空时用） */
+/**
+ * 物料展示名映射（id → `物料类型 | 物料名称`）—— 本页**全部**物料名的来源。
+ *
+ * <p>2026-10-10：流水行只带纯名称、没有类型字段 ⇒ 名称改由本映射统一供给 ✓。
+ * 数据源 `/outsource/material/page` 的每行**已经带 `materialTypeName`**
+ * （`OutsourceMaterialController:59` 填的 ✓）⇒ **纯前端即可，零后端改动** ✓；
+ * 无类型的物料由 `materialLabel` 自动退回纯名称 ✓（不会出现 `- | 名称` ✓）。</p>
+ */
 async function loadMaterialMap() {
   try {
     const res = await request.get<any, any>('/outsource/material/page', { params: { pageSize: 500 } })
     const map: Record<number, string> = {}
-    ;(res?.records || []).forEach((m: any) => { if (m?.id) map[m.id] = m.materialName || '' })
+    ;(res?.records || []).forEach((m: any) => { if (m?.id) map[m.id] = materialLabel(m) })
     materialMap.value = map
   } catch { materialMap.value = {} }
 }
 
 function onMaterialPick(m: any) {
-  if (m?.id) materialMap.value[m.id] = m.materialName || ''
+  if (m?.id) materialMap.value[m.id] = materialLabel(m)
 }
 
 async function loadData() {
