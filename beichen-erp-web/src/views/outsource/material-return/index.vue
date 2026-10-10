@@ -318,7 +318,7 @@ onMounted(() => {
              2026-09-25：物料可点进「物料库存分布详情」（后端 items[]）。 -->
         <el-table-column label="明细" :min-width="showSentCol ? 200 : 240" show-overflow-tooltip>
           <template #default="{ row }">
-            <EntityLinks :items="row.items" target="material" name-key="materialName" qty-key="quantity">
+            <EntityLinks :items="row.items" target="material" :name-key="$mLabel" qty-key="quantity">
               <span>{{ row.itemSummary || '-' }}</span>
             </EntityLinks>
           </template>

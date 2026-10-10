@@ -153,7 +153,7 @@ onActivated(() => { loadData(); loadCounts() })
         <!-- 2026-09-25：物料可点进「物料库存分布详情」（单项直链 / 多项 Popover 逐项可点） -->
         <el-table-column label="物料" min-width="56" show-overflow-tooltip>
           <template #default="{ row }">
-            <EntityLinks :items="itemsOf(row)" target="material" name-key="materialName" qty-key="orderQuantity">
+            <EntityLinks :items="itemsOf(row)" target="material" :name-key="$mLabel" qty-key="orderQuantity">
               <span>{{ namesOf(row) }}</span>
             </EntityLinks>
           </template>

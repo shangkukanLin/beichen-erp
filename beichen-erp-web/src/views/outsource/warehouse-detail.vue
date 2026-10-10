@@ -161,8 +161,10 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         </template>
       </el-alert>
       <el-table :data="sortedMaterials" border stripe v-loading="matLoading" size="small">
-        <el-table-column prop="materialTypeName" label="物料类型" width="100" />
-        <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
+        <!-- 2026-10-10 用户口径：独立「物料类型」列与名称前缀内容重复 ⇒ 删列、只留前缀（空出的 100px 转给名称列） -->
+        <el-table-column label="物料名称" min-width="260" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column prop="unit" label="单位" width="70" align="center" />
         <!-- 2026-09-25 物料形态化：送修在厂行（MATERIAL_REPAIR）与常规物料行并存，tag 区分 -->
         <el-table-column label="形态" width="110" align="center">

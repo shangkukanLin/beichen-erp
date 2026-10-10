@@ -90,7 +90,13 @@ public class OutsourceOtherIoController {
             for (OutsourceOtherIoItem it : items) {
                 String n = getMaterialNameById(it.getMaterialId());
                 java.math.BigDecimal q = it.getQuantity() != null ? it.getQuantity() : java.math.BigDecimal.ZERO;
-                sj.add(n + "×" + q.stripTrailingZeros().toPlainString());
+                // 2026-10-10 用户口径「物料名称前面需要显示物料类型」：本摘要是列表里的"物料明细"文字 ⇒ 带上类型。
+                // ⚠️ getMaterialTypeNameById 对空类型回的是字符串 "-" ⇒ 这里必须先兜住，否则会拼出 "- | 名称" ✗
+                String tn = getMaterialTypeNameById(it.getMaterialTypeId());
+                if (tn == null || tn.isBlank() || "-".equals(tn)) tn = "";
+                sj.add(tn.isEmpty()
+                        ? (n + "×" + q.stripTrailingZeros().toPlainString())
+                        : (tn + " | " + n + "×" + q.stripTrailingZeros().toPlainString()));
             }
             m.put("itemSummary", sj.toString());
             return m;

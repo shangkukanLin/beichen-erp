@@ -48,15 +48,13 @@
            成品库存主表 12 列余量为 0，那里改用同一个合计条组件（见 StockAmountBar 注释）。 -->
       <StockAmountBar mode="material" />
       <el-table v-loading="loading" :data="rows" border stripe>
-        <el-table-column prop="materialTypeName" label="物料类型" min-width="104" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
-        </el-table-column>
+        <!-- 2026-10-10 用户口径：独立「物料类型」列与名称前缀内容重复 ⇒ 删列、只留前缀（空出的 104px 转给名称列） -->
         <!-- 2026-09-26 B5b（用户口径「数据显示完整 + 物料/仓库可点」）：行粒度是「仓库 × 物料」，
              两列都做成链接：物料 → 物料库存分布详情；仓库 → 仓库详情（按 warehouseCategory 分流委外/自有）。 -->
-        <el-table-column label="物料名称" min-width="150" show-overflow-tooltip>
+        <el-table-column label="物料名称" min-width="254" show-overflow-tooltip>
           <template #default="{ row }">
-            <el-button v-if="row.materialId" type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.materialId}`)">{{ row.materialName }}</el-button>
-            <span v-else>{{ row.materialName || '—' }}</span>
+            <el-button v-if="row.materialId" type="primary" link @click.stop="router.push(`/outsource/material-stock/detail/${row.materialId}`)">{{ $mLabel(row) }}</el-button>
+            <span v-else>{{ $mLabel(row) || '—' }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="unit" label="单位" min-width="70" align="center">

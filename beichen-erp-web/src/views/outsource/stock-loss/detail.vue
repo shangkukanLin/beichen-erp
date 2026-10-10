@@ -171,9 +171,7 @@
           <el-table-column label="物料名称" min-width="190" show-overflow-tooltip>
             <template #default="{ row }">{{ $mLabel(row) }}</template>
           </el-table-column>
-          <el-table-column prop="materialTypeName" label="物料类型" width="120">
-            <template #default="{ row }">{{ row.materialTypeName || '—' }}</template>
-          </el-table-column>
+          <!-- 2026-10-10 用户口径：名称列已拼「物料类型 | 」⇒ 原独立「物料类型」列删除（内容重复），空出的 120px 转给名称列 -->
           <el-table-column prop="spec" label="规格" width="130" />
           <el-table-column label="单位" width="70" align="center">
             <template #default="{ row }">{{ row.unit || '—' }}</template>

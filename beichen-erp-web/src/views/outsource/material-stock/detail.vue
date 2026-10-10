@@ -4,8 +4,8 @@
     <el-card shadow="never">
 
       <el-descriptions v-loading="loading" :column="3" border class="info">
-        <el-descriptions-item label="物料名称">{{ summary?.materialName || '—' }}</el-descriptions-item>
-        <el-descriptions-item label="物料类型">{{ summary?.materialTypeName || '—' }}</el-descriptions-item>
+        <!-- 2026-10-10 用户口径：名称前已拼「物料类型 | 」⇒ 再留一个独立「物料类型」项会重复 ⇒ 合并为一项 -->
+        <el-descriptions-item label="物料">{{ $mLabel(summary || {}) || '—' }}</el-descriptions-item>
         <el-descriptions-item label="单位">{{ summary?.unit || '—' }}</el-descriptions-item>
         <el-descriptions-item label="分布仓库">{{ rows.length }} 个</el-descriptions-item>
         <el-descriptions-item label="总库存">

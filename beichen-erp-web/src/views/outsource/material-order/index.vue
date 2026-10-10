@@ -120,12 +120,12 @@ useDomainRefresh('materialOrder', () => {
           <!-- 2026-09-25：物料可点进「物料库存分布详情」（单项直链 / 多项 Popover 逐项可点；
                物料明细摘要（含已收）仍在悬浮 tooltip 里，无 id 时回退该 tooltip） -->
           <template #default="{row}">
-            <EntityLinks :items="row.items" target="material" name-key="materialName" qty-key="orderQuantity">
+            <EntityLinks :items="row.items" target="material" :name-key="$mLabel" qty-key="orderQuantity">
               <el-tooltip placement="top" :show-after="300" raw-content>
                 <template #content>
                   <div v-for="(it,i) in (row.items||[])" :key="i" style="line-height:1.6">{{ typeName(it) }} {{ it.materialName }} ×{{ it.orderQuantity }}{{it.unit}}（已收{{it.receivedQuantity||0}}）</div>
                 </template>
-                <span>{{ (row.items || []).map((it: any) => it.materialName).filter(Boolean).join('、') || '-' }}</span>
+                <span>{{ (row.items || []).map((it: any) => $mLabel(it)).filter(Boolean).join('、') || '-' }}</span>
               </el-tooltip>
             </EntityLinks>
           </template>

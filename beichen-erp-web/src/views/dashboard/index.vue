@@ -204,9 +204,11 @@
             </el-table-column>
             <el-table-column prop="supplierName" label="供应商" width="160" show-overflow-tooltip />
             <el-table-column label="下单日期" width="100" align="center"><template #default="{row}">{{ row.createTime ? row.createTime.slice(0,10) : '-' }}</template></el-table-column>
-            <el-table-column label="物料名称" min-width="120" show-overflow-tooltip>
+            <!-- 2026-10-10：物料名称前拼物料类型（后端 MaterialOrderServiceImpl.buildItemMaps 已回 materialTypeName ✓，
+                 这里只是前端没用 ⇒ 改一行即可，无需后端改动） -->
+            <el-table-column label="物料名称" min-width="150" show-overflow-tooltip>
               <template #default="{row}">
-                <span>{{ (row.items || []).map((it: any) => it.materialName).filter(Boolean).join('、') || '-' }}</span>
+                <span>{{ (row.items || []).map((it: any) => $mLabel(it)).filter(Boolean).join('、') || '-' }}</span>
               </template>
             </el-table-column>
             <el-table-column label="下单总数" width="80" align="center">

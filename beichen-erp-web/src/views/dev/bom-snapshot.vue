@@ -41,8 +41,8 @@ onMounted(load)
           <template #default="{ row }">
             <div style="padding:6px 16px">
               <el-table :data="row.items || []" border size="small">
-                <el-table-column label="物料类型" width="110"><template #default="{ row: it }">{{ it.materialTypeName || '-' }}</template></el-table-column>
-                <el-table-column label="物料名称" min-width="160"><template #default="{ row: it }">{{ it.materialName || ('#' + it.materialId) }}</template></el-table-column>
+                <!-- 2026-10-10 用户口径：类型列与名称前缀重复 ⇒ 删列、只留前缀（空出的 110px 转给名称列） -->
+                <el-table-column label="物料名称" min-width="270" show-overflow-tooltip><template #default="{ row: it }">{{ $mLabel(it) || ('#' + it.materialId) }}</template></el-table-column>
                 <el-table-column label="单位" width="70"><template #default="{ row: it }">{{ it.unit || '-' }}</template></el-table-column>
                 <el-table-column label="单套用量" width="90" align="right"><template #default="{ row: it }">{{ it.quantityPerSet }}</template></el-table-column>
                 <el-table-column label="损耗率%" width="90" align="right"><template #default="{ row: it }">{{ it.lossRate }}</template></el-table-column>

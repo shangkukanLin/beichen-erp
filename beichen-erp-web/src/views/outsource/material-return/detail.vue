@@ -501,7 +501,9 @@ onActivated(() => { loadData(); loadWarehouseOptions() })
       </el-table>
 
       <el-table v-else :data="detail.items || []" border size="small">
-        <el-table-column prop="materialName" label="物料名称" min-width="160" />
+        <el-table-column label="物料名称" min-width="200" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column prop="materialTypeName" label="物料类型" width="100" />
         <el-table-column prop="unit" label="单位" width="70" />
         <el-table-column prop="quantity" :label="isRepair ? '送修数量' : '数量'" width="100" align="right" />

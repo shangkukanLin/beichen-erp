@@ -469,7 +469,9 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="materialName" label="物料" min-width="140" />
+        <el-table-column label="物料" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ $mLabel(row) }}</template>
+        </el-table-column>
         <el-table-column label="已收" width="70" align="right"><template #default="{ row }">{{ (row.receivedQuantity || 0) - (row.defectReturnedQty || 0) }}</template></el-table-column>
         <!-- 2026-09-29（用户口径「物料订单也可以超量收货」）：输入框**不再设上限**（原 :max="row.maxReceive"）；
              超量改由提交后的「超收确认」二次确认把关（见 handleReceive），"剩余可收"仅作提示、超了标红。 -->

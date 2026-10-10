@@ -168,9 +168,9 @@ onMounted(() => { loadWarehouse(); loadMaterials() })
         <!-- 物料信息 Tab -->
         <el-tab-pane label="物料信息" name="material">
           <el-table :data="materials" border stripe v-loading="matLoading" size="small">
-            <el-table-column prop="materialName" label="物料名称" min-width="160" show-overflow-tooltip />
-            <el-table-column prop="materialTypeName" label="物料类型" width="130" align="center">
-              <template #default="{row}"><span v-if="row.materialTypeName">{{ row.materialTypeName }}</span><span v-else style="color:#999">-</span></template>
+            <!-- 2026-10-10 用户口径：独立「物料类型」列与名称前缀内容重复 ⇒ 删列、只留前缀（空出的 130px 转给名称列） -->
+            <el-table-column label="物料名称" min-width="290" show-overflow-tooltip>
+              <template #default="{ row }">{{ $mLabel(row) }}</template>
             </el-table-column>
             <el-table-column label="数量" width="120" align="right">
               <template #default="{row}"><span style="font-weight:600">{{ fmt(row.quantity) }}</span></template>

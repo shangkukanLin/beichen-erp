@@ -23,8 +23,12 @@ const props = defineProps<{
   items?: Array<Record<string, any>> | null
   /** 跳转目标类型（决定 id 字段名与详情路由） */
   target: 'product' | 'material' | 'supplier' | 'vendor' | 'customer'
-  /** 名称字段名（默认 product→name / material→materialName / 其余→name） */
-  nameKey?: string
+  /**
+   * 名称字段名（默认 product→name / material→materialName / 其余→name）。
+   * 2026-10-10（用户口径「物料名称前显示物料类型」）：**也接受函数** `(it) => string` ——
+   * 物料调用方直接传全局属性 `:name-key="$mLabel"` 即可拼出「类型 | 名称」✓（口径见 utils/materialLabel.ts）。
+   */
+  nameKey?: string | ((it: Record<string, any>) => string)
   /** 副标题字段名（如 sku），仅单项时随名称一起显示 */
   subKey?: string
   /** 数量字段名（Popover 里显示 ×N；无则显示名称） */
@@ -54,11 +58,19 @@ const list = computed(() => {
     .filter((it) => it && it[idKey.value] != null)
     .map((it) => ({
       id: it[idKey.value],
-      name: it[nameKey.value] || ('#' + it[idKey.value]),
+      // nameKey 支持函数（2026-10-10）：物料侧传 $mLabel ⇒ 显示「物料类型 | 物料名称」✓
+      name: resolveName(it, idKey.value),
       sub: props.subKey ? it[props.subKey] : '',
       qty: props.qtyKey ? it[props.qtyKey] : undefined
     }))
 })
+
+/** 取显示名：nameKey 是函数就用它（如 `$mLabel`），是字符串就按字段取；取不到再回退 `#id` */
+function resolveName(it: Record<string, any>, idField: string): string {
+  const nk = nameKey.value
+  const raw = typeof nk === 'function' ? nk(it) : it[nk]
+  return raw || ('#' + it[idField])
+}
 
 const first = computed(() => list.value[0])
 
