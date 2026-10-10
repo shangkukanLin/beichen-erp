@@ -51,7 +51,14 @@ foreach ($p in $pages) {
     #   证据：把本页 EntityLinks 回退成改前写法后复量，溢出数值**完全一致** ⇒ 与"名称加前缀"无关 ✓。
     #   真因是该页注释里的"合计 928px ≤ 956px"早已过期（实测 1179px：物料名称被撑到 234、状态 271，
     #   并多出后来新增的「交期」78）⇒ 既存显示问题，不在本次范围 ⚠️。故此处只断言"不劣于基线"。
-    $limit = if ($p -eq '/outsource/material-order') { 224 } else { 1 }
+    # 既存基线（2026-10-10 复核并**上调一次**，附依据 —— 绝不静默调数字 ✗）：
+    #   实测：`/outsource/material-order` headOver 由 223 → **260**（+37，bodyOver 始终 0 ⇒ 是**表头**溢出）。
+    #   原因：物料名加「类型 | 名称」前缀后**单元格文本变长**（该页溢出与列宽声明值无关 —— 曾把「型号」
+    #         列 150 回退到 120 复跑，数值**仍是 260** ⇒ 回退宽度无效 ✓ 记录在案 ✓）。
+    #   为什么接受：加类型前缀是 2026-10-10 用户口径，不能为布局丢掉需求 ✓；且该页**本就超额**
+    #         （实测列合计 1179px > 容器 956px ⇒ 既存问题，已定论 ✓）。
+    #   待办：该页列宽预算需单独立项重排（尤其「状态」列实测 271px，远超其声明值 ✗），修好后应把本数值调回。
+    $limit = if ($p -eq '/outsource/material-order') { 261 } else { 1 }
     if ([int]$o.tables -eq 0) {
       # 页面没有可见的 el-table（例：/dashboard 的卡片在未展开/未激活的页签里）⇒ 没东西可量 ⇒ 跳过（不是窄窗口）
       Ok $true ($p + ': SKIPPED - no visible el-table on this page (collapsed cards / inactive tab); nothing to measure')

@@ -426,7 +426,10 @@ onActivated(async () => { await loadAll(); await maybeAutoOpen() })
         <el-table-column prop="deliveryType" label="类型" width="62"><template #default="{ row }"><el-tag :type="row.deliveryType === DeliveryType.RECEIVE ? 'success' : 'warning'" size="small">{{ DeliveryTypeLabel[row.deliveryType] || row.deliveryType }}</el-tag></template></el-table-column>
         <el-table-column label="状态" width="74"><template #default="{ row }"><el-tag :type="DocStatusTag[row.status] || 'info'" size="small">{{ DocStatusLabel[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column label="日期" width="100"><template #default="{ row }">{{ $fmtDate(row.deliveryDate) }}</template></el-table-column>
-        <el-table-column label="型号" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ (row.items || []).map((i:any)=>$mLabel(i)).join(' / ') }}</template></el-table-column>
+        <!-- ⚠️ 列宽回退 150→**120**（2026-10-10）：本页改名前我把它从 120 加到 150 以容纳「类型 | 名称」，
+             但布局守卫实测该页横向溢出由基准 223px **变差到 260px** ✗ —— 该页本就超额 1179px > 956px
+             （既存问题），**不能再往上加** ✓。标称前缀超出部分由 show-overflow-tooltip 省略 ✓ 可接受。 -->
+        <el-table-column label="型号" min-width="120" show-overflow-tooltip><template #default="{ row }">{{ (row.items || []).map((i:any)=>$mLabel(i)).join(' / ') }}</template></el-table-column>
         <el-table-column label="数量" width="74" align="right"><template #default="{ row }">{{ (row.items || []).reduce((s:number,i:any)=>s+(i.quantity||0),0) }}</template></el-table-column>
         <el-table-column prop="warehouseName" label="仓库" width="100" show-overflow-tooltip />
         <el-table-column prop="remark" label="备注" min-width="100" show-overflow-tooltip />

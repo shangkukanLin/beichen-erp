@@ -59,25 +59,27 @@
         <el-table-column prop="brandName" label="品牌" min-width="100" show-overflow-tooltip>
           <template #default="{ row }">{{ row.brandName || '—' }}</template>
         </el-table-column>
-        <!-- 品质数量列用紧凑数字（非 tag）：五档品质 + 汇总列要在一屏内放得下，避免横向滚动 -->
-        <el-table-column label="A规" min-width="60" align="right">
+        <!-- 品质数量列用紧凑数字（非 tag）：五档品质 + 汇总列要在一屏内放得下，避免横向滚动。
+             2026-10-10 宽度配平：本表要"删「分布仓库」列、加「库存金额」列"⇒ 必须从别处让宽 ✓
+             这里 4 个 2~4 字数字列共让出 36px（60→56、72→64），使合计仍 946 ≤ 948 ✓ 不引入横向滚动。 -->
+        <el-table-column label="A规" min-width="56" align="right">
           <template #default="{ row }"><span :class="qtyClass(row.qtyA, 'a')">{{ fmt(row.qtyA) }}</span></template>
         </el-table-column>
-        <el-table-column label="B规" min-width="60" align="right">
+        <el-table-column label="B规" min-width="56" align="right">
           <template #default="{ row }"><span :class="qtyClass(row.qtyB, 'b')">{{ fmt(row.qtyB) }}</span></template>
         </el-table-column>
-        <el-table-column label="C规" min-width="60" align="right">
+        <el-table-column label="C规" min-width="56" align="right">
           <template #default="{ row }"><span :class="qtyClass(row.qtyC, 'c')">{{ fmt(row.qtyC) }}</span></template>
         </el-table-column>
-        <el-table-column label="不良" min-width="60" align="right">
+        <el-table-column label="不良" min-width="56" align="right">
           <template #default="{ row }"><span :class="qtyClass(row.qtyDefect, 'defect')">{{ fmt(row.qtyDefect) }}</span></template>
         </el-table-column>
-        <el-table-column label="待整理" min-width="72" align="right">
+        <el-table-column label="待整理" min-width="64" align="right">
           <template #default="{ row }">
             <span :class="qtyClass(row.qtyPending, 'pending')" title="压在成品仓、等待退货整理的库存（品质待整理 PENDING）">{{ fmt(row.qtyPending) }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="总库存" min-width="72" align="right">
+        <el-table-column label="总库存" min-width="64" align="right">
           <template #default="{ row }"><strong>{{ fmt(totalQty(row)) }}</strong></template>
         </el-table-column>
         <!-- 2026-10-09 用户需求：安全库存**点一下就能改**（弹框）。
@@ -86,7 +88,7 @@
              ③ 走"点击 → 弹框"而非列内输入框 ⇒ **列宽零变化**，不触碰 scan-table-overflow / scan-col-truncation；
              ④ 无 base:product（产品写权限）的账号仍渲染为只读文本（体验层可点与否，真正边界在后端）；
              ⑤ @click.stop：本表整行可点进详情（@row-click）⇒ 必须阻止冒泡，否则点一下弹框又跳页 ✗。 -->
-        <el-table-column label="安全库存" min-width="80" align="right">
+        <el-table-column label="安全库存" min-width="76" align="right">
           <template #default="{ row }">
             <span :class="{ 'safety-edit': canEditSafety }" :style="safetyCellStyle(row)"
                   :title="canEditSafety ? '点击修改安全库存（产品级，该产品所有仓库共用）' : ''"
@@ -96,14 +98,21 @@
             </span>
           </template>
         </el-table-column>
-        <!-- 2026-09-26 B6：4 字表头需 56+16+1+2 = 75；74（或再分配后的 74）会让余量只剩 1px ⇒ min74→**82**，
-             宽度由「品牌」108→100 让出（品牌正文最长 73px，100 仍完整）。 -->
-        <el-table-column label="分布仓库" min-width="82" align="center">
-          <template #default="{ row }">{{ row.warehouseCount ?? 0 }}</template>
+        <!-- 2026-10-10 用户口径：把「分布仓库」列**去掉**，换成**「库存金额」**列（逐行金额；原先只在合计条上给）。
+             ① 金额口径**照抄仓库现成的 StockCosts**（= 数量 × 单价；单价 cost_price → last_in_price 兜底）
+                —— 并且**直接用后端已算好的字段**：`product-summary/page` 早已回 `stockAmount` / `costMissing`
+                ⇒ **零后端改动** ✓（见 WarehouseStockController:335-336）。
+             ② 成本未维护时**绝不显示 0.00**：StockAmountCell 会显示「成本未维护」（静默显示 0 会让用户以为算错 ✗
+                —— 这正是 StockCosts 注释里警告过的）；该组件与物料库存列表同源，口径一致 ✓。
+             ③ **仓库个数信息不丢**：移到操作列按钮文案里 —— `分布仓库（N）`，N = row.warehouseCount ✓。
+                ⚠️ 原按钮文案是「仓库分布」（与用户口径字序相反）⇒ 这里按用户口径改为「分布仓库」✓。
+             列宽：删 82、新增 88、操作 88→116（按钮多 4 个字），并从数字列让出 36 ⇒ 合计仍 946 ≤ 948 ✓。 -->
+        <el-table-column label="库存金额" min-width="88" align="right">
+          <template #default="{ row }"><StockAmountCell :row="row" /></template>
         </el-table-column>
-        <el-table-column label="操作" min-width="88" align="center">
+        <el-table-column label="操作" min-width="116" align="center">
           <template #default="{ row }">
-            <el-button link type="primary" @click.stop="goDetail(row)">仓库分布</el-button>
+            <el-button link type="primary" @click.stop="goDetail(row)">分布仓库（{{ row.warehouseCount ?? 0 }}）</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -159,6 +168,9 @@ import * as XLSX from 'xlsx'
 import RemoteSelect from '@/components/RemoteSelect.vue'
 import StagnantPanel from '@/components/StagnantPanel.vue'
 import StockAmountBar from '@/components/StockAmountBar.vue'
+// 2026-10-10：逐行「库存金额」单元格 —— 与物料库存列表**同一个组件**（口径一致：数量 × 单价，
+// 单价 cost_price → last_in_price 兜底；成本未维护时显示「成本未维护」而不是 0.00 ✓）。
+import StockAmountCell from '@/components/StockAmountCell.vue'
 
 const router = useRouter()
 
